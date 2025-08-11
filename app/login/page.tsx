@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { login } from "@/lib/auth"
-import { toast } from "react-hot-toast"
+import { useToast } from "@/hooks/use-toast"
+import { BadgeCheck, X, AlertTriangle } from "lucide-react"
 
 const quickLinks = [
   { label: "Forms & Applications", href: "#" },
@@ -17,6 +18,7 @@ const quickLinks = [
 ]
 
 export default function LoginPage() {
+  const { toast } = useToast()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -24,21 +26,44 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Handle logout success toast
+  React.useEffect(() => {
+    if (searchParams?.get("logoutSuccess") === "true") {
+      toast({
+        title: "Logged out successfully!",
+        description: "Thank you for using BalikBayani Portal. Have a great day!",
+      })
+      // Clean up URL parameter
+      router.replace('/login')
+    }
+  }, [searchParams, toast, router])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
     setLoading(true)
+    
     try {
       const success = await login(username, password)
       if (success) {
-        toast.success("Login successful!")
         const redirect = searchParams?.get("redirect") || "/dashboard"
-        router.push(redirect)
+        // Navigate with success indicator
+        router.push(`${redirect}?loginSuccess=true`)
       } else {
         setError("Invalid username or password.")
+        toast({
+          title: "Login failed",
+          description: "Please check your username and password and try again.",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       setError("An error occurred. Please try again.")
+      toast({
+        title: "Connection error",
+        description: "Unable to connect to the server. Please check your internet connection.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

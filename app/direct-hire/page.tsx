@@ -9,8 +9,11 @@ import { useState } from "react"
 import FilterPanel from "@/components/filter-panel"
 import CreateApplicationModal from "@/components/create-application-modal"
 import Header from "@/components/shared/header"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 export default function DirectHirePage() {
+  // Handle login success toast
+  useLoginSuccessToast()
   const [showFilter, setShowFilter] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [search, setSearch] = useState("")

@@ -1,21 +1,22 @@
 "use client"
 
-import { UserCircle, LogOut, Settings, User, ChevronDown } from 'lucide-react'
+import { UserCircle, LogOut, Settings, User, ChevronDown, BadgeCheck } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useRouter, usePathname } from "next/navigation"
 import { logout } from "@/lib/auth"
 import Link from "next/link"
-import { toast } from "react-hot-toast"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Header() {
+  const { toast } = useToast()
   const router = useRouter()
   const pathname = usePathname()
 
   const handleLogout = () => {
     logout()
-    toast.success("Logged out successfully!")
-    router.push('/login')
+    // Navigate with logout indicator
+    router.push('/login?logoutSuccess=true')
   }
 
   const isActive = (path: string) => pathname === path

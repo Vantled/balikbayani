@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock data
 const initialPesoContacts = [
@@ -33,6 +33,7 @@ const initialPesoContacts = [
 ]
 
 export default function PesoContactsPage() {
+  const { toast } = useToast()
   const [pesoContacts, setPesoContacts] = useState(initialPesoContacts)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -57,7 +58,10 @@ export default function PesoContactsPage() {
     e.preventDefault()
     setPesoContacts([...pesoContacts, formData])
     setModalOpen(false)
-    toast.success("PESO Contact created!")
+    toast({
+      title: "PESO Contact created!",
+      description: "The new PESO contact has been added successfully.",
+    })
   }
 
   return (

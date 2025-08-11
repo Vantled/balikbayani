@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock data
 const initialMonitoringSummary = [
@@ -37,6 +37,7 @@ const initialMonitoringSummary = [
 ]
 
 export default function MonitoringSummaryPage() {
+  const { toast } = useToast()
   const [monitoringSummary, setMonitoringSummary] = useState(initialMonitoringSummary)
   const [modalOpen, setModalOpen] = useState(false)
   const [formData, setFormData] = useState<any>({})
@@ -59,7 +60,10 @@ export default function MonitoringSummaryPage() {
       { ...formData, totalApplicants },
     ])
     setModalOpen(false)
-    toast.success("Monitoring record created!")
+    toast({
+      title: "Monitoring record created!",
+      description: "The job fair monitoring data has been saved successfully.",
+    })
   }
 
   return (

@@ -68,10 +68,54 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "toast-slide-in": {
+          "0%": {
+            transform: "translateX(100%)",
+            opacity: "0",
+          },
+          "100%": {
+            transform: "translateX(0)",
+            opacity: "1",
+          },
+        },
+        "toast-slide-out": {
+          "0%": {
+            transform: "translateX(0)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translateX(100%)",
+            opacity: "0",
+          },
+        },
+        "toast-fade-in": {
+          "0%": {
+            opacity: "0",
+            transform: "scale(0.95)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "scale(1)",
+          },
+        },
+        "toast-fade-out": {
+          "0%": {
+            opacity: "1",
+            transform: "scale(1)",
+          },
+          "100%": {
+            opacity: "0",
+            transform: "scale(0.95)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "toast-slide-in": "toast-slide-in 0.3s ease-out",
+        "toast-slide-out": "toast-slide-out 0.3s ease-in",
+        "toast-fade-in": "toast-fade-in 0.2s ease-out",
+        "toast-fade-out": "toast-fade-out 0.2s ease-in",
       },
     },
   },

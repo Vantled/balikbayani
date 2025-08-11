@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock data
 const initialPraContacts = [
@@ -33,6 +33,7 @@ const initialPraContacts = [
 ]
 
 export default function PraContactsPage() {
+  const { toast } = useToast()
   const [praContacts, setPraContacts] = useState(initialPraContacts)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -57,7 +58,10 @@ export default function PraContactsPage() {
     e.preventDefault()
     setPraContacts([...praContacts, formData])
     setModalOpen(false)
-    toast.success("PRA Contact created!")
+    toast({
+      title: "PRA Contact created!",
+      description: "The new PRA contact has been added successfully.",
+    })
   }
 
   return (

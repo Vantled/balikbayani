@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 // Mock data
 const initialJobFairs = [
@@ -33,6 +34,10 @@ const initialJobFairs = [
 ]
 
 export default function JobFairsListPage() {
+  // Handle login success toast
+  useLoginSuccessToast()
+  
+  const { toast } = useToast()
   const [jobFairs, setJobFairs] = useState(initialJobFairs)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -51,7 +56,10 @@ export default function JobFairsListPage() {
     e.preventDefault()
     setJobFairs([...jobFairs, formData])
     setModalOpen(false)
-    toast.success("Job Fair created!")
+    toast({
+      title: "Job Fair created!",
+      description: "The new job fair has been scheduled successfully.",
+    })
   }
 
   const filteredJobFairs = jobFairs.filter(jobFair =>

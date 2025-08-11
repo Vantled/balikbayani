@@ -1,12 +1,12 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 
 type DirectHireApplication = {
   id: number
@@ -28,6 +28,7 @@ interface DirectHireApplicationsTableProps {
 }
 
 export default function DirectHireApplicationsTable({ search }: DirectHireApplicationsTableProps) {
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<DirectHireApplication | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -224,15 +225,47 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                             <Eye className="h-4 w-4 mr-2" />
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              toast({
+                                title: "Edit functionality coming soon",
+                                description: "This feature will be available in the next update",
+                              })
+                            }}
+                          >
                             <Edit className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              // Show confirmation dialog first
+                              const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`)
+                              if (confirmDelete) {
+                                setApplications(applications.filter(app => app.id !== application.id))
+                                toast({
+                                  title: "Application deleted successfully",
+                                  description: `${application.name}'s application has been removed`,
+                                })
+                              } else {
+                                toast({
+                                  title: "Deletion cancelled",
+                                  description: "No changes were made to the application",
+                                })
+                              }
+                            }}
+                            className="text-red-600 focus:text-red-600"
+                          >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              toast({
+                                title: "Compliance form generated",
+                                description: "The document has been prepared and is ready for download",
+                              })
+                            }}
+                          >
                             <FileText className="h-4 w-4 mr-2" />
                             Compliance Form
                           </DropdownMenuItem>
@@ -571,7 +604,13 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                     <input type="file" className="w-full border rounded px-3 py-2 mt-1" onChange={e => setFormData({ ...formData, tesda: e.target.files?.[0] })} />
                   </div>
                   <div className="flex justify-between mt-6 gap-2">
-                    <Button variant="outline" className="flex-1" type="button" onClick={() => { setCreateOpen(false); toast.success('Draft saved!') }}>Save as Draft</Button>
+                    <Button variant="outline" className="flex-1" type="button" onClick={() => { 
+                      setCreateOpen(false); 
+                      toast({
+                        title: 'Draft saved successfully',
+                        description: 'You can continue editing this application later',
+                      }) 
+                    }}>Save as Draft</Button>
                     <Button className="bg-[#1976D2] text-white flex-1" type="button" onClick={() => {
                       setApplications([
                         ...applications,
@@ -585,7 +624,10 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                         },
                       ])
                       setCreateOpen(false)
-                      toast.success('Applicant created successfully!')
+                      toast({
+                        title: 'Applicant created successfully!',
+                        description: `${formData.name} has been added to the system`,
+                      })
                     }}>Create</Button>
                   </div>
                 </form>

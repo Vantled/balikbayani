@@ -1,6 +1,6 @@
 "use client"
 
-import { UserCircle, Search, Download, Plus, Filter } from "lucide-react"
+import { UserCircle, Search, Download, Plus, Filter, BadgeCheck, FileDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import DirectHireApplicationsTable from "@/components/direct-hire-applications-table"
@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useState } from "react"
 import FilterPanel from "@/components/filter-panel"
 import CreateApplicationModal from "@/components/create-application-modal"
+import { toast } from "sonner"
 
 export default function DirectHirePage() {
   const [showFilter, setShowFilter] = useState(false)
@@ -76,8 +77,26 @@ export default function DirectHirePage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    toast.success("PDF Export successful", {
+                      icon: <BadgeCheck className="h-5 w-5 text-green-600" />,
+                      duration: 3000,
+                    })
+                  }}
+                >
+                  Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    toast.success("Excel Export successful", {
+                      icon: <FileDown className="h-5 w-5 text-green-600" />,
+                      duration: 3000,
+                    })
+                  }}
+                >
+                  Export as Excel
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 

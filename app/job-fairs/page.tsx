@@ -9,7 +9,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { MoreHorizontal, Plus, Download, Search } from "lucide-react"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 // Mock data for each tab
 const initialJobFairs = [
@@ -55,6 +56,10 @@ const initialMonitoringSummary = [
 ]
 
 export default function JobFairsPage() {
+  // Handle login success toast
+  useLoginSuccessToast()
+  
+  const { toast } = useToast()
   const router = useRouter()
 
   useEffect(() => {

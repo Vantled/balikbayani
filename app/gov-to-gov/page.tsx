@@ -7,8 +7,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { MoreHorizontal, Plus, Download, Search, X } from "lucide-react"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import Header from "@/components/shared/header"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 const initialRows = [
   { lastName: "Reyes", firstName: "Maria", middleName: "Clara", sex: "Female", taiwanExp: "Yes" },
@@ -21,6 +22,10 @@ const initialRows = [
 ]
 
 export default function GovToGovPage() {
+  // Handle login success toast
+  useLoginSuccessToast()
+  
+  const { toast } = useToast()
   const [rows, setRows] = useState(initialRows)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -290,7 +295,10 @@ export default function GovToGovPage() {
                         },
                       ])
                       setModalOpen(false)
-                      toast.success('Applicant created successfully!')
+                      toast({
+                        title: 'Applicant created successfully!',
+                        description: 'The new Gov-to-Gov applicant has been added to the system.',
+                      })
                     }}>Create</Button>
                   </div>
                 </form>

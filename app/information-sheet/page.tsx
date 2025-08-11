@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { MoreHorizontal, Plus, Download, Search, X } from "lucide-react"
-import { toast } from "sonner"
+import { MoreHorizontal, Plus, Download, Search, X, BadgeCheck, FileText } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 const initialRecords = [
   {
@@ -133,6 +134,10 @@ const initialRecords = [
 ]
 
 export default function InformationSheetPage() {
+  // Handle login success toast
+  useLoginSuccessToast()
+  
+  const { toast } = useToast()
   const [tab, setTab] = useState("today")
   const [records, setRecords] = useState(initialRecords)
   const [search, setSearch] = useState("")
@@ -571,7 +576,10 @@ export default function InformationSheetPage() {
                     },
                   ])
                   setModalOpen(false)
-                  toast.success('Information sheet request created!')
+                  toast({
+                    title: "Information sheet request created!",
+                    description: "Your request has been submitted successfully.",
+                  })
                 }}>Create</Button>
               </div>
             </form>

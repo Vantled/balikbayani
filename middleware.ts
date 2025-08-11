@@ -19,21 +19,25 @@ type PublicPath = typeof publicPaths[number]
 
 export function middleware(request: NextRequest) {
   const authToken = request.cookies.get('bb_auth_token')
+  const userCookie = request.cookies.get('bb_user')
   const { pathname } = request.nextUrl
 
   // Check if the path is protected
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
   const isPublicPath = publicPaths.some(path => pathname === path)
 
+  // Check if user is authenticated (both token and user data must exist)
+  const isAuthenticated = authToken && userCookie
+
   // If path is protected and user is not authenticated, redirect to login
-  if (isProtectedPath && !authToken) {
+  if (isProtectedPath && !isAuthenticated) {
     const url = new URL('/login', request.url)
     url.searchParams.set('from', pathname)
     return NextResponse.redirect(url)
   }
 
   // If user is authenticated and tries to access public pages, redirect to dashboard
-  if (isPublicPath && authToken) {
+  if (isPublicPath && isAuthenticated) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

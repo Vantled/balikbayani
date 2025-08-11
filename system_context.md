@@ -44,10 +44,7 @@ BalikBayani is a digital file management and tracking system designed to moderni
   - Scalable application design
 
 - **Database**
-  - SQLite for lightweight, serverless database
-  - Local storage capabilities
-  - Offline functionality support
-  - Simplified deployment model
+  - PostgreSQL
 
 ### Security Features
 - Role-based access control (RBAC)

@@ -7,16 +7,29 @@ import { useRouter, usePathname } from "next/navigation"
 import { logout } from "@/lib/auth"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import { useState } from "react"
 
 export default function Header() {
   const { toast } = useToast()
   const router = useRouter()
   const pathname = usePathname()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const handleLogout = () => {
-    logout()
-    // Navigate with logout indicator
-    router.push('/login?logoutSuccess=true')
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+      // Navigate with logout indicator
+      router.push('/login?logoutSuccess=true')
+    } catch (error) {
+      console.error('Logout error:', error)
+      setIsLoggingOut(false)
+      toast({
+        title: "Logout failed",
+        description: "Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const isActive = (path: string) => pathname === path
@@ -144,9 +157,10 @@ export default function Header() {
               <DropdownMenuItem 
                 className="cursor-pointer text-red-600 focus:text-red-600"
                 onClick={handleLogout}
+                disabled={isLoggingOut}
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
+                <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -44,16 +44,16 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
-      const success = await login(username, password)
-      if (success) {
-        const redirect = searchParams?.get("redirect") || "/dashboard"
+      const result = await login(username, password)
+      if (result.success) {
+        const redirect = searchParams?.get("from") || "/dashboard"
         // Navigate with success indicator
         router.push(`${redirect}?loginSuccess=true`)
       } else {
-        setError("Invalid username or password.")
+        setError(result.error || "Invalid username or password.")
         toast({
           title: "Login failed",
-          description: "Please check your username and password and try again.",
+          description: result.error || "Please check your username and password and try again.",
           variant: "destructive",
         })
       }

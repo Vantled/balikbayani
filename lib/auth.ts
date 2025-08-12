@@ -5,7 +5,7 @@ export type User = {
   username: string
   email: string
   full_name: string
-  role: 'admin' | 'staff' | 'user'
+  role: 'superadmin' | 'admin' | 'staff'
   is_approved: boolean
   is_active: boolean
   last_login?: string
@@ -106,6 +106,26 @@ export const getUser = (): User | null => {
     return null;
   }
 };
+
+// Role-based authorization functions
+export const hasRole = (user: User | null, requiredRole: 'superadmin' | 'admin' | 'staff'): boolean => {
+  if (!user) return false;
+  
+  const roleHierarchy = {
+    'superadmin': 3,
+    'admin': 2,
+    'staff': 1
+  };
+  
+  return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
+};
+
+export const isSuperadmin = (user: User | null): boolean => hasRole(user, 'superadmin');
+export const isAdmin = (user: User | null): boolean => hasRole(user, 'admin');
+export const isStaff = (user: User | null): boolean => hasRole(user, 'staff');
+
+export const canManageUsers = (user: User | null): boolean => isSuperadmin(user);
+export const canAccessAdminFeatures = (user: User | null): boolean => hasRole(user, 'admin');
 
 export const validateSession = async (): Promise<boolean> => {
   const token = Cookies.get(AUTH_COOKIE);

@@ -11,13 +11,14 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'staff', 'user')),
+    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('superadmin', 'admin', 'staff')),
     is_approved BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     last_login TIMESTAMP WITH TIME ZONE,
     failed_login_attempts INTEGER DEFAULT 0,
     account_locked_until TIMESTAMP WITH TIME ZONE,
     password_changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -338,6 +339,6 @@ CREATE TRIGGER update_pra_contacts_updated_at BEFORE UPDATE ON pra_contacts FOR 
 CREATE TRIGGER update_job_fair_monitoring_updated_at BEFORE UPDATE ON job_fair_monitoring FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert default admin user (password should be changed in production)
+-- Insert default superadmin user (password should be changed in production)
 INSERT INTO users (username, email, password_hash, full_name, role, is_approved) 
-VALUES ('admin', 'admin@balikbayani.gov.ph', '$2b$10$default_hash_here', 'System Administrator', 'admin', true);
+VALUES ('superadmin', 'superadmin@balikbayani.gov.ph', '$2b$10$default_hash_here', 'Super Administrator', 'superadmin', true);

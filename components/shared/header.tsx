@@ -1,19 +1,25 @@
 "use client"
 
-import { UserCircle, LogOut, Settings, User, ChevronDown, BadgeCheck } from 'lucide-react'
+import { UserCircle, LogOut, Settings, User, ChevronDown, BadgeCheck, Users } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useRouter, usePathname } from "next/navigation"
-import { logout } from "@/lib/auth"
+import { logout, getUser, isSuperadmin, isAdmin } from "@/lib/auth"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function Header() {
   const { toast } = useToast()
   const router = useRouter()
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  useEffect(() => {
+    const user = getUser()
+    setCurrentUser(user)
+  }, [])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -33,6 +39,21 @@ export default function Header() {
   }
 
   const isActive = (path: string) => pathname === path
+
+  const getRoleDisplay = (role: string) => {
+    switch (role) {
+      case 'superadmin':
+        return { text: 'Superadmin', color: 'text-red-600', bgColor: 'bg-red-100' }
+      case 'admin':
+        return { text: 'Admin', color: 'text-blue-600', bgColor: 'bg-blue-100' }
+      case 'staff':
+        return { text: 'Staff', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+      default:
+        return { text: 'User', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+    }
+  }
+
+  const roleDisplay = currentUser ? getRoleDisplay(currentUser.role) : { text: 'User', color: 'text-gray-600', bgColor: 'bg-gray-100' }
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between fixed top-0 left-0 w-full z-30">
@@ -135,14 +156,32 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          {/* User Management - Only visible to Superadmin */}
+          {isSuperadmin(currentUser) && (
+            <Link 
+              href="/user-management" 
+              className={`text-sm pb-1 ${
+                isActive('/user-management') 
+                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                  : 'text-gray-600 hover:text-[#1976D2]'
+              }`}
+            >
+              User Management
+            </Link>
+          )}
         </nav>
         <div className="flex items-center space-x-2">
           <UserCircle className="h-8 w-8 text-gray-700" />
-          <span className="text-sm hidden md:inline">System Administrator</span>
+          <span className="text-sm hidden md:inline">
+            {currentUser?.full_name || 'System User'}
+          </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="text-sm rounded-full border-gray-300 ml-2">
-                Admin
+              <Button 
+                variant="outline" 
+                className={`text-sm rounded-full border-gray-300 ml-2 ${roleDisplay.bgColor} ${roleDisplay.color}`}
+              >
+                {roleDisplay.text}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -150,6 +189,14 @@ export default function Header() {
                 <User className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </DropdownMenuItem>
+              {isSuperadmin(currentUser) && (
+                <DropdownMenuItem asChild>
+                  <Link href="/user-management" className="flex items-center">
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>User Management</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem className="cursor-pointer">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>

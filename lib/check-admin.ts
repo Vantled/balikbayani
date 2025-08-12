@@ -28,7 +28,7 @@ export async function checkAndFixAdmin() {
       await db.query(
         `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        ['admin', 'admin@balikbayani.gov.ph', passwordHash, 'System Administrator', 'admin', true, true]
+        ['admin', 'admin@balikbayani.gov.ph', passwordHash, 'Administrator', 'admin', true, true]
       );
 
       console.log('Admin user created successfully');

@@ -42,7 +42,7 @@ export async function initializeDatabase() {
           role = $4,
           is_approved = $5
         WHERE username = 'admin'`,
-        [passwordHash, 'admin@balikbayani.gov.ph', 'System Administrator', 'admin', true]
+        [passwordHash, 'admin@balikbayani.gov.ph', 'Administrator', 'admin', true]
       );
       console.log('Default admin user created/updated');
       console.log('Username: admin');

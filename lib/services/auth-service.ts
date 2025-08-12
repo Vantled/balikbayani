@@ -64,12 +64,12 @@ export class AuthService {
       // Hash password
       const passwordHash = await this.hashPassword(userData.password);
 
-      // Create user
+      // Create user with default role as 'staff'
       const result = await db.query(
         `INSERT INTO users (username, email, password_hash, full_name, role, is_approved)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [userData.username, userData.email, passwordHash, userData.full_name, 'user', false]
+        [userData.username, userData.email, passwordHash, userData.full_name, 'staff', false]
       );
 
       const user = result.rows[0];
@@ -78,6 +78,198 @@ export class AuthService {
     } catch (error) {
       console.error('Registration error:', error);
       return { success: false, error: 'Registration failed' };
+    }
+  }
+
+  /**
+   * Create a new user (Superadmin only)
+   */
+  static async createUser(userData: {
+    username: string;
+    email: string;
+    password: string;
+    full_name: string;
+    role: 'superadmin' | 'admin' | 'staff';
+    createdBy: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      // Check if user already exists
+      const existingUser = await db.query(
+        'SELECT id FROM users WHERE username = $1 OR email = $2',
+        [userData.username, userData.email]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return { success: false, error: 'Username or email already exists' };
+      }
+
+      // Hash password
+      const passwordHash = await this.hashPassword(userData.password);
+
+      // Create user
+      const result = await db.query(
+        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [userData.username, userData.email, passwordHash, userData.full_name, userData.role, true, userData.createdBy]
+      );
+
+      const user = result.rows[0];
+      
+      // Log user creation
+      await this.logAuditEvent(userData.createdBy, 'USER_CREATED', 'users', user.id, null, { role: userData.role });
+
+      return { success: true, user };
+
+    } catch (error) {
+      console.error('User creation error:', error);
+      return { success: false, error: 'User creation failed' };
+    }
+  }
+
+  /**
+   * Get all users (Superadmin only)
+   */
+  static async getAllUsers(): Promise<{ success: boolean; users?: User[]; error?: string }> {
+    try {
+      const result = await db.query(
+        `SELECT u.*
+         FROM users u
+         ORDER BY u.created_at DESC`
+      );
+
+      return { success: true, users: result.rows };
+
+    } catch (error) {
+      console.error('Get users error:', error);
+      return { success: false, error: 'Failed to retrieve users' };
+    }
+  }
+
+  /**
+   * Update user role (Superadmin only)
+   */
+  static async updateUserRole(
+    userId: string, 
+    newRole: 'superadmin' | 'admin' | 'staff', 
+    updatedBy: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Prevent superadmin from changing their own role
+      if (userId === updatedBy) {
+        return { success: false, error: 'Cannot change your own role' };
+      }
+
+      const result = await db.query(
+        'UPDATE users SET role = $1 WHERE id = $2 RETURNING *',
+        [newRole, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return { success: false, error: 'User not found' };
+      }
+
+      await this.logAuditEvent(updatedBy, 'USER_ROLE_UPDATED', 'users', userId, { role: result.rows[0].role }, { role: newRole });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('Role update error:', error);
+      return { success: false, error: 'Role update failed' };
+    }
+  }
+
+  /**
+   * Delete user (Superadmin only)
+   */
+  static async deleteUser(userId: string, deletedBy: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Prevent superadmin from deleting themselves
+      if (userId === deletedBy) {
+        return { success: false, error: 'Cannot delete your own account' };
+      }
+
+      // Check if user exists
+      const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        return { success: false, error: 'User not found' };
+      }
+
+      // Delete user (this will cascade to related records)
+      await db.query('DELETE FROM users WHERE id = $1', [userId]);
+
+      await this.logAuditEvent(deletedBy, 'USER_DELETED', 'users', userId, userResult.rows[0], null);
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('User deletion error:', error);
+      return { success: false, error: 'User deletion failed' };
+    }
+  }
+
+  /**
+   * Deactivate user (Superadmin only) - maintains data integrity
+   */
+  static async deactivateUser(userId: string, deactivatedBy: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check if user exists
+      const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const user = userResult.rows[0];
+
+      // Check if user is already deactivated
+      if (!user.is_active) {
+        return { success: false, error: 'User is already deactivated' };
+      }
+
+      // Deactivate user by setting is_active to false
+      await db.query('UPDATE users SET is_active = false WHERE id = $1', [userId]);
+
+      // Invalidate all active sessions for this user
+      await db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+
+      await this.logAuditEvent(deactivatedBy, 'USER_DEACTIVATED', 'users', userId, { is_active: true }, { is_active: false });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('User deactivation error:', error);
+      return { success: false, error: 'User deactivation failed' };
+    }
+  }
+
+  /**
+   * Activate user (Superadmin only) - reactivates previously deactivated user
+   */
+  static async activateUser(userId: string, activatedBy: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check if user exists
+      const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const user = userResult.rows[0];
+
+      // Check if user is already active
+      if (user.is_active) {
+        return { success: false, error: 'User is already active' };
+      }
+
+      // Activate user by setting is_active to true
+      await db.query('UPDATE users SET is_active = true WHERE id = $1', [userId]);
+
+      await this.logAuditEvent(activatedBy, 'USER_ACTIVATED', 'users', userId, { is_active: false }, { is_active: true });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('User activation error:', error);
+      return { success: false, error: 'User activation failed' };
     }
   }
 
@@ -173,7 +365,17 @@ export class AuthService {
       [userId, token, ipAddress, userAgent, expiresAt]
     );
 
-    return result.rows[0];
+    const session = result.rows[0];
+    
+    // Return with the correct property names for SessionInfo interface
+    return {
+      id: session.id,
+      userId: session.user_id,
+      token: session.session_token,
+      expiresAt: session.expires_at,
+      ipAddress: session.ip_address,
+      userAgent: session.user_agent
+    };
   }
 
   /**
@@ -344,32 +546,6 @@ export class AuthService {
     } catch (error) {
       console.error('User approval error:', error);
       return { success: false, error: 'User approval failed' };
-    }
-  }
-
-  /**
-   * Deactivate user account
-   */
-  static async deactivateUser(userId: string, deactivatedBy: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      await db.query(
-        'UPDATE users SET is_active = FALSE WHERE id = $1',
-        [userId]
-      );
-
-      // Invalidate all user sessions
-      await db.query(
-        'DELETE FROM user_sessions WHERE user_id = $1',
-        [userId]
-      );
-
-      await this.logAuditEvent(deactivatedBy, 'USER_DEACTIVATED', 'users', userId);
-
-      return { success: true };
-
-    } catch (error) {
-      console.error('User deactivation error:', error);
-      return { success: false, error: 'User deactivation failed' };
     }
   }
 }

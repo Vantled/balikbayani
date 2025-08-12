@@ -13,13 +13,15 @@ export interface User {
   email: string;
   password_hash?: string;
   full_name: string;
-  role: 'admin' | 'staff' | 'user';
+  role: 'superadmin' | 'admin' | 'staff';
   is_approved: boolean;
   is_active: boolean;
   last_login?: string;
   failed_login_attempts?: number;
   account_locked_until?: string;
   password_changed_at?: string;
+  created_by?: string;
+  created_by_name?: string;
   created_at: string;
   updated_at: string;
 }

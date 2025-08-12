@@ -1,8 +1,8 @@
 // lib/types.ts
 
-export interface ApiResponse {
+export interface ApiResponse<T = any> {
   success: boolean;
-  data?: any;
+  data?: T;
   message?: string;
   error?: string;
 }
@@ -11,6 +11,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  password_hash?: string;
   full_name: string;
   role: 'admin' | 'staff' | 'user';
   is_approved: boolean;
@@ -57,10 +58,10 @@ export interface DirectHireApplication {
   status: 'pending' | 'evaluated' | 'for_confirmation' | 'for_interview' | 'approved' | 'rejected';
   jobsite: string;
   position: string;
-  evaluator: string;
-  personal_info: PersonalInfo;
-  employment_info: EmploymentInfo;
-  documents: Document[];
+  evaluator?: string;
+  personal_info?: PersonalInfo;
+  employment_info?: EmploymentInfo;
+  documents?: Document[];
   created_at: Date;
   updated_at: Date;
 }

@@ -1,110 +1,128 @@
 // app/api/direct-hire/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
-import { ApiResponse, DirectHireApplication } from '@/lib/types';
+import { ApiResponse } from '@/lib/types';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse<ApiResponse<DirectHireApplication>>> {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params;
+    const application = await DatabaseService.getDirectHireApplicationById(params.id);
 
-    const application = await DatabaseService.getDirectHireApplicationById(id);
     if (!application) {
-      return NextResponse.json({
+      const response: ApiResponse = {
         success: false,
-        error: 'Application not found'
-      }, { status: 404 });
+        error: 'Direct hire application not found'
+      };
+      return NextResponse.json(response, { status: 404 });
     }
 
-    return NextResponse.json({
+    const response: ApiResponse = {
       success: true,
       data: application
-    });
+    };
 
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Get direct hire application error:', error);
-    return NextResponse.json({
+    console.error('Error fetching direct hire application:', error);
+    
+    const response: ApiResponse = {
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+      error: 'Failed to fetch direct hire application'
+    };
+
+    return NextResponse.json(response, { status: 500 });
   }
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse<ApiResponse<DirectHireApplication>>> {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params;
     const body = await request.json();
-
+    
     // Check if application exists
-    const existingApp = await DatabaseService.getDirectHireApplicationById(id);
-    if (!existingApp) {
-      return NextResponse.json({
+    const existingApplication = await DatabaseService.getDirectHireApplicationById(params.id);
+    if (!existingApplication) {
+      const response: ApiResponse = {
         success: false,
-        error: 'Application not found'
-      }, { status: 404 });
+        error: 'Direct hire application not found'
+      };
+      return NextResponse.json(response, { status: 404 });
     }
 
-    // Update application
-    const updatedApp = await DatabaseService.updateDirectHireApplication(id, body);
-    if (!updatedApp) {
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to update application'
-      }, { status: 500 });
-    }
+    // Prepare update data
+    const updateData: any = {};
+    if (body.name) updateData.name = body.name;
+    if (body.sex) updateData.sex = body.sex;
+    if (body.salary) updateData.salary = parseFloat(body.salary);
+    if (body.status) updateData.status = body.status;
+    if (body.jobsite) updateData.jobsite = body.jobsite;
+    if (body.position) updateData.position = body.position;
+    if (body.evaluator !== undefined) updateData.evaluator = body.evaluator;
 
-    return NextResponse.json({
+    const result = await DatabaseService.updateDirectHireApplication(params.id, updateData);
+
+    const response: ApiResponse = {
       success: true,
-      data: updatedApp,
-      message: 'Application updated successfully'
-    });
+      data: result,
+      message: 'Direct hire application updated successfully'
+    };
 
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Update direct hire application error:', error);
-    return NextResponse.json({
+    console.error('Error updating direct hire application:', error);
+    
+    const response: ApiResponse = {
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+      error: 'Failed to update direct hire application'
+    };
+
+    return NextResponse.json(response, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<NextResponse<ApiResponse>> {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params;
-
     // Check if application exists
-    const existingApp = await DatabaseService.getDirectHireApplicationById(id);
-    if (!existingApp) {
-      return NextResponse.json({
+    const existingApplication = await DatabaseService.getDirectHireApplicationById(params.id);
+    if (!existingApplication) {
+      const response: ApiResponse = {
         success: false,
-        error: 'Application not found'
-      }, { status: 404 });
+        error: 'Direct hire application not found'
+      };
+      return NextResponse.json(response, { status: 404 });
     }
 
-    // Delete application
-    const deleted = await DatabaseService.deleteDirectHireApplication(id);
+    const deleted = await DatabaseService.deleteDirectHireApplication(params.id);
+
     if (!deleted) {
-      return NextResponse.json({
+      const response: ApiResponse = {
         success: false,
-        error: 'Failed to delete application'
-      }, { status: 500 });
+        error: 'Failed to delete direct hire application'
+      };
+      return NextResponse.json(response, { status: 500 });
     }
 
-    return NextResponse.json({
+    const response: ApiResponse = {
       success: true,
-      message: 'Application deleted successfully'
-    });
+      message: 'Direct hire application deleted successfully'
+    };
 
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Delete direct hire application error:', error);
-    return NextResponse.json({
+    console.error('Error deleting direct hire application:', error);
+    
+    const response: ApiResponse = {
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+      error: 'Failed to delete direct hire application'
+    };
+
+    return NextResponse.json(response, { status: 500 });
   }
 }

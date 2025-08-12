@@ -1,13 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { X, FileText } from "lucide-react"
+import { X, FileText, Loader2, Calculator } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
+import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
+import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -15,9 +18,48 @@ interface CreateApplicationModalProps {
 
 export default function CreateApplicationModal({ onClose }: CreateApplicationModalProps) {
   const [activeTab, setActiveTab] = useState("form1")
+  const [loading, setLoading] = useState(false)
+  const [controlNumberPreview, setControlNumberPreview] = useState("")
+  const { toast } = useToast()
+  const { createApplication } = useDirectHireApplications()
+  
+  const [formData, setFormData] = useState({
+    name: "",
+    sex: "male",
+    jobsite: "",
+    position: "",
+    salary: "",
+    salaryCurrency: "USD" as Currency,
+    evaluator: ""
+  })
+
+  // Generate control number preview
+  const generateControlNumberPreview = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthDay = `${month}${day}`;
+    
+    // For preview, we'll use a placeholder count that will be updated by the backend
+    const monthlyCountStr = "001";
+    const yearlyCountStr = "001";
+    
+    return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;
+  };
+
+  // Get converted USD amount for display
+  const getUSDEquivalentDisplay = (): string => {
+    if (!formData.salary || isNaN(parseFloat(formData.salary))) return "";
+    return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
+  };
+
+  useEffect(() => {
+    setControlNumberPreview(generateControlNumberPreview());
+  }, []);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
       <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
         {/* Modal Header */}
         <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
@@ -39,22 +81,39 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
             </TabsList>
 
             <TabsContent value="form1" className="space-y-4">
-              {/* Control No */}
+              {/* Control No - Preview */}
               <div>
-                <Label className="text-sm font-medium">Control No.</Label>
-                <Input value="DHPSW-ROIVA-MMDD-2025-000" disabled className="mt-1 bg-gray-50" />
+                <Label className="text-sm font-medium">Control No. (Preview)</Label>
+                <Input 
+                  value={controlNumberPreview} 
+                  disabled
+                  className="mt-1 bg-gray-50 font-mono text-sm" 
+                  placeholder="Generating preview..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This is a preview. The actual control number will be generated upon creation.
+                </p>
               </div>
 
               {/* Name of Worker */}
               <div>
                 <Label className="text-sm font-medium">Name of Worker:</Label>
-                <Input className="mt-1" placeholder="Enter worker name" />
+                <Input 
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="mt-1" 
+                  placeholder="Enter worker name" 
+                />
               </div>
 
               {/* Sex */}
               <div>
                 <Label className="text-sm font-medium mb-2 block">Sex:</Label>
-                <RadioGroup defaultValue="male" className="flex space-x-6">
+                <RadioGroup 
+                  value={formData.sex} 
+                  onValueChange={(value) => setFormData({ ...formData, sex: value })}
+                  className="flex space-x-6"
+                >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="male" id="male" />
                     <Label htmlFor="male">Male</Label>
@@ -66,159 +125,99 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                 </RadioGroup>
               </div>
 
-              {/* Type */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Type:</Label>
-                <RadioGroup defaultValue="household" className="flex space-x-6">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="household" id="household" />
-                    <Label htmlFor="household">Household</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="professional" id="professional" />
-                    <Label htmlFor="professional">Professional</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Contact Number */}
-              <div>
-                <Label className="text-sm font-medium">Contact Number:</Label>
-                <Input className="mt-1" placeholder="Enter contact number" />
-              </div>
-
-              {/* Email Address */}
-              <div>
-                <Label className="text-sm font-medium">Email Address:</Label>
-                <Input className="mt-1" type="email" placeholder="Enter email address" />
-              </div>
-
               {/* Jobsite */}
               <div>
                 <Label className="text-sm font-medium">Jobsite:</Label>
-                <Select>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select jobsite" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="singapore">Singapore</SelectItem>
-                    <SelectItem value="japan">Japan</SelectItem>
-                    <SelectItem value="china">China</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input 
+                  value={formData.jobsite}
+                  onChange={(e) => setFormData({ ...formData, jobsite: e.target.value })}
+                  className="mt-1" 
+                  placeholder="Enter jobsite"
+                />
               </div>
 
               {/* Position */}
               <div>
                 <Label className="text-sm font-medium">Position:</Label>
-                <Select>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select position" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="domestic-worker">Domestic Worker</SelectItem>
-                    <SelectItem value="caregiver">Caregiver</SelectItem>
-                    <SelectItem value="nurse">Nurse</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input 
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  className="mt-1" 
+                  placeholder="Enter position"
+                />
               </div>
 
-              {/* Salary */}
+              {/* Salary with Currency */}
               <div>
-                <Label className="text-sm font-medium">Salary: Based on contract per month converted to USD:</Label>
-                <div className="flex space-x-2 mt-1">
-                  <Select defaultValue="php">
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="php">PHP</SelectItem>
-                      <SelectItem value="usd">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input className="flex-1" placeholder="Enter amount" />
-                  <Select defaultValue="daily">
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Label className="text-sm font-medium">Salary:</Label>
+                <div className="flex gap-2 mt-1">
+                  <div className="flex-1">
+                    <Input 
+                      value={formData.salary}
+                      onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                      type="number"
+                      step="0.01"
+                      placeholder="Enter salary amount" 
+                    />
+                  </div>
+                  <div className="w-32">
+                    <select 
+                      className="w-full border rounded px-3 py-2 text-sm"
+                      value={formData.salaryCurrency} 
+                      onChange={(e) => setFormData({ ...formData, salaryCurrency: e.target.value as Currency })}
+                    >
+                      {AVAILABLE_CURRENCIES.map((currency) => (
+                        <option key={currency.value} value={currency.value}>
+                          {currency.value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
-
-              {/* Employer */}
-              <div>
-                <Label className="text-sm font-medium">Employer:</Label>
-                <Input className="mt-1" placeholder="Enter employer name" />
+                {formData.salary && formData.salaryCurrency !== "USD" && (
+                  <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded-md">
+                    <Calculator className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm text-blue-700">
+                      USD Equivalent: {getUSDEquivalentDisplay()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Evaluator */}
               <div>
                 <Label className="text-sm font-medium">Evaluator:</Label>
-                <Select>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select evaluator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="evaluator1">Evaluator 1</SelectItem>
-                    <SelectItem value="evaluator2">Evaluator 2</SelectItem>
-                    <SelectItem value="evaluator3">Evaluator 3</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input 
+                  value={formData.evaluator}
+                  onChange={(e) => setFormData({ ...formData, evaluator: e.target.value })}
+                  className="mt-1" 
+                  placeholder="Enter evaluator name"
+                />
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0]" onClick={() => setActiveTab("form2")}>
+                <Button 
+                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
+                  onClick={() => setActiveTab("form2")}
+                  disabled={!formData.name || !formData.jobsite || !formData.position || !formData.salary}
+                >
                   Next
                 </Button>
               </div>
             </TabsContent>
 
             <TabsContent value="form2" className="space-y-6">
-              {/* Passport */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Passport:</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <Button variant="outline" className="mb-2">
-                    Choose files
-                  </Button>
-                  <p className="text-sm text-gray-500">No file chosen</p>
-                </div>
-              </div>
-
-              {/* Visa/Work Permit */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Visa/Work Permit:</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <Button variant="outline" className="mb-2">
-                    Choose files
-                  </Button>
-                  <p className="text-sm text-gray-500">No file chosen</p>
-                </div>
-              </div>
-
-              {/* Employment Contract */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Employment Contract/ Offer of Employment:</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <Button variant="outline" className="mb-2">
-                    Choose files
-                  </Button>
-                  <p className="text-sm text-gray-500">No file chosen</p>
-                </div>
-              </div>
-
-              {/* TESDA License */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">TESDA NC/IPRC License:</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <Button variant="outline" className="mb-2">
-                    Choose files
-                  </Button>
-                  <p className="text-sm text-gray-500">No file chosen</p>
+              <div className="text-center py-8">
+                <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Document Upload</h3>
+                <p className="text-gray-500 mb-6">
+                  Document upload functionality will be available in the next update.
+                </p>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p>• Passport</p>
+                  <p>• Visa/Work Permit</p>
+                  <p>• Employment Contract</p>
+                  <p>• TESDA NC/PRC License</p>
                 </div>
               </div>
 
@@ -226,8 +225,54 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                 <Button variant="outline" onClick={onClose}>
                   Save as Draft
                 </Button>
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0]" onClick={onClose}>
-                  Create
+                <Button 
+                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      // Convert salary to USD for storage
+                      const salaryInUSD = formData.salaryCurrency === "USD" 
+                        ? parseFloat(formData.salary)
+                        : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency);
+
+                      const applicationData = {
+                        name: formData.name,
+                        sex: formData.sex,
+                        salary: salaryInUSD,
+                        jobsite: formData.jobsite,
+                        position: formData.position,
+                        evaluator: formData.evaluator,
+                        status: 'pending'
+                      };
+
+                      const result = await createApplication(applicationData);
+                      if (result) {
+                        onClose();
+                        toast({
+                          title: 'Application created successfully!',
+                          description: `${formData.name} has been added to the system`,
+                        });
+                      }
+                    } catch (error) {
+                      toast({
+                        title: 'Error creating application',
+                        description: 'Failed to create the application. Please try again.',
+                        variant: 'destructive'
+                      });
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create'
+                  )}
                 </Button>
               </div>
             </TabsContent>

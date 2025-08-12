@@ -1,27 +1,15 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
-
-type DirectHireApplication = {
-  id: number
-  controlNumber: string
-  name: string
-  sex: string
-  salary: string
-  status:
-    | "evaluated"
-    | "for confirmation"
-    | "emailed to dhad"
-    | "received from dhad"
-    | "for interview"
-    | "for appointment"
-}
+import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
+import { DirectHireApplication } from "@/lib/types"
+import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 
 interface DirectHireApplicationsTableProps {
   search: string
@@ -29,155 +17,93 @@ interface DirectHireApplicationsTableProps {
 
 export default function DirectHireApplicationsTable({ search }: DirectHireApplicationsTableProps) {
   const { toast } = useToast()
+  const { 
+    applications, 
+    loading, 
+    error, 
+    createApplication, 
+    deleteApplication,
+    fetchApplications 
+  } = useDirectHireApplications()
+  
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<DirectHireApplication | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [formStep, setFormStep] = useState(1)
+  const [controlNumberPreview, setControlNumberPreview] = useState("")
   const [formData, setFormData] = useState<any>({
-    controlNumber: "",
     name: "",
-    sex: "Male",
-    type: "Professional",
-    contact: "",
-    email: "",
+    sex: "male",
     jobsite: "",
     position: "",
     salary: "",
-    salaryCurrency: "PHP",
-    salaryUSD: "",
-    salaryFrequency: "Daily",
-    employer: "",
+    salaryCurrency: "USD" as Currency,
     evaluator: "",
-    passport: null,
-    visa: null,
-    contract: null,
-    tesda: null,
   })
-  const [applications, setApplications] = useState<DirectHireApplication[]>([
-    {
-      id: 1,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-001",
-      name: "Delos Santos, Patricia Mae",
-      sex: "Female",
-      salary: "$690",
-      status: "evaluated",
-    },
-    {
-      id: 2,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-002",
-      name: "Santos, Juan Dela Cruz",
-      sex: "Male",
-      salary: "$1,200",
-      status: "for confirmation",
-    },
-    {
-      id: 3,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-003",
-      name: "Reyes, Maria Clara",
-      sex: "Female",
-      salary: "$2,000",
-      status: "emailed to dhad",
-    },
-    {
-      id: 4,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-004",
-      name: "Lim, Roberto",
-      sex: "Male",
-      salary: "$1,500",
-      status: "received from dhad",
-    },
-    {
-      id: 5,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-005",
-      name: "Gomez, Ana",
-      sex: "Female",
-      salary: "$1,800",
-      status: "for interview",
-    },
-    {
-      id: 6,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-006",
-      name: "Torres, Michael",
-      sex: "Male",
-      salary: "$950",
-      status: "for appointment",
-    },
-    {
-      id: 7,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-007",
-      name: "Navarro, Jose",
-      sex: "Male",
-      salary: "$1,100",
-      status: "evaluated",
-    },
-    {
-      id: 8,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-008",
-      name: "Cruz, Angela",
-      sex: "Female",
-      salary: "$1,300",
-      status: "for confirmation",
-    },
-    {
-      id: 9,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-009",
-      name: "Dela Cruz, Mark",
-      sex: "Male",
-      salary: "$1,400",
-      status: "emailed to dhad",
-    },
-    {
-      id: 10,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-010",
-      name: "Villanueva, Carla",
-      sex: "Female",
-      salary: "$1,600",
-      status: "received from dhad",
-    },
-    {
-      id: 11,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-011",
-      name: "Santiago, Paul",
-      sex: "Male",
-      salary: "$1,700",
-      status: "for interview",
-    },
-    {
-      id: 12,
-      controlNumber: "DHPSW-ROIVA-2025-0319-013-012",
-      name: "Lopez, Maria",
-      sex: "Female",
-      salary: "$1,800",
-      status: "for appointment",
-    },
-  ])
 
+  // Generate control number preview
+  const generateControlNumberPreview = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthDay = `${month}${day}`;
+    
+    // For preview, we'll use a placeholder count that will be updated by the backend
+    const monthlyCountStr = "001";
+    const yearlyCountStr = "001";
+    
+    return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;
+  };
+
+  // Get converted USD amount for display
+  const getUSDEquivalentDisplay = (): string => {
+    if (!formData.salary || isNaN(parseFloat(formData.salary))) return "";
+    return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
+  };
+
+  useEffect(() => {
+    setControlNumberPreview(generateControlNumberPreview());
+  }, []);
+
+  // Filter applications based on search
   const filteredApplications = applications.filter(application =>
     Object.values(application).some(value =>
       String(value).toLowerCase().includes(search.toLowerCase())
     )
   )
 
+  // Show error toast if there's an error
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: error,
+        variant: "destructive"
+      })
+    }
+  }, [error, toast])
+
   const getStatusBadge = (status: string) => {
     const capitalizeWords = (str: string) => {
-      return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
     }
 
     switch (status) {
+      case "pending":
+        return <div className="bg-[#FFF3E0] text-[#F57C00] text-xs px-2 py-1 rounded">Pending</div>
       case "evaluated":
         return <div className="bg-[#E3F2FD] text-[#1976D2] text-xs px-2 py-1 rounded">Evaluated</div>
-      case "for confirmation":
+      case "for_confirmation":
         return <div className="bg-[#F5F5F5] text-[#424242] text-xs px-2 py-1 rounded">For Confirmation</div>
-      case "emailed to dhad":
-        return <div className="bg-[#FFF3E0] text-[#F57C00] text-xs px-2 py-1 rounded">Emailed To DHAD</div>
-      case "received from dhad":
-        return <div className="bg-[#E8F5E9] text-[#2E7D32] text-xs px-2 py-1 rounded">Received From DHAD</div>
-      case "for interview":
+      case "for_interview":
         return <div className="bg-[#FCE4EC] text-[#C2185B] text-xs px-2 py-1 rounded">For Interview</div>
-      case "for appointment":
-        return <div className="bg-[#F3E5F5] text-[#7B1FA2] text-xs px-2 py-1 rounded">For Appointment</div>
+      case "approved":
+        return <div className="bg-[#E8F5E9] text-[#2E7D32] text-xs px-2 py-1 rounded">Approved</div>
+      case "rejected":
+        return <div className="bg-[#FFEBEE] text-[#C62828] text-xs px-2 py-1 rounded">Rejected</div>
       default:
-        return null
+        return <div className="bg-[#F5F5F5] text-[#424242] text-xs px-2 py-1 rounded">{capitalizeWords(status)}</div>
     }
   }
 
@@ -197,84 +123,97 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredApplications.map((application) => (
-                <tr key={application.id} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 text-center">{application.controlNumber}</td>
-                  <td className="py-3 px-4 text-center">{application.name}</td>
-                  <td className="py-3 px-4 text-center">{application.sex}</td>
-                  <td className={`py-3 px-4 text-center font-medium ${parseInt(application.salary.replace(/[^0-9]/g, '')) < 1000 ? 'text-red-500' : ''}`}>
-                    {application.salary}
-                  </td>
-                  <td className="py-3 px-4 text-center">{getStatusBadge(application.status)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex justify-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelected(application)
-                              setOpen(true)
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              toast({
-                                title: "Edit functionality coming soon",
-                                description: "This feature will be available in the next update",
-                              })
-                            }}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              // Show confirmation dialog first
-                              const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`)
-                              if (confirmDelete) {
-                                setApplications(applications.filter(app => app.id !== application.id))
-                                toast({
-                                  title: "Application deleted successfully",
-                                  description: `${application.name}'s application has been removed`,
-                                })
-                              } else {
-                                toast({
-                                  title: "Deletion cancelled",
-                                  description: "No changes were made to the application",
-                                })
-                              }
-                            }}
-                            className="text-red-600 focus:text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              toast({
-                                title: "Compliance form generated",
-                                description: "The document has been prepared and is ready for download",
-                              })
-                            }}
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Compliance Form
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center">
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                      Loading applications...
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : filteredApplications.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
+                    No applications found
+                  </td>
+                </tr>
+              ) : (
+                filteredApplications.map((application) => (
+                  <tr key={application.id} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 text-center">{application.control_number}</td>
+                    <td className="py-3 px-4 text-center">{application.name}</td>
+                    <td className="py-3 px-4 text-center capitalize">{application.sex}</td>
+                    <td className={`py-3 px-4 text-center font-medium ${application.salary < 1000 ? 'text-red-500' : ''}`}>
+                      ${application.salary.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-center">{getStatusBadge(application.status)}</td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex justify-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Open menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelected(application)
+                                setOpen(true)
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                toast({
+                                  title: "Edit functionality coming soon",
+                                  description: "This feature will be available in the next update",
+                                })
+                              }}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`)
+                                if (confirmDelete) {
+                                  const success = await deleteApplication(application.id)
+                                  if (success) {
+                                    toast({
+                                      title: "Application deleted successfully",
+                                      description: `${application.name}'s application has been removed`,
+                                    })
+                                  }
+                                }
+                              }}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                toast({
+                                  title: "Compliance form generated",
+                                  description: "The document has been prepared and is ready for download",
+                                })
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              Compliance Form
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -296,7 +235,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <div>
                     <div className="text-gray-500">Control No.:</div>
-                    <div className="font-medium">{selected.controlNumber}</div>
+                    <div className="font-medium">{selected.control_number}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Name:</div>
@@ -304,19 +243,19 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                   </div>
                   <div>
                     <div className="text-gray-500">Sex:</div>
-                    <div className="font-medium">{selected.sex}</div>
+                    <div className="font-medium capitalize">{selected.sex}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Type of Worker:</div>
-                    <div className="font-medium">Professional</div>
+                    <div className="text-gray-500">Status:</div>
+                    <div className="font-medium">{getStatusBadge(selected.status)}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Contact No.:</div>
-                    <div className="font-medium">(+63) 9999999999</div>
+                    <div className="text-gray-500">Jobsite:</div>
+                    <div className="font-medium">{selected.jobsite}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Email Address:</div>
-                    <div className="font-medium">evangelistafatima@gmail.com</div>
+                    <div className="text-gray-500">Position:</div>
+                    <div className="font-medium">{selected.position}</div>
                   </div>
                 </div>
               </div>
@@ -327,19 +266,19 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <div>
                     <div className="text-gray-500">Jobsite:</div>
-                    <div className="font-medium">Singapore</div>
+                    <div className="font-medium">{selected.jobsite}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Position:</div>
-                    <div className="font-medium">Teacher</div>
+                    <div className="font-medium">{selected.position}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Salary:</div>
-                    <div className="font-medium">{selected.salary}</div>
+                    <div className="font-medium">${selected.salary.toLocaleString()}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Employer:</div>
-                    <div className="font-medium">ABC Company</div>
+                    <div className="text-gray-500">Evaluator:</div>
+                    <div className="font-medium">{selected.evaluator || 'Not assigned'}</div>
                   </div>
                 </div>
               </div>
@@ -349,34 +288,46 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 <div className="font-semibold text-gray-700 mb-2">Application Status</div>
                 <ul className="text-sm">
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-green-600 text-lg">●</span>
-                    <span className="font-semibold text-green-700">Evaluated</span>
-                    <span className="ml-auto text-xs text-green-700">(Feb 10, 2025) 2:10 PM</span>
+                    <span className={`text-lg ${selected.status === 'pending' ? 'text-orange-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'pending' ? 'text-orange-700' : 'text-gray-700'}`}>Pending</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'pending' ? 'text-orange-700' : 'text-gray-500'}`}>
+                      {selected.status === 'pending' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-lg">●</span>
-                    <span className="font-semibold text-gray-700">For Confirmation (MWO/PE/PCG)</span>
-                    <span className="ml-auto text-xs text-gray-500">N/A</span>
+                    <span className={`text-lg ${selected.status === 'evaluated' ? 'text-green-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'evaluated' ? 'text-green-700' : 'text-gray-700'}`}>Evaluated</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'evaluated' ? 'text-green-700' : 'text-gray-500'}`}>
+                      {selected.status === 'evaluated' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-lg">●</span>
-                    <span className="font-semibold text-gray-700">Emailed to DHAD</span>
-                    <span className="ml-auto text-xs text-gray-500">N/A</span>
+                    <span className={`text-lg ${selected.status === 'for_confirmation' ? 'text-blue-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'for_confirmation' ? 'text-blue-700' : 'text-gray-700'}`}>For Confirmation</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'for_confirmation' ? 'text-blue-700' : 'text-gray-500'}`}>
+                      {selected.status === 'for_confirmation' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-lg">●</span>
-                    <span className="font-semibold text-gray-700">Received from DHAD</span>
-                    <span className="ml-auto text-xs text-gray-500">N/A</span>
+                    <span className={`text-lg ${selected.status === 'for_interview' ? 'text-purple-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'for_interview' ? 'text-purple-700' : 'text-gray-700'}`}>For Interview</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'for_interview' ? 'text-purple-700' : 'text-gray-500'}`}>
+                      {selected.status === 'for_interview' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-lg">●</span>
-                    <span className="font-semibold text-gray-700">For Appointment</span>
-                    <span className="ml-auto text-xs text-gray-500">...</span>
+                    <span className={`text-lg ${selected.status === 'approved' ? 'text-green-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'approved' ? 'text-green-700' : 'text-gray-700'}`}>Approved</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'approved' ? 'text-green-700' : 'text-gray-500'}`}>
+                      {selected.status === 'approved' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                   <li className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-lg">●</span>
-                    <span className="font-semibold text-gray-700">For Interview</span>
-                    <span className="ml-auto text-xs text-gray-500">N/A</span>
+                    <span className={`text-lg ${selected.status === 'rejected' ? 'text-red-600' : 'text-gray-400'}`}>●</span>
+                    <span className={`font-semibold ${selected.status === 'rejected' ? 'text-red-700' : 'text-gray-700'}`}>Rejected</span>
+                    <span className={`ml-auto text-xs ${selected.status === 'rejected' ? 'text-red-700' : 'text-gray-500'}`}>
+                      {selected.status === 'rejected' ? '(Current)' : 'N/A'}
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -511,8 +462,11 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 {/* Form 1 Fields */}
                 <form className="space-y-4">
                   <div>
-                    <label className="text-xs font-medium flex items-center gap-2"><span>Control No.</span></label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.controlNumber} onChange={e => setFormData({ ...formData, controlNumber: e.target.value })} />
+                    <label className="text-xs font-medium flex items-center gap-2"><span>Control No. (Preview)</span></label>
+                    <input className="w-full border rounded px-3 py-2 mt-1 bg-gray-50 font-mono text-sm" value={controlNumberPreview} disabled />
+                    <p className="text-xs text-gray-500 mt-1">
+                      This is a preview. The actual control number will be generated upon creation.
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs font-medium flex items-center gap-2"><span>Name of Worker:</span></label>
@@ -522,25 +476,10 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                     <div className="flex-1">
                       <label className="text-xs font-medium">Sex:</label>
                       <div className="flex gap-4 mt-1">
-                        <label className="flex items-center gap-1"><input type="radio" name="sex" checked={formData.sex === 'Male'} onChange={() => setFormData({ ...formData, sex: 'Male' })} /> Male</label>
-                        <label className="flex items-center gap-1"><input type="radio" name="sex" checked={formData.sex === 'Female'} onChange={() => setFormData({ ...formData, sex: 'Female' })} /> Female</label>
+                        <label className="flex items-center gap-1"><input type="radio" name="sex" checked={formData.sex === 'male'} onChange={() => setFormData({ ...formData, sex: 'male' })} /> Male</label>
+                        <label className="flex items-center gap-1"><input type="radio" name="sex" checked={formData.sex === 'female'} onChange={() => setFormData({ ...formData, sex: 'female' })} /> Female</label>
                       </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium">Type:</label>
-                      <div className="flex gap-4 mt-1">
-                        <label className="flex items-center gap-1"><input type="radio" name="type" checked={formData.type === 'Household'} onChange={() => setFormData({ ...formData, type: 'Household' })} /> Household</label>
-                        <label className="flex items-center gap-1"><input type="radio" name="type" checked={formData.type === 'Professional'} onChange={() => setFormData({ ...formData, type: 'Professional' })} /> Professional</label>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium">Contact Number:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.contact} onChange={e => setFormData({ ...formData, contact: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium">Email Address:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                   </div>
                   <div>
                     <label className="text-xs font-medium">Jobsite:</label>
@@ -550,37 +489,54 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                     <label className="text-xs font-medium">Position:</label>
                     <input className="w-full border rounded px-3 py-2 mt-1" value={formData.position} onChange={e => setFormData({ ...formData, position: e.target.value })} />
                   </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs font-medium">Salary: Based on contract per month (converted to USD):</label>
-                      <div className="flex gap-2 mt-1">
-                        <select className="border rounded px-2" value={formData.salaryCurrency} onChange={e => setFormData({ ...formData, salaryCurrency: e.target.value })}>
-                          <option>PHP</option>
-                          <option>USD</option>
-                        </select>
-                        <input className="border rounded px-2 w-24" value={formData.salary} onChange={e => setFormData({ ...formData, salary: e.target.value })} />
-                        <span>/</span>
-                        <select className="border rounded px-2" value={formData.salaryFrequency} onChange={e => setFormData({ ...formData, salaryFrequency: e.target.value })}>
-                          <option>Daily</option>
-                          <option>Monthly</option>
+                  <div>
+                    <label className="text-xs font-medium">Salary:</label>
+                    <div className="flex gap-2 mt-1">
+                      <div className="flex-1">
+                        <input 
+                          className="w-full border rounded px-3 py-2" 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.salary} 
+                          onChange={e => setFormData({ ...formData, salary: e.target.value })} 
+                          placeholder="Enter salary amount"
+                        />
+                      </div>
+                      <div className="w-32">
+                        <select 
+                          className="w-full border rounded px-3 py-2 text-sm"
+                          value={formData.salaryCurrency} 
+                          onChange={e => setFormData({ ...formData, salaryCurrency: e.target.value as Currency })}
+                        >
+                          {AVAILABLE_CURRENCIES.map((currency) => (
+                            <option key={currency.value} value={currency.value}>
+                              {currency.value}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium">USD:</label>
-                      <input className="w-full border rounded px-3 py-2 mt-1" value={formData.salaryUSD} onChange={e => setFormData({ ...formData, salaryUSD: e.target.value })} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium">Employer:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.employer} onChange={e => setFormData({ ...formData, employer: e.target.value })} />
+                    {formData.salary && formData.salaryCurrency !== "USD" && (
+                      <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded-md">
+                        <span className="text-xs text-blue-700">
+                          USD Equivalent: {getUSDEquivalentDisplay()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-medium">Evaluator:</label>
                     <input className="w-full border rounded px-3 py-2 mt-1" value={formData.evaluator} onChange={e => setFormData({ ...formData, evaluator: e.target.value })} />
                   </div>
                   <div className="flex justify-end mt-6">
-                    <Button className="bg-[#1976D2] text-white px-8" type="button" onClick={() => setFormStep(2)}>Next</Button>
+                    <Button 
+                      className="bg-[#1976D2] text-white px-8" 
+                      type="button" 
+                      onClick={() => setFormStep(2)}
+                      disabled={!formData.name || !formData.jobsite || !formData.position || !formData.salary}
+                    >
+                      Next
+                    </Button>
                   </div>
                 </form>
               </TabsContent>
@@ -611,24 +567,56 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                         description: 'You can continue editing this application later',
                       }) 
                     }}>Save as Draft</Button>
-                    <Button className="bg-[#1976D2] text-white flex-1" type="button" onClick={() => {
-                      setApplications([
-                        ...applications,
-                        {
-                          id: applications.length + 1,
-                          controlNumber: formData.controlNumber,
+                    <Button 
+                      className="bg-[#1976D2] text-white flex-1" 
+                      type="button" 
+                                          onClick={async () => {
+                      try {
+                        // Convert salary to USD for storage
+                        const salaryInUSD = formData.salaryCurrency === "USD" 
+                          ? parseFloat(formData.salary)
+                          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency);
+
+                        const applicationData = {
                           name: formData.name,
                           sex: formData.sex,
-                          salary: formData.salaryUSD ? `$${formData.salaryUSD}` : `$${formData.salary}`,
-                          status: "evaluated",
-                        },
-                      ])
-                      setCreateOpen(false)
-                      toast({
-                        title: 'Applicant created successfully!',
-                        description: `${formData.name} has been added to the system`,
-                      })
-                    }}>Create</Button>
+                          salary: salaryInUSD,
+                          jobsite: formData.jobsite,
+                          position: formData.position,
+                          evaluator: formData.evaluator,
+                          status: 'pending'
+                        };
+
+                          const result = await createApplication(applicationData);
+                          if (result) {
+                            setCreateOpen(false);
+                            setFormData({
+                              name: "",
+                              sex: "male",
+                              jobsite: "",
+                              position: "",
+                              salary: "",
+                              salaryCurrency: "USD" as Currency,
+                              evaluator: "",
+                            });
+                            setControlNumberPreview(generateControlNumberPreview());
+                            setFormStep(1);
+                            toast({
+                              title: 'Applicant created successfully!',
+                              description: `${formData.name} has been added to the system`,
+                            });
+                          }
+                        } catch (error) {
+                          toast({
+                            title: 'Error creating application',
+                            description: 'Failed to create the application. Please try again.',
+                            variant: 'destructive'
+                          });
+                        }
+                      }}
+                    >
+                      Create
+                    </Button>
                   </div>
                 </form>
               </TabsContent>
@@ -639,3 +627,4 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
     </>
   )
 }
+

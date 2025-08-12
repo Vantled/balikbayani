@@ -19,6 +19,41 @@ import {
 } from '../types';
 
 export class DatabaseService {
+  // Generate control number for direct hire applications
+  static async generateDirectHireControlNumber(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthDay = `${month}${day}`;
+    
+    // Get count for this month
+    const monthStart = new Date(year, now.getMonth(), 1);
+    const monthEnd = new Date(year, now.getMonth() + 1, 0);
+    
+    const { rows: monthCount } = await db.query(
+      'SELECT COUNT(*) FROM direct_hire_applications WHERE created_at >= $1 AND created_at <= $2',
+      [monthStart, monthEnd]
+    );
+    
+    const monthlyCount = parseInt(monthCount[0].count) + 1;
+    const monthlyCountStr = String(monthlyCount).padStart(3, '0');
+    
+    // Get count for this year
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31);
+    
+    const { rows: yearCount } = await db.query(
+      'SELECT COUNT(*) FROM direct_hire_applications WHERE created_at >= $1 AND created_at <= $2',
+      [yearStart, yearEnd]
+    );
+    
+    const yearlyCount = parseInt(yearCount[0].count) + 1;
+    const yearlyCountStr = String(yearlyCount).padStart(3, '0');
+    
+    return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;
+  }
+
   // User Management
   static async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
     const { rows } = await db.query(
@@ -57,7 +92,7 @@ export class DatabaseService {
   static async createDirectHireApplication(appData: Omit<DirectHireApplication, 'id' | 'created_at' | 'updated_at'>): Promise<DirectHireApplication> {
     const { rows } = await db.query(
       'INSERT INTO direct_hire_applications (control_number, name, sex, salary, status, jobsite, position, evaluator) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [appData.control_number, appData.name, appData.sex, appData.salary, appData.status, appData.jobsite, appData.position, appData.evaluator]
+      [appData.control_number, appData.name, appData.sex, appData.salary, appData.status, appData.jobsite, appData.position, appData.evaluator || '']
     );
     return rows[0];
   }
@@ -136,7 +171,7 @@ export class DatabaseService {
 
   static async deleteDirectHireApplication(id: string): Promise<boolean> {
     const { rowCount } = await db.query('DELETE FROM direct_hire_applications WHERE id = $1', [id]);
-    return rowCount > 0;
+    return (rowCount || 0) > 0;
   }
 
   // Balik Manggagawa Clearance

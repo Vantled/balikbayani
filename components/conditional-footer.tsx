@@ -18,7 +18,7 @@ export function ConditionalFooter() {
   }
 
   return (
-    <footer className="fixed bottom-0 left-0 w-full bg-white p-4 text-center text-xs text-gray-500 z-50">
+    <footer className="fixed bottom-0 left-0 w-full bg-white p-4 text-center text-xs text-gray-500 z-40">
       <p>© 2025 BalikBayani Portal. All rights reserved.</p>
       <p>This is a secure government system. Unauthorized access is prohibited and subject to legal action.</p>
     </footer>

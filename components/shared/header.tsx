@@ -113,9 +113,9 @@ export default function Header() {
                       ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
                       : 'text-gray-600 hover:text-[#1976D2]'
                   }`}
-                  aria-label="Job Fairs menu"
+                  aria-label="Monitoring List menu"
                 >
-                  Job Fairs
+                  Monitoring List
                   <ChevronDown className="h-4 w-4 ml-1" />
                 </button>
               </DropdownMenuTrigger>

@@ -1,92 +1,96 @@
 // app/api/direct-hire/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
-import { ApiResponse, PaginatedResponse, DirectHireApplication } from '@/lib/types';
+import { ApiResponse } from '@/lib/types';
 
-export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<PaginatedResponse<DirectHireApplication>>>> {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
-    // Parse query parameters
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || undefined;
     const status = searchParams.get('status') || undefined;
     const sex = searchParams.get('sex') || undefined;
-    const dateFrom = searchParams.get('date_from') || undefined;
-    const dateTo = searchParams.get('date_to') || undefined;
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
 
     const filters = {
       search,
       status,
-      sex,
-      date_from: dateFrom ? new Date(dateFrom) : undefined,
-      date_to: dateTo ? new Date(dateTo) : undefined
+      sex: sex as 'male' | 'female' | undefined
     };
 
-    const pagination = { page, limit };
+    const pagination = {
+      page,
+      limit
+    };
 
     const result = await DatabaseService.getDirectHireApplications(filters, pagination);
 
-    return NextResponse.json({
+    const response: ApiResponse = {
       success: true,
       data: result
-    });
+    };
 
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Get direct hire applications error:', error);
-    return NextResponse.json({
+    console.error('Error fetching direct hire applications:', error);
+    
+    const response: ApiResponse = {
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+      error: 'Failed to fetch direct hire applications'
+    };
+
+    return NextResponse.json(response, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<DirectHireApplication>>> {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { control_number, name, sex, salary, status, jobsite, position, evaluator } = body;
-
-    // Validation
-    if (!control_number || !name || !sex || !salary || !jobsite || !position) {
-      return NextResponse.json({
-        success: false,
-        error: 'Required fields are missing'
-      }, { status: 400 });
+    
+    // Validate required fields
+    const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
+    for (const field of requiredFields) {
+      if (!body[field]) {
+        const response: ApiResponse = {
+          success: false,
+          error: `Missing required field: ${field}`
+        };
+        return NextResponse.json(response, { status: 400 });
+      }
     }
 
-    // Check if control number already exists
-    const existingApp = await DatabaseService.getDirectHireApplicationById(control_number);
-    if (existingApp) {
-      return NextResponse.json({
-        success: false,
-        error: 'Control number already exists'
-      }, { status: 409 });
-    }
+    // Generate control number automatically
+    const controlNumber = await DatabaseService.generateDirectHireControlNumber();
 
-    // Create application
-    const application = await DatabaseService.createDirectHireApplication({
-      control_number,
-      name,
-      sex,
-      salary: parseFloat(salary),
-      status: status || 'pending',
-      jobsite,
-      position,
-      evaluator
-    });
+    // Create the application
+    const applicationData = {
+      control_number: controlNumber,
+      name: body.name,
+      sex: body.sex,
+      salary: parseFloat(body.salary),
+      status: body.status || 'pending',
+      jobsite: body.jobsite,
+      position: body.position,
+      evaluator: body.evaluator || ''
+    };
 
-    return NextResponse.json({
+    const result = await DatabaseService.createDirectHireApplication(applicationData);
+
+    const response: ApiResponse = {
       success: true,
-      data: application,
+      data: result,
       message: 'Direct hire application created successfully'
-    }, { status: 201 });
+    };
 
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
-    console.error('Create direct hire application error:', error);
-    return NextResponse.json({
+    console.error('Error creating direct hire application:', error);
+    
+    const response: ApiResponse = {
       success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+      error: 'Failed to create direct hire application'
+    };
+
+    return NextResponse.json(response, { status: 500 });
   }
 }

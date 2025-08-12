@@ -508,6 +508,11 @@ export class DatabaseService {
     return rows[0];
   }
 
+  static async getDocumentById(id: string): Promise<Document | null> {
+    const { rows } = await db.query('SELECT * FROM documents WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
   static async getDocumentsByApplication(applicationId: string, applicationType: string): Promise<Document[]> {
     const { rows } = await db.query(
       'SELECT * FROM documents WHERE application_id = $1 AND application_type = $2 ORDER BY uploaded_at DESC',

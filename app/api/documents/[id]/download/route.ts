@@ -1,56 +1,58 @@
 // app/api/documents/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
-import FileUploadService from '@/lib/file-upload';
-import fs from 'fs';
-
-interface RouteParams {
-  params: { id: string };
-}
+import { FileUploadService } from '@/lib/file-upload-service';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 
 export async function GET(
   request: NextRequest,
-  { params }: RouteParams
-): Promise<NextResponse> {
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const documentId = params.id;
-
-    // Get document from database
-    const document = await DatabaseService.getDocumentById(documentId);
+    const { id } = await params;
+    
+    // Get document info from database
+    const document = await DatabaseService.getDocumentById(id);
+    
     if (!document) {
-      return NextResponse.json({
-        success: false,
-        error: 'Document not found'
-      }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      );
     }
 
+    // Get full file path
+    const filePath = FileUploadService.getFilePath(document.file_path);
+    
     // Check if file exists
-    const fileInfo = FileUploadService.getFileInfo(document.file_path);
-    if (!fileInfo.exists) {
-      return NextResponse.json({
-        success: false,
-        error: 'File not found on server'
-      }, { status: 404 });
+    if (!existsSync(filePath)) {
+      return NextResponse.json(
+        { error: 'File not found on server' },
+        { status: 404 }
+      );
     }
 
     // Read file
-    const filePath = FileUploadService.getFilePath(document.file_path);
-    const fileBuffer = fs.readFileSync(filePath);
-
-    // Return file with appropriate headers
+    const fileBuffer = await readFile(filePath);
+    
+    // Set appropriate headers
+    const headers = new Headers();
+    headers.set('Content-Type', document.mime_type);
+    headers.set('Content-Disposition', `inline; filename="${document.file_name}"`);
+    headers.set('Content-Length', document.file_size.toString());
+    
+    // Return file
     return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': document.mime_type,
-        'Content-Disposition': `attachment; filename="${document.file_name}"`,
-        'Content-Length': document.file_size.toString()
-      }
+      status: 200,
+      headers
     });
-
+    
   } catch (error) {
-    console.error('File download error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to download document'
-    }, { status: 500 });
+    console.error('Error serving document:', error);
+    return NextResponse.json(
+      { error: 'Failed to serve document' },
+      { status: 500 }
+    );
   }
 }

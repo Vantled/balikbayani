@@ -10,9 +10,14 @@ import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { DirectHireApplication } from "@/lib/types"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
+import { Document } from "@/lib/types"
 
 interface DirectHireApplicationsTableProps {
   search: string
+}
+
+interface ApplicantDocumentsTabProps {
+  applicationId: string
 }
 
 export default function DirectHireApplicationsTable({ search }: DirectHireApplicationsTableProps) {
@@ -29,6 +34,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<DirectHireApplication | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [formStep, setFormStep] = useState(1)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
   const [formData, setFormData] = useState<any>({
@@ -337,110 +343,49 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
                 <div className="flex gap-2 mb-2">
                   <Button variant="outline" className="text-xs">+ Merge</Button>
-                  <Button className="bg-[#1976D2] text-white text-xs">+ New</Button>
+                  <Button 
+                    className="bg-[#1976D2] text-white text-xs"
+                    onClick={() => setUploadModalOpen(true)}
+                  >
+                    + New
+                  </Button>
                 </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-                    <span>Clearance</span>
-                    <span className="ml-auto">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View</DropdownMenuItem>
-                          <DropdownMenuItem>Update/Replace</DropdownMenuItem>
-                          <DropdownMenuItem>Download</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-                    <span>Memorandum</span>
-                    <span className="ml-auto">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View</DropdownMenuItem>
-                          <DropdownMenuItem>Update/Replace</DropdownMenuItem>
-                          <DropdownMenuItem>Download</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-                    <span>MWO/PE/PCG Confirmation</span>
-                    <span className="ml-auto">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View</DropdownMenuItem>
-                          <DropdownMenuItem>Update/Replace</DropdownMenuItem>
-                          <DropdownMenuItem>Download</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <input type="checkbox" readOnly className="accent-[#1976D2]" />
-                    <span>Checklist of Requirements</span>
-                    <span className="ml-auto">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View</DropdownMenuItem>
-                          <DropdownMenuItem>Update/Replace</DropdownMenuItem>
-                          <DropdownMenuItem>Download</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <input type="checkbox" readOnly className="accent-[#1976D2]" />
-                    <span>Interview Form</span>
-                    <span className="ml-auto">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View</DropdownMenuItem>
-                          <DropdownMenuItem>Update/Replace</DropdownMenuItem>
-                          <DropdownMenuItem>Download</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </li>
-                </ul>
+                <ApplicantDocumentsList applicationId={selected.id} />
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Upload Document Modal */}
+      <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload New Document</DialogTitle>
+          </DialogHeader>
+          <DocumentUploadForm 
+            applicationId={selected?.id || ''}
+            applicationType="direct_hire"
+            onSuccess={() => {
+              setUploadModalOpen(false)
+              // Refresh the documents list by triggering a re-render
+              setSelected({ ...selected! })
+              toast({
+                title: 'Document uploaded',
+                description: 'Document has been uploaded successfully',
+              })
+            }}
+            onError={(error) => {
+              toast({
+                title: 'Upload Error',
+                description: error,
+                variant: 'destructive'
+              })
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
       {/* Create Applicant Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
@@ -545,19 +490,33 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 <form className="space-y-4">
                   <div>
                     <label className="text-xs font-medium">Passport:</label>
-                    <input type="file" className="w-full border rounded px-3 py-2 mt-1" onChange={e => setFormData({ ...formData, passport: e.target.files?.[0] })} />
+                    <input 
+                      type="file" 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={e => setFormData({ ...formData, passport: e.target.files?.[0] })} 
+                    />
+                    <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
                   </div>
                   <div>
                     <label className="text-xs font-medium">Visa/Work Permit:</label>
-                    <input type="file" className="w-full border rounded px-3 py-2 mt-1" onChange={e => setFormData({ ...formData, visa: e.target.files?.[0] })} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium">Employment Contract/ Offer of Employment:</label>
-                    <input type="file" className="w-full border rounded px-3 py-2 mt-1" onChange={e => setFormData({ ...formData, contract: e.target.files?.[0] })} />
+                    <input 
+                      type="file" 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={e => setFormData({ ...formData, visa: e.target.files?.[0] })} 
+                    />
+                    <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
                   </div>
                   <div>
                     <label className="text-xs font-medium">TESDA NCII/PRC License:</label>
-                    <input type="file" className="w-full border rounded px-3 py-2 mt-1" onChange={e => setFormData({ ...formData, tesda: e.target.files?.[0] })} />
+                    <input 
+                      type="file" 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={e => setFormData({ ...formData, tesda: e.target.files?.[0] })} 
+                    />
+                    <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
                   </div>
                   <div className="flex justify-between mt-6 gap-2">
                     <Button variant="outline" className="flex-1" type="button" onClick={() => { 
@@ -577,35 +536,53 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                           ? parseFloat(formData.salary)
                           : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency);
 
-                        const applicationData = {
-                          name: formData.name,
-                          sex: formData.sex,
-                          salary: salaryInUSD,
-                          jobsite: formData.jobsite,
-                          position: formData.position,
-                          evaluator: formData.evaluator,
-                          status: 'pending'
-                        };
+                        // Create FormData for file upload
+                        const formDataToSend = new FormData();
+                        formDataToSend.append('name', formData.name);
+                        formDataToSend.append('sex', formData.sex);
+                        formDataToSend.append('salary', salaryInUSD.toString());
+                        formDataToSend.append('jobsite', formData.jobsite);
+                        formDataToSend.append('position', formData.position);
+                        formDataToSend.append('evaluator', formData.evaluator);
+                        formDataToSend.append('status', 'pending');
 
-                          const result = await createApplication(applicationData);
-                          if (result) {
-                            setCreateOpen(false);
-                            setFormData({
-                              name: "",
-                              sex: "male",
-                              jobsite: "",
-                              position: "",
-                              salary: "",
-                              salaryCurrency: "USD" as Currency,
-                              evaluator: "",
-                            });
-                            setControlNumberPreview(generateControlNumberPreview());
-                            setFormStep(1);
-                            toast({
-                              title: 'Applicant created successfully!',
-                              description: `${formData.name} has been added to the system`,
-                            });
-                          }
+                        // Add files if they exist
+                        if (formData.passport) {
+                          formDataToSend.append('passport', formData.passport);
+                        }
+                        if (formData.visa) {
+                          formDataToSend.append('visa', formData.visa);
+                        }
+                        if (formData.tesda) {
+                          formDataToSend.append('tesda', formData.tesda);
+                        }
+
+                        const response = await fetch('/api/direct-hire', {
+                          method: 'POST',
+                          body: formDataToSend,
+                        });
+
+                        const result = await response.json();
+                                                  if (result.success) {
+                          setCreateOpen(false);
+                          setFormData({
+                            name: "",
+                            sex: "male",
+                            jobsite: "",
+                            position: "",
+                            salary: "",
+                            salaryCurrency: "USD" as Currency,
+                            evaluator: "",
+                          });
+                          setControlNumberPreview(generateControlNumberPreview());
+                          setFormStep(1);
+                          toast({
+                            title: 'Applicant created successfully!',
+                            description: `${formData.name} has been added to the system`,
+                          });
+                        } else {
+                          throw new Error(result.error || 'Failed to create application');
+                        }
                         } catch (error) {
                           toast({
                             title: 'Error creating application',
@@ -625,6 +602,253 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// Applicant Documents List Component
+function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
+
+  // Fetch documents for this application
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=direct_hire`)
+        const result = await response.json()
+        
+        if (result.success) {
+          setDocuments(result.data)
+        } else {
+          console.error('Failed to fetch documents:', result.error)
+        }
+      } catch (error) {
+        console.error('Error fetching documents:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to load documents',
+          variant: 'destructive'
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (applicationId) {
+      fetchDocuments()
+    }
+  }, [applicationId, toast])
+
+  // Handle document view/download
+  const handleView = async (document: Document) => {
+    try {
+      const response = await fetch(`/api/documents/${document.id}/download`)
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        window.open(url, '_blank')
+        window.URL.revokeObjectURL(url)
+      } else {
+        throw new Error('View failed')
+      }
+    } catch (error) {
+      toast({
+        title: 'View Error',
+        description: 'Failed to view document',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  // Handle document delete
+  const handleDelete = async (document: Document) => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${document.file_name}?`)
+    if (!confirmDelete) return
+
+    try {
+      const response = await fetch(`/api/documents/${document.id}`, {
+        method: 'DELETE'
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        setDocuments(docs => docs.filter(doc => doc.id !== document.id))
+        toast({
+          title: 'Document deleted',
+          description: `${document.file_name} has been removed`,
+        })
+      } else {
+        throw new Error(result.error || 'Delete failed')
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete Error',
+        description: 'Failed to delete document',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-4">
+        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+        Loading documents...
+      </div>
+    )
+  }
+
+  if (documents.length === 0) {
+    return (
+      <div className="text-center py-4 text-gray-500 text-sm">
+        No documents uploaded yet
+      </div>
+    )
+  }
+
+  return (
+    <ul className="space-y-2">
+      {documents.map((document) => (
+        <li key={document.id} className="flex items-center gap-2">
+          <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
+          <span className="flex-1 text-sm">{document.file_name}</span>
+          <span className="ml-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleView(document)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDelete(document)}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Document Upload Form Component
+interface DocumentUploadFormProps {
+  applicationId: string
+  applicationType: string
+  onSuccess: () => void
+  onError: (error: string) => void
+}
+
+function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError }: DocumentUploadFormProps) {
+  const [uploading, setUploading] = useState(false)
+  const [documentType, setDocumentType] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
+  const documentTypes = [
+    'passport',
+    'visa',
+    'tesda',
+    'clearance',
+    'memorandum',
+    'employment_contract',
+    'interview_form',
+    'other'
+  ]
+
+  const handleUpload = async () => {
+    if (!selectedFile || !documentType) {
+      onError('Please select a file and document type')
+      return
+    }
+
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('applicationId', applicationId)
+      formData.append('applicationType', applicationType)
+      formData.append('documentType', documentType)
+
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        onSuccess()
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-sm font-medium">Document Type</label>
+        <select
+          value={documentType}
+          onChange={(e) => setDocumentType(e.target.value)}
+          className="w-full border rounded px-3 py-2 mt-1"
+        >
+          <option value="">Select document type</option>
+          {documentTypes.map((type) => (
+            <option key={type} value={type}>
+              {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">File</label>
+        <input
+          type="file"
+          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          accept=".jpg,.jpeg,.png,.pdf"
+          className="w-full border rounded px-3 py-2 mt-1"
+        />
+        <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
+      </div>
+
+      <div className="flex justify-end space-x-2">
+        <Button
+          variant="outline"
+          onClick={() => onError('Upload cancelled')}
+          disabled={uploading}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleUpload}
+          disabled={uploading || !selectedFile || !documentType}
+          className="bg-[#1976D2] hover:bg-[#1565C0]"
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            'Upload'
+          )}
+        </Button>
+      </div>
+    </div>
   )
 }
 

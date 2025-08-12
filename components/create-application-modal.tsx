@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { X, FileText, Loader2, Calculator } from "lucide-react"
+import { X, FileText, Loader2, Calculator, Upload, Eye, Trash2, File } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
@@ -14,6 +14,15 @@ import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } f
 
 interface CreateApplicationModalProps {
   onClose: () => void
+}
+
+interface UploadedFile {
+  id: string
+  name: string
+  type: string
+  size: number
+  file: File
+  preview?: string
 }
 
 export default function CreateApplicationModal({ onClose }: CreateApplicationModalProps) {
@@ -31,6 +40,16 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
     salary: "",
     salaryCurrency: "USD" as Currency,
     evaluator: ""
+  })
+
+  const [uploadedFiles, setUploadedFiles] = useState<{
+    passport: UploadedFile | null
+    visa: UploadedFile | null
+    tesda: UploadedFile | null
+  }>({
+    passport: null,
+    visa: null,
+    tesda: null
   })
 
   // Generate control number preview
@@ -54,8 +73,100 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
     return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
   };
 
+  // Handle file upload
+  const handleFileUpload = (fileType: 'passport' | 'visa' | 'tesda', file: File) => {
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload only JPEG, PNG, or PDF files.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      toast({
+        title: 'File too large',
+        description: 'Please upload files smaller than 5MB.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const uploadedFile: UploadedFile = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      file: file,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+    };
+
+    setUploadedFiles(prev => ({
+      ...prev,
+      [fileType]: uploadedFile
+    }));
+
+    toast({
+      title: 'File uploaded successfully',
+      description: `${file.name} has been uploaded.`,
+    });
+  };
+
+  // Remove uploaded file
+  const removeFile = (fileType: 'passport' | 'visa' | 'tesda') => {
+    const file = uploadedFiles[fileType];
+    if (file?.preview) {
+      URL.revokeObjectURL(file.preview);
+    }
+    
+    setUploadedFiles(prev => ({
+      ...prev,
+      [fileType]: null
+    }));
+
+    toast({
+      title: 'File removed',
+      description: 'File has been removed from the application.',
+    });
+  };
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Get file icon based on type
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) {
+      return <FileText className="h-8 w-8 text-blue-500" />;
+    } else if (fileType === 'application/pdf') {
+      return <FileText className="h-8 w-8 text-red-500" />;
+    }
+    return <File className="h-8 w-8 text-gray-500" />;
+  };
+
   useEffect(() => {
     setControlNumberPreview(generateControlNumberPreview());
+  }, []);
+
+  // Cleanup file previews on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(uploadedFiles).forEach(file => {
+        if (file?.preview) {
+          URL.revokeObjectURL(file.preview);
+        }
+      });
+    };
   }, []);
 
   return (
@@ -207,17 +318,201 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
             </TabsContent>
 
             <TabsContent value="form2" className="space-y-6">
-              <div className="text-center py-8">
-                <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Document Upload</h3>
-                <p className="text-gray-500 mb-6">
-                  Document upload functionality will be available in the next update.
-                </p>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p>• Passport</p>
-                  <p>• Visa/Work Permit</p>
-                  <p>• Employment Contract</p>
-                  <p>• TESDA NC/PRC License</p>
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Document Upload</h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Please upload the required documents. Supported formats: JPEG, PNG, PDF (Max 5MB each)
+                  </p>
+                </div>
+
+                {/* Passport Upload */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Passport:</Label>
+                  {!uploadedFiles.passport ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        type="file"
+                        id="passport-upload"
+                        className="hidden"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload('passport', file);
+                        }}
+                      />
+                      <label htmlFor="passport-upload" className="cursor-pointer">
+                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-600">Click to upload passport</p>
+                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getFileIcon(uploadedFiles.passport.type)}
+                          <div>
+                            <p className="text-sm font-medium">{uploadedFiles.passport.name}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.passport.size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          {uploadedFiles.passport.preview && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(uploadedFiles.passport!.preview, '_blank')}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFile('passport')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {uploadedFiles.passport.preview && (
+                        <div className="mt-3">
+                          <img 
+                            src={uploadedFiles.passport.preview} 
+                            alt="Passport preview" 
+                            className="max-w-full h-32 object-contain rounded border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Visa/Work Permit Upload */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Visa/Work Permit:</Label>
+                  {!uploadedFiles.visa ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        type="file"
+                        id="visa-upload"
+                        className="hidden"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload('visa', file);
+                        }}
+                      />
+                      <label htmlFor="visa-upload" className="cursor-pointer">
+                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-600">Click to upload visa/work permit</p>
+                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getFileIcon(uploadedFiles.visa.type)}
+                          <div>
+                            <p className="text-sm font-medium">{uploadedFiles.visa.name}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.visa.size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          {uploadedFiles.visa.preview && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(uploadedFiles.visa!.preview, '_blank')}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFile('visa')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {uploadedFiles.visa.preview && (
+                        <div className="mt-3">
+                          <img 
+                            src={uploadedFiles.visa.preview} 
+                            alt="Visa preview" 
+                            className="max-w-full h-32 object-contain rounded border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* TESDA NC/PRC License Upload */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">TESDA NC/PRC License:</Label>
+                  {!uploadedFiles.tesda ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        type="file"
+                        id="tesda-upload"
+                        className="hidden"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload('tesda', file);
+                        }}
+                      />
+                      <label htmlFor="tesda-upload" className="cursor-pointer">
+                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-600">Click to upload TESDA NC/PRC license</p>
+                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getFileIcon(uploadedFiles.tesda.type)}
+                          <div>
+                            <p className="text-sm font-medium">{uploadedFiles.tesda.name}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.tesda.size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          {uploadedFiles.tesda.preview && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(uploadedFiles.tesda!.preview, '_blank')}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFile('tesda')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {uploadedFiles.tesda.preview && (
+                        <div className="mt-3">
+                          <img 
+                            src={uploadedFiles.tesda.preview} 
+                            alt="TESDA license preview" 
+                            className="max-w-full h-32 object-contain rounded border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -235,25 +530,45 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                         ? parseFloat(formData.salary)
                         : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency);
 
-                      const applicationData = {
-                        name: formData.name,
-                        sex: formData.sex,
-                        salary: salaryInUSD,
-                        jobsite: formData.jobsite,
-                        position: formData.position,
-                        evaluator: formData.evaluator,
-                        status: 'pending'
-                      };
+                      // Create FormData for file upload
+                      const formDataToSend = new FormData();
+                      formDataToSend.append('name', formData.name);
+                      formDataToSend.append('sex', formData.sex);
+                      formDataToSend.append('salary', salaryInUSD.toString());
+                      formDataToSend.append('jobsite', formData.jobsite);
+                      formDataToSend.append('position', formData.position);
+                      formDataToSend.append('evaluator', formData.evaluator);
+                      formDataToSend.append('status', 'pending');
 
-                      const result = await createApplication(applicationData);
-                      if (result) {
+                      // Add files if they exist
+                      if (uploadedFiles.passport) {
+                        formDataToSend.append('passport', uploadedFiles.passport.file);
+                      }
+                      if (uploadedFiles.visa) {
+                        formDataToSend.append('visa', uploadedFiles.visa.file);
+                      }
+                      if (uploadedFiles.tesda) {
+                        formDataToSend.append('tesda', uploadedFiles.tesda.file);
+                      }
+
+                      const response = await fetch('/api/direct-hire', {
+                        method: 'POST',
+                        body: formDataToSend,
+                      });
+
+                      const result = await response.json();
+
+                      if (result.success) {
                         onClose();
                         toast({
                           title: 'Application created successfully!',
                           description: `${formData.name} has been added to the system`,
                         });
+                      } else {
+                        throw new Error(result.error || 'Failed to create application');
                       }
                     } catch (error) {
+                      console.error('Error creating application:', error);
                       toast({
                         title: 'Error creating application',
                         description: 'Failed to create the application. Please try again.',

@@ -1,6 +1,7 @@
 // app/api/direct-hire/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
+import { FileUploadService } from '@/lib/file-upload-service';
 import { ApiResponse } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -45,44 +46,186 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // Check if the request is multipart/form-data
+    const contentType = request.headers.get('content-type') || '';
     
-    // Validate required fields
-    const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        const response: ApiResponse = {
-          success: false,
-          error: `Missing required field: ${field}`
-        };
-        return NextResponse.json(response, { status: 400 });
+    if (contentType.includes('multipart/form-data')) {
+      // Handle file upload with FormData
+      const formData = await request.formData();
+      
+      // Extract application data
+      const name = formData.get('name') as string;
+      const sex = formData.get('sex') as string;
+      const salary = formData.get('salary') as string;
+      const jobsite = formData.get('jobsite') as string;
+      const position = formData.get('position') as string;
+      const evaluator = formData.get('evaluator') as string;
+      const status = formData.get('status') as string || 'pending';
+      
+      // Validate required fields
+      const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
+      for (const field of requiredFields) {
+        if (!formData.get(field)) {
+          const response: ApiResponse = {
+            success: false,
+            error: `Missing required field: ${field}`
+          };
+          return NextResponse.json(response, { status: 400 });
+        }
       }
+
+      // Generate control number automatically
+      const controlNumber = await DatabaseService.generateDirectHireControlNumber();
+
+      // Create the application first
+      const applicationData = {
+        control_number: controlNumber,
+        name,
+        sex,
+        salary: parseFloat(salary),
+        status,
+        jobsite,
+        position,
+        evaluator: evaluator || ''
+      };
+
+      const application = await DatabaseService.createDirectHireApplication(applicationData);
+
+      // Handle file uploads
+      const uploadedDocuments = [];
+      
+      // Process passport file
+      const passportFile = formData.get('passport') as File;
+      if (passportFile && passportFile.size > 0) {
+        try {
+          const uploadResult = await FileUploadService.uploadFile(
+            passportFile, 
+            application.id, 
+            'passport'
+          );
+          
+          const documentData = {
+            application_id: application.id,
+            application_type: 'direct_hire',
+            document_type: 'passport',
+            file_name: uploadResult.fileName,
+            file_path: uploadResult.filePath,
+            file_size: uploadResult.fileSize,
+            mime_type: uploadResult.mimeType
+          };
+          
+          const document = await DatabaseService.createDocument(documentData);
+          uploadedDocuments.push(document);
+        } catch (error) {
+          console.error('Error uploading passport:', error);
+        }
+      }
+
+      // Process visa file
+      const visaFile = formData.get('visa') as File;
+      if (visaFile && visaFile.size > 0) {
+        try {
+          const uploadResult = await FileUploadService.uploadFile(
+            visaFile, 
+            application.id, 
+            'visa'
+          );
+          
+          const documentData = {
+            application_id: application.id,
+            application_type: 'direct_hire',
+            document_type: 'visa',
+            file_name: uploadResult.fileName,
+            file_path: uploadResult.filePath,
+            file_size: uploadResult.fileSize,
+            mime_type: uploadResult.mimeType
+          };
+          
+          const document = await DatabaseService.createDocument(documentData);
+          uploadedDocuments.push(document);
+        } catch (error) {
+          console.error('Error uploading visa:', error);
+        }
+      }
+
+      // Process TESDA file
+      const tesdaFile = formData.get('tesda') as File;
+      if (tesdaFile && tesdaFile.size > 0) {
+        try {
+          const uploadResult = await FileUploadService.uploadFile(
+            tesdaFile, 
+            application.id, 
+            'tesda'
+          );
+          
+          const documentData = {
+            application_id: application.id,
+            application_type: 'direct_hire',
+            document_type: 'tesda',
+            file_name: uploadResult.fileName,
+            file_path: uploadResult.filePath,
+            file_size: uploadResult.fileSize,
+            mime_type: uploadResult.mimeType
+          };
+          
+          const document = await DatabaseService.createDocument(documentData);
+          uploadedDocuments.push(document);
+        } catch (error) {
+          console.error('Error uploading TESDA document:', error);
+        }
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          ...application,
+          documents: uploadedDocuments
+        },
+        message: 'Direct hire application created successfully with documents'
+      };
+
+      return NextResponse.json(response, { status: 201 });
+    } else {
+      // Handle JSON request (backward compatibility)
+      const body = await request.json();
+      
+      // Validate required fields
+      const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
+      for (const field of requiredFields) {
+        if (!body[field]) {
+          const response: ApiResponse = {
+            success: false,
+            error: `Missing required field: ${field}`
+          };
+          return NextResponse.json(response, { status: 400 });
+        }
+      }
+
+      // Generate control number automatically
+      const controlNumber = await DatabaseService.generateDirectHireControlNumber();
+
+      // Create the application
+      const applicationData = {
+        control_number: controlNumber,
+        name: body.name,
+        sex: body.sex,
+        salary: parseFloat(body.salary),
+        status: body.status || 'pending',
+        jobsite: body.jobsite,
+        position: body.position,
+        evaluator: body.evaluator || ''
+      };
+
+      const result = await DatabaseService.createDirectHireApplication(applicationData);
+
+      const response: ApiResponse = {
+        success: true,
+        data: result,
+        message: 'Direct hire application created successfully'
+      };
+
+      return NextResponse.json(response, { status: 201 });
     }
-
-    // Generate control number automatically
-    const controlNumber = await DatabaseService.generateDirectHireControlNumber();
-
-    // Create the application
-    const applicationData = {
-      control_number: controlNumber,
-      name: body.name,
-      sex: body.sex,
-      salary: parseFloat(body.salary),
-      status: body.status || 'pending',
-      jobsite: body.jobsite,
-      position: body.position,
-      evaluator: body.evaluator || ''
-    };
-
-    const result = await DatabaseService.createDirectHireApplication(applicationData);
-
-    const response: ApiResponse = {
-      success: true,
-      data: result,
-      message: 'Direct hire application created successfully'
-    };
-
-    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('Error creating direct hire application:', error);
     

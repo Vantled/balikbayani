@@ -9,7 +9,8 @@ const protectedPaths = [
   '/gov-to-gov',
   '/balik-manggagawa',
   '/information-sheet',
-  '/user-management'
+  '/user-management',
+  '/profile'
 ] as const
 
 // Define public paths that don't require authentication

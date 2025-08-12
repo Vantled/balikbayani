@@ -465,7 +465,7 @@ export class AuthService {
   /**
    * Log audit event
    */
-  private static async logAuditEvent(
+  static async logAuditEvent(
     userId: string,
     action: string,
     tableName: string,
@@ -546,6 +546,128 @@ export class AuthService {
     } catch (error) {
       console.error('User approval error:', error);
       return { success: false, error: 'User approval failed' };
+    }
+  }
+
+  /**
+   * Get user by ID
+   */
+  static async getUserById(userId: string): Promise<User | null> {
+    try {
+      const result = await db.query(
+        'SELECT * FROM users WHERE id = $1',
+        [userId]
+      );
+
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+      console.error('Get user by ID error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user by email
+   */
+  static async getUserByEmail(email: string): Promise<User | null> {
+    try {
+      const result = await db.query(
+        'SELECT * FROM users WHERE email = $1',
+        [email]
+      );
+
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+      console.error('Get user by email error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user by username
+   */
+  static async getUserByUsername(username: string): Promise<User | null> {
+    try {
+      const result = await db.query(
+        'SELECT * FROM users WHERE username = $1',
+        [username]
+      );
+
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+      console.error('Get user by username error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update user profile
+   */
+  static async updateUserProfile(
+    userId: string,
+    updateData: {
+      full_name?: string;
+      email?: string;
+      username?: string;
+      password_hash?: string;
+      password_changed_at?: string;
+    }
+  ): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      // Build dynamic update query
+      if (updateData.full_name !== undefined) {
+        fields.push(`full_name = $${paramIndex++}`);
+        values.push(updateData.full_name);
+      }
+      if (updateData.email !== undefined) {
+        fields.push(`email = $${paramIndex++}`);
+        values.push(updateData.email);
+      }
+      if (updateData.username !== undefined) {
+        fields.push(`username = $${paramIndex++}`);
+        values.push(updateData.username);
+      }
+      if (updateData.password_hash !== undefined) {
+        fields.push(`password_hash = $${paramIndex++}`);
+        values.push(updateData.password_hash);
+      }
+      if (updateData.password_changed_at !== undefined) {
+        fields.push(`password_changed_at = $${paramIndex++}`);
+        values.push(updateData.password_changed_at);
+      }
+
+      if (fields.length === 0) {
+        return { success: false, error: 'No fields to update' };
+      }
+
+      // Add updated_at timestamp
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+      // Add user ID to values
+      values.push(userId);
+
+      const query = `
+        UPDATE users 
+        SET ${fields.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+      `;
+
+      const result = await db.query(query, values);
+
+      if (result.rows.length === 0) {
+        return { success: false, error: 'User not found' };
+      }
+
+      return { success: true, user: result.rows[0] };
+
+    } catch (error) {
+      console.error('Update user profile error:', error);
+      return { success: false, error: 'Profile update failed' };
     }
   }
 }

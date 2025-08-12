@@ -108,6 +108,17 @@ is_active BOOLEAN DEFAULT true,
 - **Authentication**: Required (Superadmin only)
 - **Features**: Sets `is_active = true`
 
+#### PUT `/api/profile`
+- **Purpose**: Update user profile information and password
+- **Authentication**: Required (All authenticated users)
+- **Body**: `{ email, username, current_password, new_password? }`
+- **Features**: 
+  - Updates personal information (email and username only)
+  - **Current password required for all changes** (security verification)
+  - Password change requires current password verification
+  - Email and username uniqueness validation
+  - Audit logging of all changes
+
 ## Security Features
 
 ### Session Management
@@ -146,6 +157,16 @@ is_active BOOLEAN DEFAULT true,
 - **Real-time feedback** with toast notifications
 - **Hover-to-reveal**: Hold eye icon to temporarily reveal anonymized information
 - **Columns**: Name, Username, Email, Role, Status, Last Login, Actions
+
+### Profile Management
+- **Account Information**: Update email and username (full name is read-only)
+- **Security Verification**: **Current password modal for general changes** (username/email updates)
+- **Password Security**: Change password with current password field and confirm password modal
+- **Validation**: Email format validation and duplicate checking
+- **Account Status**: Display role, status, approval, and last login
+- **Security**: Current password required for all changes, confirm password modal for password changes
+- **Real-time Updates**: Profile changes are immediately reflected in the UI and persisted across browser sessions
+- **Audit Logging**: All profile changes are logged for security
 
 ## Migration and Setup
 
@@ -190,6 +211,7 @@ npm run db:set-superadmin-password
 npm run test:role-hierarchy      # Test role hierarchy functions
 npm run test:complete-auth       # Test complete authentication flow
 npm run test:user-management     # Test user management features
+npm run test:profile            # Test profile functionality
 npm run debug:session           # Debug session authentication
 ```
 
@@ -200,6 +222,7 @@ npm run debug:session           # Debug session authentication
 - ✅ Deactivation/activation flow
 - ✅ Name and email anonymization
 - ✅ API endpoint security
+- ✅ Profile management and password changes
 
 ## Troubleshooting
 

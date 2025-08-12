@@ -185,21 +185,11 @@ export default function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem className="cursor-pointer">
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </DropdownMenuItem>
-              {isSuperadmin(currentUser) && (
-                <DropdownMenuItem asChild>
-                  <Link href="/user-management" className="flex items-center">
-                    <Users className="mr-2 h-4 w-4" />
-                    <span>User Management</span>
-                  </Link>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem className="cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+              <DropdownMenuItem asChild>
+                <Link href="/profile" className="flex items-center">
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Profile</span>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem 
                 className="cursor-pointer text-red-600 focus:text-red-600"

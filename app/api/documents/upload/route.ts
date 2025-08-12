@@ -10,13 +10,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const file = formData.get('file') as File;
     const applicationId = formData.get('applicationId') as string;
     const applicationType = formData.get('applicationType') as string;
-    const documentType = formData.get('documentType') as string;
+    const documentName = formData.get('documentName') as string;
 
     // Validate required fields
-    if (!file || !applicationId || !applicationType || !documentType) {
+    if (!file || !applicationId || !applicationType || !documentName) {
       return NextResponse.json({
         success: false,
-        error: 'Missing required fields: file, applicationId, applicationType, documentType'
+        error: 'Missing required fields: file, applicationId, applicationType, documentName'
       }, { status: 400 });
     }
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const document = await DatabaseService.createDocument({
       application_id: applicationId,
       application_type: applicationType,
-      document_type: documentType,
+      document_type: documentName, // Use the custom document name as the document type
       file_name: uploadedFile.originalName,
       file_path: uploadedFile.filePath,
       file_size: uploadedFile.fileSize,

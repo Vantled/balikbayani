@@ -69,7 +69,18 @@ export class FileUploadService {
    * Get file path for serving
    */
   static getFilePath(relativePath: string): string {
-    return path.join(this.uploadDir, relativePath);
+    // Normalize the path to handle different separators and remove any leading uploads references
+    let normalizedPath = relativePath.replace(/\\/g, '/');
+    
+    // Remove leading /uploads/ or uploads/ if it exists
+    if (normalizedPath.startsWith('/uploads/')) {
+      normalizedPath = normalizedPath.substring('/uploads/'.length);
+    } else if (normalizedPath.startsWith('uploads/')) {
+      normalizedPath = normalizedPath.substring('uploads/'.length);
+    }
+    
+    // Always construct the path relative to the upload directory
+    return path.join(this.uploadDir, normalizedPath);
   }
 
   /**

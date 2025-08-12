@@ -18,6 +18,8 @@ interface DirectHireApplicationsTableProps {
 
 interface ApplicantDocumentsTabProps {
   applicationId: string
+  refreshTrigger?: number
+  onRefresh?: () => void
 }
 
 export default function DirectHireApplicationsTable({ search }: DirectHireApplicationsTableProps) {
@@ -37,6 +39,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [formStep, setFormStep] = useState(1)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
+  const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
   const [formData, setFormData] = useState<any>({
     name: "",
     sex: "male",
@@ -350,7 +353,11 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                     + New
                   </Button>
                 </div>
-                <ApplicantDocumentsList applicationId={selected.id} />
+                <ApplicantDocumentsList 
+                  applicationId={selected.id} 
+                  refreshTrigger={documentsRefreshTrigger}
+                  onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
+                />
               </div>
             </div>
           )}
@@ -368,8 +375,8 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
             applicationType="direct_hire"
             onSuccess={() => {
               setUploadModalOpen(false)
-              // Refresh the documents list by triggering a re-render
-              setSelected({ ...selected! })
+              // Refresh the documents list
+              setDocumentsRefreshTrigger(prev => prev + 1)
               toast({
                 title: 'Document uploaded',
                 description: 'Document has been uploaded successfully',
@@ -381,6 +388,9 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                 description: error,
                 variant: 'destructive'
               })
+            }}
+            onCancel={() => {
+              setUploadModalOpen(false)
             }}
           />
         </DialogContent>
@@ -606,9 +616,11 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
 }
 
 // Applicant Documents List Component
-function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
+function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: ApplicantDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingDocument, setEditingDocument] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
   const { toast } = useToast()
 
   // Fetch documents for this application
@@ -639,7 +651,7 @@ function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
     if (applicationId) {
       fetchDocuments()
     }
-  }, [applicationId, toast])
+  }, [applicationId, refreshTrigger, toast])
 
   // Handle document view/download
   const handleView = async (document: Document) => {
@@ -662,6 +674,59 @@ function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
     }
   }
 
+  // Handle document edit
+  const handleEdit = (document: Document) => {
+    setEditingDocument(document.id)
+    setEditName(document.document_type)
+  }
+
+  // Handle document name update
+  const handleUpdateName = async (document: Document) => {
+    if (!editName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Document name cannot be empty',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/documents/${document.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentName: editName.trim() })
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        setDocuments(docs => docs.map(doc => 
+          doc.id === document.id 
+            ? { ...doc, document_type: editName.trim() }
+            : doc
+        ))
+        setEditingDocument(null)
+        setEditName('')
+        // Refresh the documents list
+        onRefresh?.()
+        toast({
+          title: 'Document updated',
+          description: 'Document name has been updated',
+        })
+      } else {
+        throw new Error(result.error || 'Update failed')
+      }
+    } catch (error) {
+      toast({
+        title: 'Update Error',
+        description: 'Failed to update document name',
+        variant: 'destructive'
+      })
+    }
+  }
+
   // Handle document delete
   const handleDelete = async (document: Document) => {
     const confirmDelete = window.confirm(`Are you sure you want to delete ${document.file_name}?`)
@@ -675,6 +740,8 @@ function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
 
       if (result.success) {
         setDocuments(docs => docs.filter(doc => doc.id !== document.id))
+        // Refresh the documents list
+        onRefresh?.()
         toast({
           title: 'Document deleted',
           description: `${document.file_name} has been removed`,
@@ -713,7 +780,45 @@ function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
       {documents.map((document) => (
         <li key={document.id} className="flex items-center gap-2">
           <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-          <span className="flex-1 text-sm">{document.file_name}</span>
+          {editingDocument === document.id ? (
+            <div className="flex-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="flex-1 text-sm border rounded px-2 py-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleUpdateName(document)
+                  } else if (e.key === 'Escape') {
+                    setEditingDocument(null)
+                    setEditName('')
+                  }
+                }}
+                autoFocus
+              />
+              <Button
+                size="sm"
+                onClick={() => handleUpdateName(document)}
+                className="h-6 px-2 text-xs"
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditingDocument(null)
+                  setEditName('')
+                }}
+                className="h-6 px-2 text-xs"
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <span className="flex-1 text-sm">{document.document_type}</span>
+          )}
           <span className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -725,6 +830,10 @@ function ApplicantDocumentsList({ applicationId }: ApplicantDocumentsTabProps) {
                 <DropdownMenuItem onClick={() => handleView(document)}>
                   <Eye className="h-4 w-4 mr-2" />
                   View
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleEdit(document)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Name
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleDelete(document)}>
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -745,27 +854,17 @@ interface DocumentUploadFormProps {
   applicationType: string
   onSuccess: () => void
   onError: (error: string) => void
+  onCancel: () => void
 }
 
-function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError }: DocumentUploadFormProps) {
+function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError, onCancel }: DocumentUploadFormProps) {
   const [uploading, setUploading] = useState(false)
-  const [documentType, setDocumentType] = useState('')
+  const [documentName, setDocumentName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
-  const documentTypes = [
-    'passport',
-    'visa',
-    'tesda',
-    'clearance',
-    'memorandum',
-    'employment_contract',
-    'interview_form',
-    'other'
-  ]
-
   const handleUpload = async () => {
-    if (!selectedFile || !documentType) {
-      onError('Please select a file and document type')
+    if (!selectedFile || !documentName.trim()) {
+      onError('Please select a file and enter a document name')
       return
     }
 
@@ -775,7 +874,7 @@ function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError
       formData.append('file', selectedFile)
       formData.append('applicationId', applicationId)
       formData.append('applicationType', applicationType)
-      formData.append('documentType', documentType)
+      formData.append('documentName', documentName.trim())
 
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -799,19 +898,14 @@ function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError
   return (
     <div className="space-y-4">
       <div>
-        <label className="text-sm font-medium">Document Type</label>
-        <select
-          value={documentType}
-          onChange={(e) => setDocumentType(e.target.value)}
+        <label className="text-sm font-medium">Document Name</label>
+        <input
+          type="text"
+          value={documentName}
+          onChange={(e) => setDocumentName(e.target.value)}
+          placeholder="Enter document name (e.g., Passport, Visa, Employment Contract)"
           className="w-full border rounded px-3 py-2 mt-1"
-        >
-          <option value="">Select document type</option>
-          {documentTypes.map((type) => (
-            <option key={type} value={type}>
-              {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       <div>
@@ -828,14 +922,14 @@ function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError
       <div className="flex justify-end space-x-2">
         <Button
           variant="outline"
-          onClick={() => onError('Upload cancelled')}
+          onClick={onCancel}
           disabled={uploading}
         >
           Cancel
         </Button>
         <Button
           onClick={handleUpload}
-          disabled={uploading || !selectedFile || !documentType}
+          disabled={uploading || !selectedFile || !documentName.trim()}
           className="bg-[#1976D2] hover:bg-[#1565C0]"
         >
           {uploading ? (

@@ -19,13 +19,10 @@ import {
 } from '../types';
 
 export class DatabaseService {
-  // Generate control number for direct hire applications
-  static async generateDirectHireControlNumber(): Promise<string> {
+  // Get preview counts for direct hire control number
+  static async getDirectHireControlNumberPreview(): Promise<{ monthlyCount: number; yearlyCount: number }> {
     const now = new Date();
     const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const monthDay = `${month}${day}`;
     
     // Get count for this month
     const monthStart = new Date(year, now.getMonth(), 1);
@@ -37,7 +34,6 @@ export class DatabaseService {
     );
     
     const monthlyCount = parseInt(monthCount[0].count) + 1;
-    const monthlyCountStr = String(monthlyCount).padStart(3, '0');
     
     // Get count for this year
     const yearStart = new Date(year, 0, 1);
@@ -49,6 +45,21 @@ export class DatabaseService {
     );
     
     const yearlyCount = parseInt(yearCount[0].count) + 1;
+    
+    return { monthlyCount, yearlyCount };
+  }
+
+  // Generate control number for direct hire applications
+  static async generateDirectHireControlNumber(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthDay = `${month}${day}`;
+    
+    const { monthlyCount, yearlyCount } = await this.getDirectHireControlNumberPreview();
+    
+    const monthlyCountStr = String(monthlyCount).padStart(3, '0');
     const yearlyCountStr = String(yearlyCount).padStart(3, '0');
     
     return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;

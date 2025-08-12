@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { User, Lock, Mail, UserCheck } from 'lucide-react';
+import { User, Lock, Mail } from 'lucide-react';
 import Header from '@/components/shared/header';
 import {
   Dialog,
@@ -390,43 +390,7 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserCheck className="w-5 h-5" />
-                  Account Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Role:</span>
-                    <span className="ml-2 capitalize">{user.role}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Status:</span>
-                    <span className="ml-2">
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Approved:</span>
-                    <span className="ml-2">
-                      {user.is_approved ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Last Login:</span>
-                    <span className="ml-2">
-                      {user.last_login 
-                        ? new Date(user.last_login).toLocaleDateString()
-                        : 'Never'
-                      }
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+
           </div>
         </div>
       </div>

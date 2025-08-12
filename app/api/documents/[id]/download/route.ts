@@ -1,7 +1,7 @@
 // app/api/documents/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
-import { FileUploadService } from '@/lib/file-upload-service';
+import FileUploadService from '@/lib/file-upload';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 

@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
+import { getUser } from "@/lib/auth"
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -38,9 +39,11 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
     jobsite: "",
     position: "",
     salary: "",
-    salaryCurrency: "USD" as Currency,
-    evaluator: ""
+    salaryCurrency: "USD" as Currency
   })
+
+  // Get current user for evaluator
+  const currentUser = getUser()
 
   const [uploadedFiles, setUploadedFiles] = useState<{
     passport: UploadedFile | null
@@ -53,18 +56,44 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
   })
 
   // Generate control number preview
-  const generateControlNumberPreview = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const monthDay = `${month}${day}`;
-    
-    // For preview, we'll use a placeholder count that will be updated by the backend
-    const monthlyCountStr = "001";
-    const yearlyCountStr = "001";
-    
-    return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;
+  const generateControlNumberPreview = async () => {
+    try {
+      const response = await fetch('/api/direct-hire/preview');
+      const result = await response.json();
+      
+      if (result.success) {
+        const { monthlyCount, yearlyCount } = result.data;
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const monthDay = `${month}${day}`;
+        
+        const monthlyCountStr = String(monthlyCount).padStart(3, '0');
+        const yearlyCountStr = String(yearlyCount).padStart(3, '0');
+        
+        return `DHPSW-ROIVA-${year}-${monthDay}-${monthlyCountStr}-${yearlyCountStr}`;
+      } else {
+        // Fallback to placeholder if API fails
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const monthDay = `${month}${day}`;
+        
+        return `DHPSW-ROIVA-${year}-${monthDay}-001-001`;
+      }
+    } catch (error) {
+      console.error('Error fetching control number preview:', error);
+      // Fallback to placeholder if API fails
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const monthDay = `${month}${day}`;
+      
+      return `DHPSW-ROIVA-${year}-${monthDay}-001-001`;
+    }
   };
 
   // Get converted USD amount for display
@@ -155,7 +184,11 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
   };
 
   useEffect(() => {
-    setControlNumberPreview(generateControlNumberPreview());
+    const fetchPreview = async () => {
+      const preview = await generateControlNumberPreview();
+      setControlNumberPreview(preview);
+    };
+    fetchPreview();
   }, []);
 
   // Cleanup file previews on unmount
@@ -295,16 +328,7 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                 )}
               </div>
 
-              {/* Evaluator */}
-              <div>
-                <Label className="text-sm font-medium">Evaluator:</Label>
-                <Input 
-                  value={formData.evaluator}
-                  onChange={(e) => setFormData({ ...formData, evaluator: e.target.value })}
-                  className="mt-1" 
-                  placeholder="Enter evaluator name"
-                />
-              </div>
+
 
               <div className="flex justify-end pt-4">
                 <Button 
@@ -537,7 +561,7 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                       formDataToSend.append('salary', salaryInUSD.toString());
                       formDataToSend.append('jobsite', formData.jobsite);
                       formDataToSend.append('position', formData.position);
-                      formDataToSend.append('evaluator', formData.evaluator);
+                      formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
                       formDataToSend.append('status', 'pending');
 
                       // Add files if they exist

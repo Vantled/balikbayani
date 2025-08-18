@@ -35,6 +35,7 @@ CREATE TABLE direct_hire_applications (
     position VARCHAR(255) NOT NULL,
     job_type VARCHAR(20) NOT NULL DEFAULT 'professional' CHECK (job_type IN ('household', 'professional')),
     evaluator VARCHAR(255),
+    employer VARCHAR(255),
     status_checklist JSONB DEFAULT '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

@@ -51,6 +51,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     position: "",
     job_type: "" as 'household' | 'professional' | '',
     salary: "",
+    employer: "",
     salaryCurrency: "" as Currency | ''
   })
 
@@ -281,7 +282,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
         position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
-        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''
+        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : '',
+        employer: initialData.employer || '' // Prefill employer if available
       }))
     }
   }, [initialData])
@@ -478,6 +480,16 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 )}
               </div>
 
+              {/* Employer */}
+              <div>
+                <Label className="text-sm font-medium">Employer:</Label>
+                <Input 
+                  value={formData.employer}
+                  onChange={(e) => setFormData({ ...formData, employer: e.target.value })}
+                  className="mt-1"
+                  placeholder="Enter employer name" 
+                />
+              </div>
 
 
               <div className="flex justify-end pt-4">
@@ -732,7 +744,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                             jobsite: formData.jobsite || 'To be filled',
                             position: formData.position || 'To be filled',
                             salary: String(salaryInUSD),
-                            status: 'draft'
+                            status: 'draft',
+                            employer: formData.employer || 'To be filled'
                           })
                         })
                         const result = await response.json();
@@ -752,6 +765,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       formDataToSend.append('position', formData.position);
                       formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
                       formDataToSend.append('status', 'draft');
+                      formDataToSend.append('employer', formData.employer);
 
                       if (uploadedFiles.passport) formDataToSend.append('passport', uploadedFiles.passport.file);
                       if (uploadedFiles.visa) formDataToSend.append('visa', uploadedFiles.visa.file);
@@ -823,6 +837,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       formDataToSend.append('position', formData.position);
                       formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
                       formDataToSend.append('status', 'pending');
+                      formDataToSend.append('employer', formData.employer);
 
                       // Add files if they exist
                       if (uploadedFiles.passport) {

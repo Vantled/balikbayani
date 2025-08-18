@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
       const position = formData.get('position') as string;
       const job_type = formData.get('job_type') as string;
       const evaluator = formData.get('evaluator') as string;
+      const employer = formData.get('employer') as string | null;
       
       // Validate required fields based on status
       if (status === 'draft') {
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
         position: status === 'draft' ? (position || 'To be filled') : position,
         job_type: job_type as 'household' | 'professional' || 'professional',
         evaluator: evaluator || '',
+        employer: employer || '',
         status_checklist: status === 'draft' ? {
           evaluated: { checked: false, timestamp: undefined },
           for_confirmation: { checked: false, timestamp: undefined },
@@ -242,6 +244,7 @@ export async function POST(request: NextRequest) {
         position: body.position,
         job_type: body.job_type as 'household' | 'professional' || 'professional',
         evaluator: body.evaluator || '',
+        employer: body.employer || '',
         status_checklist: {
           evaluated: { checked: true, timestamp: new Date().toISOString() },
           for_confirmation: { checked: false, timestamp: undefined },

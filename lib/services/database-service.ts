@@ -110,12 +110,13 @@ export class DatabaseService {
     position: string;
     job_type: 'household' | 'professional';
     evaluator: string;
+    employer: string;
     status_checklist: any;
   }): Promise<DirectHireApplication> {
     const query = `
       INSERT INTO direct_hire_applications 
-      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, status_checklist)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `;
     
@@ -129,6 +130,7 @@ export class DatabaseService {
       data.position,
       data.job_type,
       data.evaluator,
+      data.employer,
       JSON.stringify(data.status_checklist)
     ];
     
@@ -222,46 +224,18 @@ export class DatabaseService {
     let paramCount = 1;
 
     // Build dynamic query based on provided fields
-    if (updateData.name !== undefined) {
-      fields.push(`name = $${paramCount++}`);
-      values.push(updateData.name);
-    }
-    if (updateData.sex !== undefined) {
-      fields.push(`sex = $${paramCount++}`);
-      values.push(updateData.sex);
-    }
-    if (updateData.salary !== undefined) {
-      fields.push(`salary = $${paramCount++}`);
-      values.push(updateData.salary);
-    }
-    if (updateData.status !== undefined) {
-      fields.push(`status = $${paramCount++}`);
-      values.push(updateData.status);
-    }
-    if (updateData.jobsite !== undefined) {
-      fields.push(`jobsite = $${paramCount++}`);
-      values.push(updateData.jobsite);
-    }
-    if (updateData.position !== undefined) {
-      fields.push(`position = $${paramCount++}`);
-      values.push(updateData.position);
-    }
-    if (updateData.job_type !== undefined) {
-      fields.push(`job_type = $${paramCount++}`);
-      values.push(updateData.job_type);
-    }
-    if (updateData.evaluator !== undefined) {
-      fields.push(`evaluator = $${paramCount++}`);
-      values.push(updateData.evaluator);
-    }
-    if (updateData.status_checklist !== undefined) {
-      fields.push(`status_checklist = $${paramCount++}`);
-      values.push(JSON.stringify(updateData.status_checklist));
-    }
+    if (updateData.name !== undefined) { fields.push(`name = $${paramCount++}`); values.push(updateData.name); }
+    if (updateData.sex !== undefined) { fields.push(`sex = $${paramCount++}`); values.push(updateData.sex); }
+    if (updateData.salary !== undefined) { fields.push(`salary = $${paramCount++}`); values.push(updateData.salary); }
+    if (updateData.status !== undefined) { fields.push(`status = $${paramCount++}`); values.push(updateData.status); }
+    if (updateData.jobsite !== undefined) { fields.push(`jobsite = $${paramCount++}`); values.push(updateData.jobsite); }
+    if (updateData.position !== undefined) { fields.push(`position = $${paramCount++}`); values.push(updateData.position); }
+    if (updateData.job_type !== undefined) { fields.push(`job_type = $${paramCount++}`); values.push(updateData.job_type); }
+    if (updateData.evaluator !== undefined) { fields.push(`evaluator = $${paramCount++}`); values.push(updateData.evaluator); }
+    if ((updateData as any).employer !== undefined) { fields.push(`employer = $${paramCount++}`); values.push((updateData as any).employer); }
+    if (updateData.status_checklist !== undefined) { fields.push(`status_checklist = $${paramCount++}`); values.push(JSON.stringify(updateData.status_checklist)); }
 
-    if (fields.length === 0) {
-      return null;
-    }
+    if (fields.length === 0) { return null; }
 
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
@@ -274,16 +248,10 @@ export class DatabaseService {
     `;
 
     const { rows } = await db.query(query, values);
-    
-    if (rows.length === 0) {
-      return null;
-    }
+    if (rows.length === 0) return null;
 
     const result = rows[0];
-    
-    // Parse status_checklist JSONB field
     result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
-    
     return result;
   }
 

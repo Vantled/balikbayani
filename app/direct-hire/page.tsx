@@ -17,6 +17,29 @@ export default function DirectHirePage() {
   const [showFilter, setShowFilter] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [search, setSearch] = useState("")
+  const [panelQuery, setPanelQuery] = useState("")
+
+  // Controlled panel state
+  const [typeHousehold, setTypeHousehold] = useState(false)
+  const [typeProfessional, setTypeProfessional] = useState(false)
+  const [sexFilter, setSexFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [dateWithin, setDateWithin] = useState("")
+  const [jobsiteFilter, setJobsiteFilter] = useState("")
+  const [positionFilter, setPositionFilter] = useState("")
+  const [evaluatorFilter, setEvaluatorFilter] = useState("")
+
+  const clearPanel = () => {
+    setTypeHousehold(false)
+    setTypeProfessional(false)
+    setSexFilter("")
+    setStatusFilter("")
+    setDateWithin("")
+    setJobsiteFilter("")
+    setPositionFilter("")
+    setEvaluatorFilter("")
+    setPanelQuery("")
+  }
 
   return (
     <div className="min-h-screen bg-[#EEF5FD]">
@@ -65,11 +88,36 @@ export default function DirectHirePage() {
             </Button>
 
             {/* Filter Panel */}
-            {showFilter && <FilterPanel onClose={() => setShowFilter(false)} />}
+            {showFilter && (
+              <FilterPanel 
+                onClose={() => setShowFilter(false)} 
+                onApply={(query) => {
+                  setPanelQuery(query)
+                  setShowFilter(false)
+                }}
+                typeHousehold={typeHousehold}
+                setTypeHousehold={setTypeHousehold}
+                typeProfessional={typeProfessional}
+                setTypeProfessional={setTypeProfessional}
+                sex={sexFilter}
+                setSex={setSexFilter}
+                status={statusFilter}
+                setStatus={setStatusFilter}
+                dateWithin={dateWithin}
+                setDateWithin={setDateWithin}
+                jobsite={jobsiteFilter}
+                setJobsite={setJobsiteFilter}
+                position={positionFilter}
+                setPosition={setPositionFilter}
+                evaluator={evaluatorFilter}
+                setEvaluator={setEvaluatorFilter}
+                onClear={clearPanel}
+              />
+            )}
           </div>
         </div>
 
-        <DirectHireApplicationsTable search={search} />
+        <DirectHireApplicationsTable search={search} filterQuery={panelQuery} />
       </main>
 
       {/* Create Application Modal */}

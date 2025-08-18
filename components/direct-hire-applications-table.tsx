@@ -16,6 +16,7 @@ import CreateApplicationModal from "@/components/create-application-modal"
 
 interface DirectHireApplicationsTableProps {
   search: string
+  filterQuery?: string
 }
 
 interface ApplicantDocumentsTabProps {
@@ -24,7 +25,7 @@ interface ApplicantDocumentsTabProps {
   onRefresh?: () => void
 }
 
-export default function DirectHireApplicationsTable({ search }: DirectHireApplicationsTableProps) {
+export default function DirectHireApplicationsTable({ search, filterQuery = "" }: DirectHireApplicationsTableProps) {
   const { toast } = useToast()
   const { 
     applications, 
@@ -82,6 +83,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
 
   // Filter applications based on search
   const normalizedSearch = search.trim().toLowerCase()
+  const normalizedFilterQuery = (filterQuery || '').trim().toLowerCase()
 
   // Parse key:value filters and free-text terms
   const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
@@ -152,6 +154,20 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
         return ((application as any).job_type || '').toLowerCase().includes(value)
       case 'salary':
         return String(application.salary).toLowerCase().includes(value)
+      case 'date_range': {
+        const [startStr, endStr] = value.split('|')
+        if (!startStr || !endStr) return true
+        const createdAtRaw: any = (application as any).created_at
+        if (!createdAtRaw) return false
+        const created = new Date(createdAtRaw)
+        if (isNaN(created.getTime())) return false
+        const start = new Date(startStr)
+        const end = new Date(endStr)
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return true
+        start.setHours(0, 0, 0, 0)
+        end.setHours(23, 59, 59, 999)
+        return created >= start && created <= end
+      }
       default:
         // Unknown key: try to match against a combined haystack
         const haystack = [
@@ -173,11 +189,16 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
     }
   }
 
-  const filteredApplications = !normalizedSearch ? applications : (() => {
-    const { filters, terms } = parseSearch(normalizedSearch)
+  const filteredApplications = (() => {
+    const { filters: searchFilters, terms } = parseSearch(normalizedSearch)
+    const { filters: panelFilters } = parseSearch(normalizedFilterQuery)
+    const combinedFilters = { ...searchFilters, ...panelFilters }
+
+    if (!normalizedSearch && !normalizedFilterQuery) return applications
+
     return applications.filter((application) => {
       // All key:value filters must match
-      const allFiltersMatch = Object.entries(filters).every(([k, v]) => matchesFilter(application, k, v))
+      const allFiltersMatch = Object.entries(combinedFilters).every(([k, v]) => matchesFilter(application, k, v))
       if (!allFiltersMatch) return false
 
       if (terms.length === 0) return true
@@ -458,14 +479,6 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                         }
                       })()}
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Jobsite:</div>
-                    <div className="font-medium">{selected.jobsite}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Position:</div>
-                    <div className="font-medium">{selected.position}</div>
                   </div>
                 </div>
               </div>

@@ -57,15 +57,15 @@ export async function PUT(
 
     // Prepare update data
     const updateData: any = {};
-    if (body.name) updateData.name = body.name;
-    if (body.sex) updateData.sex = body.sex;
+    if (body.name) updateData.name = String(body.name).toUpperCase();
+    if (body.sex) updateData.sex = String(body.sex).toUpperCase() as any;
     if (body.salary) updateData.salary = parseFloat(body.salary);
     if (body.status) updateData.status = body.status;
-    if (body.jobsite) updateData.jobsite = body.jobsite;
-    if (body.position) updateData.position = body.position;
-    if (body.job_type) updateData.job_type = body.job_type;
-    if (body.evaluator !== undefined) updateData.evaluator = body.evaluator;
-    if (body.employer !== undefined) updateData.employer = body.employer;
+    if (body.jobsite) updateData.jobsite = String(body.jobsite).toUpperCase();
+    if (body.position) updateData.position = String(body.position).toUpperCase();
+    if (body.job_type) updateData.job_type = String(body.job_type).toUpperCase() as any;
+    if (body.evaluator !== undefined) updateData.evaluator = String(body.evaluator || '').toUpperCase();
+    if (body.employer !== undefined) updateData.employer = String(body.employer || '').toUpperCase();
 
     // If client didn't send checklist but sets status to evaluated, set it here
     if (body.status === 'evaluated' && !body.status_checklist) {

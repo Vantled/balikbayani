@@ -503,8 +503,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                 filteredApplications.map((application) => (
                   <tr key={application.id} className="hover:bg-gray-50">
                     <td className="py-3 px-4 text-center">{application.control_number}</td>
-                    <td className="py-3 px-4 text-center">{application.name}</td>
-                    <td className="py-3 px-4 text-center capitalize">{application.sex}</td>
+                    <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
+                    <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
                     <td className={`py-3 px-4 text-center font-medium ${application.salary < 1000 ? 'text-red-500' : ''}`}>
                       ${application.salary.toLocaleString()}
                     </td>
@@ -649,7 +649,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <div>
                     <div className="text-gray-500">Jobsite:</div>
-                    <div className="font-medium">{selected.jobsite}</div>
+                    <div className="font-medium">{(selected.jobsite || '').toUpperCase()}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Position:</div>

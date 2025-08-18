@@ -746,14 +746,14 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                         }
 
                         const updated = await updateApplication(applicationId, {
-                          name: formData.name,
+                          name: formData.name.toUpperCase(),
                           sex: formData.sex,
-                          jobsite: formData.jobsite,
-                          position: formData.position,
+                          jobsite: formData.jobsite.toUpperCase(),
+                          position: formData.position.toUpperCase(),
                           job_type: formData.job_type,
                           salary: salaryInUSD,
-                          employer: formData.employer,
-                          evaluator: currentUser?.full_name || 'Unknown',
+                          employer: (formData.employer || '').toUpperCase(),
+                          evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
                           status: 'evaluated',
                           status_checklist: statusChecklist
                         })
@@ -778,15 +778,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
                       // Create FormData for new draft (with files)
                       const formDataToSend = new FormData();
-                      formDataToSend.append('name', formData.name);
+                      formDataToSend.append('name', formData.name.toUpperCase());
                       formDataToSend.append('sex', formData.sex);
                       formDataToSend.append('salary', salaryInUSD.toString());
                       formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
-                      formDataToSend.append('jobsite', formData.jobsite);
-                      formDataToSend.append('position', formData.position);
-                      formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
+                      formDataToSend.append('jobsite', formData.jobsite.toUpperCase());
+                      formDataToSend.append('position', formData.position.toUpperCase());
+                      formDataToSend.append('evaluator', (currentUser?.full_name || 'Unknown').toUpperCase());
                       formDataToSend.append('status', 'draft');
-                      formDataToSend.append('employer', formData.employer);
+                      formDataToSend.append('employer', (formData.employer || '').toUpperCase());
 
                       if (uploadedFiles.passport) formDataToSend.append('passport', uploadedFiles.passport.file);
                       if (uploadedFiles.visa) formDataToSend.append('visa', uploadedFiles.visa.file);

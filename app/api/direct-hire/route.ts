@@ -100,15 +100,15 @@ export async function POST(request: NextRequest) {
       // Create the application first
       const applicationData = {
         control_number: controlNumber,
-        name,
-        sex: sex as 'male' | 'female' || 'male',
+        name: (name || '').toUpperCase(),
+        sex: (sex as 'male' | 'female') || 'male',
         salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
         status: status as 'draft' | 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected',
-        jobsite: status === 'draft' ? (jobsite || 'To be filled') : jobsite,
-        position: status === 'draft' ? (position || 'To be filled') : position,
-        job_type: job_type as 'household' | 'professional' || 'professional',
-        evaluator: evaluator || '',
-        employer: employer || '',
+        jobsite: (status === 'draft' ? (jobsite || 'To be filled') : jobsite || '').toUpperCase(),
+        position: (status === 'draft' ? (position || 'To be filled') : position || '').toUpperCase(),
+        job_type: (job_type as 'household' | 'professional') || 'professional',
+        evaluator: (evaluator || '').toUpperCase(),
+        employer: (employer || '').toUpperCase(),
         status_checklist: status === 'draft' ? {
           evaluated: { checked: false, timestamp: undefined },
           for_confirmation: { checked: false, timestamp: undefined },

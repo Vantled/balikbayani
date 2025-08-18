@@ -46,12 +46,12 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   
   const [formData, setFormData] = useState({
     name: "",
-    sex: "male",
+    sex: "" as 'male' | 'female' | '',
     jobsite: "",
     position: "",
-    job_type: "professional" as 'household' | 'professional',
+    job_type: "" as 'household' | 'professional' | '',
     salary: "",
-    salaryCurrency: "USD" as Currency
+    salaryCurrency: "" as Currency | ''
   })
 
   // Get current user for evaluator
@@ -110,7 +110,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
   // Get converted USD amount for display
   const getUSDEquivalentDisplay = (): string => {
-    if (!formData.salary || isNaN(parseFloat(formData.salary))) return "";
+    if (!formData.salary || isNaN(parseFloat(formData.salary)) || !formData.salaryCurrency) return "";
     return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
   };
 
@@ -120,7 +120,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     
     // Form 1 validation
     if (!formData.name.trim() || !formData.jobsite.trim() || !formData.position.trim() || 
-        !formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
+        !formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0 ||
+        !formData.sex || !formData.job_type || !formData.salaryCurrency) {
       errors.push("Form 1 is incomplete");
     }
     
@@ -149,6 +150,12 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     
     // Only validate other fields if not saving as draft
     if (!isDraft) {
+      if (!formData.sex) {
+        errors.sex = "Sex is required";
+      }
+      if (!formData.job_type) {
+        errors.job_type = "Job type is required";
+      }
       if (!formData.jobsite.trim()) {
         errors.jobsite = "Jobsite is required";
       }
@@ -157,6 +164,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       }
       if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
         errors.salary = "Valid salary is required";
+      }
+      if (!formData.salaryCurrency) {
+        errors.salaryCurrency = "Currency is required";
       }
     }
     
@@ -346,7 +356,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 <Label className="text-sm font-medium mb-2 block">Sex:</Label>
                 <RadioGroup 
                   value={formData.sex} 
-                  onValueChange={(value) => setFormData({ ...formData, sex: value })}
+                  onValueChange={(value) => setFormData({ ...formData, sex: value as 'male' | 'female' })}
                   className="flex space-x-6"
                 >
                   <div className="flex items-center space-x-2">
@@ -379,8 +389,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
               {/* Position with Job Type */}
               <div>
-                <Label className="text-sm font-medium">Position:</Label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2 mb-1">
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">Position:</Label>
+                  </div>
+                  <div className="w-32">
+                    <Label className="text-sm font-medium">Job Type:</Label>
+                  </div>
+                </div>
+                <div className="flex gap-2">
                   <div className="flex-1">
                     <Input 
                       value={formData.position}
@@ -398,6 +415,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       value={formData.job_type} 
                       onChange={(e) => setFormData({ ...formData, job_type: e.target.value as 'household' | 'professional' })}
                     >
+                      <option value="">----</option>
                       <option value="professional">Professional</option>
                       <option value="household">Household</option>
                     </select>
@@ -410,8 +428,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
               {/* Salary with Currency */}
               <div>
-                <Label className="text-sm font-medium">Salary:</Label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2 mb-1">
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">Salary:</Label>
+                  </div>
+                  <div className="w-32">
+                    <Label className="text-sm font-medium">Currency:</Label>
+                  </div>
+                </div>
+                <div className="flex gap-2">
                   <div className="flex-1">
                     <Input 
                       value={formData.salary}
@@ -431,6 +456,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       value={formData.salaryCurrency} 
                       onChange={(e) => setFormData({ ...formData, salaryCurrency: e.target.value as Currency })}
                     >
+                      <option value="">----</option>
                       {AVAILABLE_CURRENCIES.map((currency) => (
                         <option key={currency.value} value={currency.value}>
                           {currency.value}
@@ -688,7 +714,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                     setLoading(true);
                     try {
                       // Convert salary to USD for storage
-                      const salaryInUSD = formData.salary ? (
+                      const salaryInUSD = formData.salaryCurrency && formData.salary ? (
                         formData.salaryCurrency === "USD" 
                           ? parseFloat(formData.salary)
                           : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
@@ -781,9 +807,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                     setLoading(true);
                     try {
                       // Convert salary to USD for storage
-                      const salaryInUSD = formData.salaryCurrency === "USD" 
-                        ? parseFloat(formData.salary)
-                        : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency);
+                      const salaryInUSD = formData.salaryCurrency && formData.salary ? (
+                        formData.salaryCurrency === "USD" 
+                          ? parseFloat(formData.salary)
+                          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
+                      ) : 0;
 
                       // Create FormData for file upload
                       const formDataToSend = new FormData();

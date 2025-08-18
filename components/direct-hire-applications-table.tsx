@@ -81,11 +81,126 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
   }, []);
 
   // Filter applications based on search
-  const filteredApplications = applications.filter(application =>
-    Object.values(application).some(value =>
-      String(value).toLowerCase().includes(search.toLowerCase())
-    )
-  )
+  const normalizedSearch = search.trim().toLowerCase()
+
+  // Parse key:value filters and free-text terms
+  const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
+    const tokens = input.split(/[\s,]+/).filter(Boolean)
+    const filters: Record<string, string> = {}
+    const terms: string[] = []
+    for (const token of tokens) {
+      const match = token.match(/^([a-z_]+):(.*)$/i)
+      if (match && match[2] !== '') {
+        filters[match[1].toLowerCase()] = match[2].toLowerCase()
+      } else {
+        terms.push(token.toLowerCase())
+      }
+    }
+    return { filters, terms }
+  }
+
+  const getDerivedStatusKey = (application: DirectHireApplication): string | null => {
+    if (application.status === 'draft') return 'draft'
+    if (!application.status_checklist) return application.status
+    const checked = Object.entries(application.status_checklist).filter(([, s]) => (s as any).checked)
+    if (checked.length === 0) return null
+    return checked[checked.length - 1][0]
+  }
+
+  const statusKeyToLabel: Record<string, string> = {
+    draft: 'draft',
+    pending: 'pending',
+    evaluated: 'evaluated',
+    for_confirmation: 'for confirmation',
+    emailed_to_dhad: 'emailed to dhad',
+    received_from_dhad: 'received from dhad',
+    for_interview: 'for interview',
+    approved: 'approved',
+    rejected: 'rejected',
+  }
+
+  const matchesFilter = (application: DirectHireApplication, key: string, value: string): boolean => {
+    switch (key) {
+      case 'name':
+        return application.name.toLowerCase().includes(value)
+      case 'sex':
+        return application.sex.toLowerCase().includes(value)
+      case 'status': {
+        const statusKey = getDerivedStatusKey(application)
+        const statusLabel = statusKey ? (statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' ')) : ''
+        return (
+          (statusKey ? statusKey.toLowerCase().includes(value) : false) ||
+          statusLabel.toLowerCase().includes(value)
+        )
+      }
+      case 'control':
+      case 'control_number':
+      case 'controlno':
+        return application.control_number.toLowerCase().includes(value)
+      case 'jobsite':
+      case 'site':
+        return application.jobsite.toLowerCase().includes(value)
+      case 'position':
+      case 'pos':
+        return application.position.toLowerCase().includes(value)
+      case 'evaluator':
+      case 'eval':
+        return (application.evaluator || '').toLowerCase().includes(value)
+      case 'job_type':
+      case 'jobtype':
+      case 'type':
+        return ((application as any).job_type || '').toLowerCase().includes(value)
+      case 'salary':
+        return String(application.salary).toLowerCase().includes(value)
+      default:
+        // Unknown key: try to match against a combined haystack
+        const haystack = [
+          application.control_number,
+          application.name,
+          application.sex,
+          application.jobsite,
+          application.position,
+          (application as any).job_type || '',
+          application.evaluator || '',
+          String(application.salary),
+        ].join(' | ').toLowerCase()
+        const statusKey = getDerivedStatusKey(application)
+        if (statusKey) {
+          const statusLabel = statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' ')
+          return haystack.includes(value) || statusKey.toLowerCase().includes(value) || statusLabel.toLowerCase().includes(value)
+        }
+        return haystack.includes(value)
+    }
+  }
+
+  const filteredApplications = !normalizedSearch ? applications : (() => {
+    const { filters, terms } = parseSearch(normalizedSearch)
+    return applications.filter((application) => {
+      // All key:value filters must match
+      const allFiltersMatch = Object.entries(filters).every(([k, v]) => matchesFilter(application, k, v))
+      if (!allFiltersMatch) return false
+
+      if (terms.length === 0) return true
+
+      // Free-text terms: require every term to appear somewhere in the haystack
+      const fields: string[] = []
+      fields.push(application.control_number)
+      fields.push(application.name)
+      fields.push(application.sex)
+      fields.push(application.jobsite)
+      fields.push(application.position)
+      fields.push(((application as any).job_type || ''))
+      if (application.evaluator) fields.push(application.evaluator)
+      fields.push(String(application.salary))
+      const statusKey = getDerivedStatusKey(application)
+      if (statusKey) {
+        fields.push(statusKey)
+        fields.push(statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' '))
+      }
+      const haystack = fields.join(' | ').toLowerCase()
+      return terms.every(term => haystack.includes(term))
+    })
+  })()
 
   // Show error toast if there's an error
   useEffect(() => {

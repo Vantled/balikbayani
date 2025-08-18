@@ -397,7 +397,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               <div>
                 <div className="flex gap-2 mb-1">
                   <div className="flex-1">
-                    <Label className="text-sm font-medium">Position:</Label>
+                <Label className="text-sm font-medium">Position:</Label>
                   </div>
                   <div className="w-32">
                     <Label className="text-sm font-medium">Job Type:</Label>
@@ -405,15 +405,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <Input 
-                      value={formData.position}
+                <Input 
+                  value={formData.position}
                       onChange={(e) => {
                         setFormData({ ...formData, position: e.target.value });
                         clearFieldError('position');
                       }}
                       className={`${validationErrors.position ? 'border-red-500 focus:border-red-500' : ''}`}
-                      placeholder="Enter position"
-                    />
+                  placeholder="Enter position"
+                />
                   </div>
                   <div className="w-32">
                     <select 
@@ -436,7 +436,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               <div>
                 <div className="flex gap-2 mb-1">
                   <div className="flex-1">
-                    <Label className="text-sm font-medium">Salary:</Label>
+                <Label className="text-sm font-medium">Salary:</Label>
                   </div>
                   <div className="w-32">
                     <Label className="text-sm font-medium">Currency:</Label>
@@ -496,7 +496,13 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               </div>
 
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end pt-4 gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
                 <Button 
                   className="bg-[#1976D2] hover:bg-[#1565C0]" 
                   onClick={() => setActiveTab("form2")}
@@ -737,14 +743,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       ) : 0;
 
                       if (applicationId) {
-                        const statusChecklist = {
-                          evaluated: { checked: true, timestamp: new Date().toISOString() },
-                          for_confirmation: { checked: false, timestamp: undefined },
-                          emailed_to_dhad: { checked: false, timestamp: undefined },
-                          received_from_dhad: { checked: false, timestamp: undefined },
-                          for_interview: { checked: false, timestamp: undefined }
-                        }
-
+                        // Save changes but keep as draft
                         const updated = await updateApplication(applicationId, {
                           name: formData.name.toUpperCase(),
                           sex: formData.sex,
@@ -754,24 +753,17 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           salary: salaryInUSD,
                           employer: (formData.employer || '').toUpperCase(),
                           evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
-                          status: 'evaluated',
-                          status_checklist: statusChecklist
+                          status: 'draft'
                         })
 
                         if (!updated) throw new Error('Failed to update draft')
 
-                        // Try to generate and attach the clearance document
-                        try {
-                          await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
-                        } catch {}
-
-                        // Notify parent to refresh
-                        onSuccess?.()
-
+                        // Refresh list before showing toast
+                        await onSuccess?.()
                         onClose();
                         toast({
-                          title: 'Application submitted',
-                          description: `${formData.name} has been updated and set to Evaluated.`,
+                          title: 'Draft saved',
+                          description: `${formData.name} has been saved as a draft.`,
                         });
                         return;
                       }
@@ -796,8 +788,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       const result = await response.json();
 
                       if (result.success) {
-                        // Notify parent to refresh
-                        onSuccess?.()
+                        // Refresh list before showing toast
+                        await onSuccess?.()
                         onClose();
                         toast({ title: 'Draft saved successfully!', description: `${formData.name} has been saved as a draft` });
                       } else {
@@ -846,7 +838,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       // Convert salary to USD for storage
                       const salaryInUSD = formData.salaryCurrency && formData.salary ? (
                         formData.salaryCurrency === "USD" 
-                          ? parseFloat(formData.salary)
+                        ? parseFloat(formData.salary)
                           : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
                       ) : 0;
 
@@ -880,6 +872,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
                         } catch {}
 
+                        // Ensure parent refresh completes before toast
+                        await onSuccess?.()
                         onClose();
                         toast({
                           title: 'Application submitted',
@@ -919,6 +913,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       const result = await response.json();
 
                       if (result.success) {
+                        // Ensure parent refresh completes before toast
+                        await onSuccess?.()
                         onClose();
                         toast({
                           title: 'Application created successfully!',

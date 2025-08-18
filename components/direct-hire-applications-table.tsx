@@ -114,6 +114,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Listen for global refresh events (e.g., from page-level Create modal)
+  useEffect(() => {
+    const handler = () => {
+      fetchApplications(search, 1, showDeletedOnly)
+    }
+    window.addEventListener('refresh:direct_hire' as any, handler as any)
+    return () => window.removeEventListener('refresh:direct_hire' as any, handler as any)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, showDeletedOnly])
+
   // Filter applications based on search
   const normalizedSearch = search.trim().toLowerCase()
   const normalizedFilterQuery = (filterQuery || '').trim().toLowerCase()
@@ -522,6 +532,21 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                             {application.status === 'draft' ? (
                               <>
                             <DropdownMenuItem
+                                  onClick={async () => {
+                                    const confirmCancel = window.confirm(`Cancel this draft for ${application.name}?`)
+                                    if (!confirmCancel) return
+                                    const success = await deleteApplication(application.id)
+                                    if (success) {
+                                      await fetchApplications(search, 1, showDeletedOnly)
+                                      toast({ title: 'Draft cancelled', description: `${application.name}'s draft has been cancelled.` })
+                                    }
+                                  }}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Cancel Draft
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => {
                                     setShowEditDraftModal({ open: true, app: application })
                                   }}
@@ -638,7 +663,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           }
                         }
                       })()}
-                    </div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1104,7 +1129,18 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 
                         const result = await response.json();
                                                   if (result.success) {
+                          const createdName = formData.name
+                          // Close modal first so the list is visible
                           setCreateOpen(false);
+                          // Refresh the table to include the newly created applicant
+                          await fetchApplications(search, 1, showDeletedOnly)
+                          // Allow render to commit
+                          await new Promise(requestAnimationFrame)
+                          // Small delay and a second refresh to avoid race conditions (e.g., doc generation)
+                          await new Promise(resolve => setTimeout(resolve, 100))
+                          await fetchApplications(search, 1, showDeletedOnly)
+                          await new Promise(requestAnimationFrame)
+                          // Reset form after refresh
                           setFormData({
                             name: "",
                             sex: "male",
@@ -1118,7 +1154,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           setFormStep(1);
                           toast({
                             title: 'Applicant created successfully!',
-                            description: `${formData.name} has been added to the system`,
+                            description: `${createdName} has been added to the system`,
                           });
                         } else {
                           throw new Error(result.error || 'Failed to create application');

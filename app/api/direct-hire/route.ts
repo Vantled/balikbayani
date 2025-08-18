@@ -210,6 +210,12 @@ export async function POST(request: NextRequest) {
           const templatePath = join(process.cwd(), 'public', 'templates', 'direct-hire-clearance.docx');
           const template = await readFile(templatePath);
           const createdDate = new Date().toISOString().slice(0, 10);
+          const dateValue = createdDate
+          const dateCmd: any = () => dateValue
+          dateCmd.toString = () => dateValue
+          const DATECmd: any = () => dateValue
+          DATECmd.toString = () => dateValue
+
           const report = await createReport({
             template,
             data: {
@@ -225,7 +231,11 @@ export async function POST(request: NextRequest) {
               evaluator: evaluator || '',
               created_date: createdDate
             },
-            cmdDelimiter: ['{{', '}}']
+            cmdDelimiter: ['{{', '}}'],
+            additionalJsContext: {
+              date: dateCmd,
+              DATE: DATECmd
+            }
           });
           // Save as DOCX (fallback attachment)
           const docxUpload = await FileUploadService.uploadBuffer(Buffer.from(report), `DH-${controlNumber}-clearance.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', application.id, 'clearance');

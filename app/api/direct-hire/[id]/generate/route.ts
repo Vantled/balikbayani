@@ -34,6 +34,12 @@ export async function POST(
       }
     }
 
+    const dateValue = createdDateStr
+    const dateCmd: any = () => dateValue
+    dateCmd.toString = () => dateValue
+    const DATECmd: any = () => dateValue
+    DATECmd.toString = () => dateValue
+
     const report = await createReport({
       template,
       data: {
@@ -51,7 +57,11 @@ export async function POST(
         date: createdDateStr,
         DATE: createdDateStr
       },
-      cmdDelimiter: ['{{', '}}']
+      cmdDelimiter: ['{{', '}}'],
+      additionalJsContext: {
+        date: dateCmd,
+        DATE: DATECmd
+      }
     })
 
     // Save DOCX

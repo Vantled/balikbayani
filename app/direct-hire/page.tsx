@@ -121,7 +121,15 @@ export default function DirectHirePage() {
       </main>
 
       {/* Create Application Modal */}
-      {showCreateModal && <CreateApplicationModal onClose={() => setShowCreateModal(false)} />}
+      {showCreateModal && (
+        <CreateApplicationModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            // Broadcast a refresh to the table before showing any toasts
+            window.dispatchEvent(new Event('refresh:direct_hire' as any))
+          }}
+        />
+      )}
     </div>
   )
 }

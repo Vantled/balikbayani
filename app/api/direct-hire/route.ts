@@ -13,13 +13,15 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || undefined;
     const status = searchParams.get('status') || undefined;
     const sex = searchParams.get('sex') || undefined;
+    const includeDeleted = searchParams.get('include_deleted') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
 
     const filters = {
       search,
       status,
-      sex: sex as 'male' | 'female' | undefined
+      sex: sex as 'male' | 'female' | undefined,
+      include_deleted: includeDeleted
     };
 
     const pagination = {

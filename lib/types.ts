@@ -75,6 +75,7 @@ export interface DirectHireApplication {
   documents?: Document[];
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 }
 
 export interface PersonalInfo {
@@ -304,6 +305,7 @@ export interface FilterOptions {
   clearance_type?: string;
   purpose?: string;
   worker_category?: string;
+  include_deleted?: boolean;
 }
 
 export interface PaginationOptions {

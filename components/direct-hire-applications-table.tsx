@@ -1,10 +1,11 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useState, useEffect } from "react"
+import type { User } from "@/lib/auth"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
@@ -13,6 +14,7 @@ import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } f
 import { Document } from "@/lib/types"
 import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
+// Defer auth role check to client to avoid hydration mismatch
 
 interface DirectHireApplicationsTableProps {
   search: string
@@ -56,6 +58,35 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   })
   const [showEditDraftModal, setShowEditDraftModal] = useState<{open: boolean, app: DirectHireApplication | null}>({ open: false, app: null })
 
+  const [userIsSuperadmin, setUserIsSuperadmin] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
+  const [showFinishedOnly, setShowFinishedOnly] = useState(false)
+  const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [confirmingPassword, setConfirmingPassword] = useState(false)
+  const [confirmPurpose, setConfirmPurpose] = useState<'deleted' | 'finished' | null>(null)
+
+  // Resolve superadmin on client after mount to keep SSR markup stable
+  useEffect(() => {
+    let mounted = true
+    import('@/lib/auth').then(mod => {
+      const u = mod.getUser()
+      const isSuper = mod.isSuperadmin(u)
+      if (mounted) {
+        setUserIsSuperadmin(isSuper)
+        setCurrentUser(u)
+      }
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  // Initial load and whenever showDeletedOnly toggles
+  useEffect(() => {
+    fetchApplications(search, 1, showDeletedOnly)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDeletedOnly])
+
   // Generate control number preview
   const generateControlNumberPreview = () => {
     const now = new Date();
@@ -79,6 +110,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 
   useEffect(() => {
     setControlNumberPreview(generateControlNumberPreview());
+    fetchApplications(search, 1, showDeletedOnly)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filter applications based on search
@@ -105,8 +138,24 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     if (application.status === 'draft') return 'draft'
     if (!application.status_checklist) return application.status
     const checked = Object.entries(application.status_checklist).filter(([, s]) => (s as any).checked)
-    if (checked.length === 0) return null
-    return checked[checked.length - 1][0]
+    if (checked.length === 0) {
+      // Fallback to status field when checklist not yet updated
+      return application.status || null
+    }
+    // Pick the most recent by timestamp to avoid relying on object key order
+    const latest = checked.reduce((acc, curr) => {
+      const accTs = new Date(((acc[1] as any)?.timestamp) || 0).getTime()
+      const currTs = new Date(((curr[1] as any)?.timestamp) || 0).getTime()
+      return currTs >= accTs ? curr : acc
+    })
+    return latest[0]
+  }
+
+  const isFinished = (application: DirectHireApplication): boolean => {
+    const sc: any = (application as any).status_checklist
+    if (!sc) return false
+    const requiredKeys = ['evaluated','for_confirmation','emailed_to_dhad','received_from_dhad','for_interview']
+    return requiredKeys.every(k => sc[k]?.checked === true)
   }
 
   const statusKeyToLabel: Record<string, string> = {
@@ -194,33 +243,44 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     const { filters: panelFilters } = parseSearch(normalizedFilterQuery)
     const combinedFilters = { ...searchFilters, ...panelFilters }
 
-    if (!normalizedSearch && !normalizedFilterQuery) return applications
-
-    return applications.filter((application) => {
-      // All key:value filters must match
-      const allFiltersMatch = Object.entries(combinedFilters).every(([k, v]) => matchesFilter(application, k, v))
-      if (!allFiltersMatch) return false
-
-      if (terms.length === 0) return true
-
-      // Free-text terms: require every term to appear somewhere in the haystack
-      const fields: string[] = []
-      fields.push(application.control_number)
-      fields.push(application.name)
-      fields.push(application.sex)
-      fields.push(application.jobsite)
-      fields.push(application.position)
-      fields.push(((application as any).job_type || ''))
-      if (application.evaluator) fields.push(application.evaluator)
-      fields.push(String(application.salary))
-      const statusKey = getDerivedStatusKey(application)
-      if (statusKey) {
-        fields.push(statusKey)
-        fields.push(statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' '))
-      }
-      const haystack = fields.join(' | ').toLowerCase()
-      return terms.every(term => haystack.includes(term))
+    // Start with server list; apply deleted/finished visibility first
+    const base = applications.filter(app => {
+      const deleted = Boolean((app as any).deleted_at)
+      const finished = isFinished(app)
+      if (showDeletedOnly) return deleted
+      if (showFinishedOnly) return !deleted && finished
+      // default monitoring view: exclude deleted and finished
+      return !deleted && !finished
     })
+
+    if (!normalizedSearch && !normalizedFilterQuery) return base
+
+    return base
+      .filter((application) => {
+        // All key:value filters must match
+        const allFiltersMatch = Object.entries(combinedFilters).every(([k, v]) => matchesFilter(application, k, v))
+        if (!allFiltersMatch) return false
+
+        if (terms.length === 0) return true
+
+        // Free-text terms: require every term to appear somewhere in the haystack
+        const fields: string[] = []
+        fields.push(application.control_number)
+        fields.push(application.name)
+        fields.push(application.sex)
+        fields.push(application.jobsite)
+        fields.push(application.position)
+        fields.push(((application as any).job_type || ''))
+        if (application.evaluator) fields.push(application.evaluator)
+        fields.push(String(application.salary))
+        const statusKey = getDerivedStatusKey(application)
+        if (statusKey) {
+          fields.push(statusKey)
+          fields.push(statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' '))
+        }
+        const haystack = fields.join(' | ').toLowerCase()
+        return terms.every(term => haystack.includes(term))
+      })
   })()
 
   // Show error toast if there's an error
@@ -236,29 +296,40 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 
   const getStatusBadge = (application: DirectHireApplication) => {
     const { status, status_checklist } = application
+    // Soft-deleted marker overrides all
+    if ((application as any).deleted_at) {
+      return (
+        <div
+          className={"bg-red-100 text-red-700 text-sm px-3 py-1.5 rounded-full w-fit font-medium"}
+          title="This application has been deleted"
+        >
+          Deleted
+        </div>
+      )
+    }
     
     // If no status_checklist exists, fall back to the old status system
     if (!status_checklist) {
-      const capitalizeWords = (str: string) => {
-        return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-      }
+    const capitalizeWords = (str: string) => {
+      return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    }
 
-      switch (status) {
+    switch (status) {
         case "draft":
           return <div className="bg-gray-100 text-gray-600 text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Draft</div>
-        case "pending":
+      case "pending":
           return <div className="bg-[#FFF3E0] text-[#F57C00] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Pending</div>
-        case "evaluated":
+      case "evaluated":
           return <div className="bg-[#E3F2FD] text-[#1976D2] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Evaluated</div>
-        case "for_confirmation":
+      case "for_confirmation":
           return <div className="bg-[#F5F5F5] text-[#424242] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">For Confirmation</div>
-        case "for_interview":
+      case "for_interview":
           return <div className="bg-[#FCE4EC] text-[#C2185B] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">For Interview</div>
-        case "approved":
+      case "approved":
           return <div className="bg-[#E8F5E9] text-[#2E7D32] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Approved</div>
-        case "rejected":
+      case "rejected":
           return <div className="bg-[#FFEBEE] text-[#C62828] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Rejected</div>
-        default:
+      default:
           return <div className="bg-[#F5F5F5] text-[#424242] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">{capitalizeWords(status)}</div>
       }
     }
@@ -268,40 +339,56 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
       return <div className="bg-gray-100 text-gray-600 text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Draft</div>
     }
 
-    // Get the current status based on checklist
-    const checkedItems = Object.entries(status_checklist).filter(([_, status]) => status.checked)
+    // Get the current status based on latest timestamp in checklist (or fallback)
+    const latestKey = getDerivedStatusKey(application)
     let currentStatus = "No statuses checked"
     let statusColor = "bg-gray-100 text-gray-800"
 
-    if (checkedItems.length > 0) {
-      const lastChecked = checkedItems[checkedItems.length - 1]
-      const statusKey = lastChecked[0]
-      
-      switch (statusKey) {
-        case "evaluated":
-          currentStatus = "Evaluated"
-          statusColor = "bg-blue-100 text-blue-800"
-          break
-        case "for_confirmation":
-          currentStatus = "For Confirmation"
-          statusColor = "bg-yellow-100 text-yellow-800"
-          break
-        case "emailed_to_dhad":
-          currentStatus = "Emailed to DHAD"
-          statusColor = "bg-purple-100 text-purple-800"
-          break
-        case "received_from_dhad":
-          currentStatus = "Received from DHAD"
-          statusColor = "bg-green-100 text-green-800"
-          break
-        case "for_interview":
-          currentStatus = "For Interview"
-          statusColor = "bg-pink-100 text-pink-800"
-          break
-        default:
-          currentStatus = "Unknown status"
-          statusColor = "bg-gray-100 text-gray-800"
-      }
+    switch (latestKey) {
+      case "evaluated":
+        currentStatus = "Evaluated"
+        statusColor = "bg-blue-100 text-blue-800"
+        break
+      case "for_confirmation":
+        currentStatus = "For Confirmation"
+        statusColor = "bg-yellow-100 text-yellow-800"
+        break
+      case "emailed_to_dhad":
+        currentStatus = "Emailed to DHAD"
+        statusColor = "bg-purple-100 text-purple-800"
+        break
+      case "received_from_dhad":
+        currentStatus = "Received from DHAD"
+        statusColor = "bg-green-100 text-green-800"
+        break
+      case "for_interview":
+        currentStatus = "For Interview"
+        statusColor = "bg-pink-100 text-pink-800"
+        break
+      case null:
+      default:
+        // If no derived key, fall back to legacy status
+        switch (application.status) {
+          case 'evaluated':
+            currentStatus = 'Evaluated'
+            statusColor = 'bg-blue-100 text-blue-800'
+            break
+          case 'pending':
+            currentStatus = 'Pending'
+            statusColor = 'bg-orange-100 text-orange-700'
+            break
+          case 'approved':
+            currentStatus = 'Approved'
+            statusColor = 'bg-green-100 text-green-700'
+            break
+          case 'rejected':
+            currentStatus = 'Rejected'
+            statusColor = 'bg-red-100 text-red-700'
+            break
+          default:
+            currentStatus = 'No statuses checked'
+            statusColor = 'bg-gray-100 text-gray-800'
+        }
     }
 
     return (
@@ -315,6 +402,15 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
               description: "This is a draft application. Complete the form to proceed with status updates.",
               variant: "default"
             });
+            return;
+          }
+          // Don't open for deleted applications
+          if ((application as any).deleted_at) {
+            toast({
+              title: "Deleted Application",
+              description: "This application is deleted. Restore it to update statuses.",
+              variant: "destructive"
+            })
             return;
           }
           setSelectedApplicationForStatus(application)
@@ -332,6 +428,49 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   return (
     <>
       <div className="bg-white rounded-md border overflow-hidden">
+        {/* Superadmin controls */}
+        <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              className="h-3 w-3"
+              checked={showFinishedOnly}
+              onChange={async (e) => {
+                const next = e.target.checked
+                if (next) {
+                  setShowDeletedOnly(false)
+                  setConfirmPurpose('finished')
+                  setConfirmPasswordOpen(true)
+                } else {
+                  setShowFinishedOnly(false)
+                  await fetchApplications(search, 1, false)
+                }
+              }}
+            />
+            Show finished only
+          </label>
+          {userIsSuperadmin && (
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={showDeletedOnly}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    // Require password confirmation before enabling
+                    setShowFinishedOnly(false)
+                    setConfirmPurpose('deleted')
+                    setConfirmPasswordOpen(true)
+                  } else {
+                    setShowDeletedOnly(false)
+                    fetchApplications(search, 1, false)
+                  }
+                }}
+              />
+              Show deleted only
+            </label>
+          )}
+        </div>
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <table className="w-full">
             <thead>
@@ -382,8 +521,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           <DropdownMenuContent align="end">
                             {application.status === 'draft' ? (
                               <>
-                                <DropdownMenuItem
-                                  onClick={() => {
+                            <DropdownMenuItem
+                              onClick={() => {
                                     setShowEditDraftModal({ open: true, app: application })
                                   }}
                                 >
@@ -394,23 +533,51 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                             ) : (
                               <>
                                 <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View
-                                </DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                   toast({ title: "Edit functionality coming soon", description: "This feature will be available in the next update" })
                                 }}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={async () => { const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`); if (confirmDelete) { const success = await deleteApplication(application.id); if (success) { toast({ title: "Application deleted successfully", description: `${application.name}'s application has been removed` }) } } }} className="text-red-600 focus:text-red-600">
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                                <DropdownMenuItem onClick={async () => { const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`); if (confirmDelete) { const success = await deleteApplication(application.id); if (success) { 
+                                  if (showDeletedOnly) {
+                                    await fetchApplications(search, 1, true)
+                                  }
+                                  toast({ title: "Application deleted successfully", description: `${application.name}'s application has been removed` }) 
+                                } } }} className="text-red-600 focus:text-red-600">
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                                {userIsSuperadmin && (application as any).deleted_at && (
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      const res = await fetch(`/api/direct-hire/${application.id}/restore`, { method: 'POST' })
+                                      const result = await res.json()
+                                      if (result.success) {
+                                        if (showDeletedOnly) {
+                                          await fetchApplications(search, 1, true)
+                                        } else {
+                                          await fetchApplications(search, 1, false)
+                                        }
+                                        toast({ title: 'Application restored', description: `${application.name} has been restored` })
+                                      } else {
+                                        throw new Error(result.error || 'Restore failed')
+                                      }
+                                    } catch (err) {
+                                      toast({ title: 'Restore error', description: 'Failed to restore application', variant: 'destructive' })
+                                    }
+                                  }}>
+                                    <RefreshCcw className="h-4 w-4 mr-2" />
+                                    Restore
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Compliance Form
-                                </DropdownMenuItem>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Compliance Form
+                            </DropdownMenuItem>
                               </>
                             )}
                           </DropdownMenuContent>
@@ -455,27 +622,20 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     <div className="text-gray-500">Status:</div>
                     <div className="font-medium">
                       {(() => {
-                        const { status_checklist } = selected
-                        if (!status_checklist) {
-                          const capitalizeWords = (str: string) => {
-                            return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                        if ((selected as any).deleted_at) return 'Deleted'
+                        const latestKey = getDerivedStatusKey(selected)
+                        switch (latestKey) {
+                          case 'evaluated': return 'Evaluated'
+                          case 'for_confirmation': return 'For Confirmation'
+                          case 'emailed_to_dhad': return 'Emailed to DHAD'
+                          case 'received_from_dhad': return 'Received from DHAD'
+                          case 'for_interview': return 'For Interview'
+                          case null:
+                          default: {
+                            const capitalizeWords = (str: string) => str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                            if (!selected.status_checklist && selected.status) return capitalizeWords(selected.status)
+                            return 'No statuses checked'
                           }
-                          return capitalizeWords(selected.status)
-                        }
-                        
-                        const checkedItems = Object.entries(status_checklist).filter(([_, status]) => (status as any).checked)
-                        if (checkedItems.length === 0) return "No statuses checked"
-                        
-                        const lastChecked = checkedItems[checkedItems.length - 1]
-                        const statusKey = lastChecked[0]
-                        
-                        switch (statusKey) {
-                          case "evaluated": return "Evaluated"
-                          case "for_confirmation": return "For Confirmation"
-                          case "emailed_to_dhad": return "Emailed to DHAD"
-                          case "received_from_dhad": return "Received from DHAD"
-                          case "for_interview": return "For Interview"
-                          default: return "Unknown status"
                         }
                       })()}
                     </div>
@@ -536,11 +696,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           <span className={`text-lg ${selected.status === status.key ? status.color : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
                             {status.label}
-                          </span>
+                    </span>
                           <span className={`ml-auto text-xs ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-500'}`}>
                             {selected.status === status.key ? '(Current)' : 'N/A'}
-                          </span>
-                        </li>
+                    </span>
+                  </li>
                       ))
                     }
                     
@@ -558,13 +718,15 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           <span className={`text-lg ${isChecked ? status.color : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
                             {status.label}
-                          </span>
+                    </span>
                           <span className={`ml-auto text-xs ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-500'}`}>
                             {isChecked ? (
-                              timestamp ? new Date(timestamp).toLocaleString() : new Date().toLocaleString()
+                              timestamp 
+                                ? new Date(timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                : new Date().toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
                             ) : 'N/A'}
-                          </span>
-                        </li>
+                    </span>
+                  </li>
                       )
                     })
                   })()}
@@ -611,6 +773,94 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Password Modal for Show Deleted/Finished Only */}
+      <Dialog open={confirmPasswordOpen} onOpenChange={(open) => {
+        setConfirmPasswordOpen(open)
+        if (!open) setConfirmPassword("")
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Confirm Access</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">Enter your password to view {confirmPurpose === 'deleted' ? 'deleted' : 'finished'} applications.</p>
+            <input
+              type="password"
+              className="w-full border rounded px-3 py-2"
+              placeholder="Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  const username = currentUser?.username || ''
+                  if (!username || !confirmPassword) return
+                  setConfirmingPassword(true)
+                  try {
+                    const res = await fetch('/api/auth/login', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username, password: confirmPassword })
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      if (confirmPurpose === 'deleted') setShowDeletedOnly(true)
+                      if (confirmPurpose === 'finished') setShowFinishedOnly(true)
+                      setConfirmPasswordOpen(false)
+                      setConfirmPassword("")
+                      await fetchApplications(search, 1, confirmPurpose === 'deleted')
+                    } else {
+                      toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' })
+                    }
+                  } finally {
+                    setConfirmingPassword(false)
+                  }
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setConfirmPasswordOpen(false); setConfirmPassword("") }}>Cancel</Button>
+              <Button
+                className="bg-[#1976D2] text-white"
+                onClick={async () => {
+                  const username = currentUser?.username || ''
+                  if (!username || !confirmPassword) return
+                  setConfirmingPassword(true)
+                  try {
+                    const res = await fetch('/api/auth/login', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username, password: confirmPassword })
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      if (confirmPurpose === 'deleted') setShowDeletedOnly(true)
+                      if (confirmPurpose === 'finished') setShowFinishedOnly(true)
+                      setConfirmPasswordOpen(false)
+                      setConfirmPassword("")
+                      await fetchApplications(search, 1, confirmPurpose === 'deleted')
+                    } else {
+                      toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' })
+                    }
+                  } finally {
+                    setConfirmingPassword(false)
+                  }
+                }}
+                disabled={confirmingPassword || !confirmPassword}
+              >
+                {confirmingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Confirm'
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -904,6 +1154,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             salary: Number(showEditDraftModal.app.salary)
           }}
           applicationId={showEditDraftModal.app.id}
+          onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
         />
       )}
     </>

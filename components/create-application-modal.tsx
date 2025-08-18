@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { getUser } from "@/lib/auth"
+import React from "react"
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -25,6 +26,7 @@ interface CreateApplicationModalProps {
     salary?: number
   } | null
   applicationId?: string | null
+  onSuccess?: () => void
 }
 
 interface UploadedFile {
@@ -36,13 +38,13 @@ interface UploadedFile {
   preview?: string
 }
 
-export default function CreateApplicationModal({ onClose, initialData = null, applicationId = null }: CreateApplicationModalProps) {
+export default function CreateApplicationModal({ onClose, initialData = null, applicationId = null, onSuccess }: CreateApplicationModalProps) {
   const [activeTab, setActiveTab] = useState("form1")
   const [loading, setLoading] = useState(false)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
   const { toast } = useToast()
-  const { createApplication } = useDirectHireApplications()
+  const { createApplication, updateApplication, refreshApplications } = useDirectHireApplications()
   
   const [formData, setFormData] = useState({
     name: "",
@@ -272,9 +274,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     fetchPreview();
   }, []);
 
-  // Prefill form when editing a draft
+  // Prefill form when editing a draft (only once per application id)
+  const prefillKey = applicationId || (initialData as any)?.id || null
+  const prefilledRef = React.useRef<string | null>(null)
   useEffect(() => {
-    if (initialData) {
+    if (initialData && prefillKey && prefilledRef.current !== prefillKey) {
       setFormData(prev => ({
         ...prev,
         name: initialData.name ?? '',
@@ -282,11 +286,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
         position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
-        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : '',
-        employer: initialData.employer || '' // Prefill employer if available
+        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''
       }))
+      prefilledRef.current = prefillKey
     }
-  }, [initialData])
+  }, [initialData, prefillKey])
 
   // Cleanup file previews on unmount
   useEffect(() => {
@@ -733,25 +737,42 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       ) : 0;
 
                       if (applicationId) {
-                        // Update existing draft via PUT (no file uploads here)
-                        const response = await fetch(`/api/direct-hire/${applicationId}`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: formData.name,
-                            sex: formData.sex,
-                            job_type: formData.job_type,
-                            jobsite: formData.jobsite || 'To be filled',
-                            position: formData.position || 'To be filled',
-                            salary: String(salaryInUSD),
-                            status: 'draft',
-                            employer: formData.employer || 'To be filled'
-                          })
+                        const statusChecklist = {
+                          evaluated: { checked: true, timestamp: new Date().toISOString() },
+                          for_confirmation: { checked: false, timestamp: undefined },
+                          emailed_to_dhad: { checked: false, timestamp: undefined },
+                          received_from_dhad: { checked: false, timestamp: undefined },
+                          for_interview: { checked: false, timestamp: undefined }
+                        }
+
+                        const updated = await updateApplication(applicationId, {
+                          name: formData.name,
+                          sex: formData.sex,
+                          jobsite: formData.jobsite,
+                          position: formData.position,
+                          job_type: formData.job_type,
+                          salary: salaryInUSD,
+                          employer: formData.employer,
+                          evaluator: currentUser?.full_name || 'Unknown',
+                          status: 'evaluated',
+                          status_checklist: statusChecklist
                         })
-                        const result = await response.json();
-                        if (!result.success) throw new Error(result.error || 'Failed to update draft')
+
+                        if (!updated) throw new Error('Failed to update draft')
+
+                        // Try to generate and attach the clearance document
+                        try {
+                          await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
+                        } catch {}
+
+                        // Notify parent to refresh
+                        onSuccess?.()
+
                         onClose();
-                        toast({ title: 'Draft updated', description: `${formData.name} has been updated` })
+                        toast({
+                          title: 'Application submitted',
+                          description: `${formData.name} has been updated and set to Evaluated.`,
+                        });
                         return;
                       }
 
@@ -775,6 +796,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       const result = await response.json();
 
                       if (result.success) {
+                        // Notify parent to refresh
+                        onSuccess?.()
                         onClose();
                         toast({ title: 'Draft saved successfully!', description: `${formData.name} has been saved as a draft` });
                       } else {
@@ -826,6 +849,44 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           ? parseFloat(formData.salary)
                           : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
                       ) : 0;
+
+                      // If continuing a draft, update instead of creating
+                      if (applicationId) {
+                        const statusChecklist = {
+                          evaluated: { checked: true, timestamp: new Date().toISOString() },
+                          for_confirmation: { checked: false, timestamp: undefined },
+                          emailed_to_dhad: { checked: false, timestamp: undefined },
+                          received_from_dhad: { checked: false, timestamp: undefined },
+                          for_interview: { checked: false, timestamp: undefined }
+                        }
+
+                        const updated = await updateApplication(applicationId, {
+                          name: formData.name,
+                          sex: formData.sex,
+                          jobsite: formData.jobsite,
+                          position: formData.position,
+                          job_type: formData.job_type,
+                          salary: salaryInUSD,
+                          employer: formData.employer,
+                          evaluator: currentUser?.full_name || 'Unknown',
+                          status: 'evaluated',
+                          status_checklist: statusChecklist
+                        })
+
+                        if (!updated) throw new Error('Failed to update draft')
+
+                        // Try to generate and attach the clearance document
+                        try {
+                          await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
+                        } catch {}
+
+                        onClose();
+                        toast({
+                          title: 'Application submitted',
+                          description: `${formData.name} has been updated and submitted.`,
+                        });
+                        return;
+                      }
 
                       // Create FormData for file upload
                       const formDataToSend = new FormData();

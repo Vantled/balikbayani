@@ -148,6 +148,11 @@ export class DatabaseService {
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Exclude deleted by default
+    if (!filters.include_deleted) {
+      query += ' AND deleted_at IS NULL';
+    }
+
     if (filters.search) {
       query += ` AND (name ILIKE $${paramIndex} OR control_number ILIKE $${paramIndex})`;
       params.push(`%${filters.search}%`);
@@ -207,7 +212,7 @@ export class DatabaseService {
   }
 
   static async getDirectHireApplicationById(id: string): Promise<DirectHireApplication | null> {
-    const { rows } = await db.query('SELECT * FROM direct_hire_applications WHERE id = $1', [id]);
+    const { rows } = await db.query('SELECT * FROM direct_hire_applications WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (!rows[0]) return null;
     
     // Parse status_checklist JSONB field
@@ -256,7 +261,12 @@ export class DatabaseService {
   }
 
   static async deleteDirectHireApplication(id: string): Promise<boolean> {
-    const { rowCount } = await db.query('DELETE FROM direct_hire_applications WHERE id = $1', [id]);
+    const { rowCount } = await db.query('UPDATE direct_hire_applications SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
+    return (rowCount || 0) > 0;
+  }
+
+  static async restoreDirectHireApplication(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('UPDATE direct_hire_applications SET deleted_at = NULL WHERE id = $1', [id]);
     return (rowCount || 0) > 0;
   }
 

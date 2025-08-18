@@ -65,6 +65,23 @@ export async function PUT(
     if (body.position) updateData.position = body.position;
     if (body.job_type) updateData.job_type = body.job_type;
     if (body.evaluator !== undefined) updateData.evaluator = body.evaluator;
+    if (body.employer !== undefined) updateData.employer = body.employer;
+
+    // If client didn't send checklist but sets status to evaluated, set it here
+    if (body.status === 'evaluated' && !body.status_checklist) {
+      updateData.status_checklist = {
+        evaluated: { checked: true, timestamp: new Date().toISOString() },
+        for_confirmation: { checked: false, timestamp: undefined },
+        emailed_to_dhad: { checked: false, timestamp: undefined },
+        received_from_dhad: { checked: false, timestamp: undefined },
+        for_interview: { checked: false, timestamp: undefined }
+      };
+    }
+
+    // Allow explicit status_checklist updates too
+    if (body.status_checklist) {
+      updateData.status_checklist = body.status_checklist;
+    }
 
     const result = await DatabaseService.updateDirectHireApplication(id, updateData);
 

@@ -190,7 +190,7 @@ export default function StatusChecklist({
                           </label>
                           {status.checked && status.timestamp && (
                             <span className="text-xs text-gray-500 ml-auto">
-                              {new Date(status.timestamp).toLocaleString()}
+                              {new Date(status.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </span>
                           )}
                         </div>

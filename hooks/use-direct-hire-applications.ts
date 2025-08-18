@@ -12,7 +12,7 @@ interface UseDirectHireApplicationsReturn {
     total: number;
     totalPages: number;
   };
-  fetchApplications: (search?: string, page?: number) => Promise<void>;
+  fetchApplications: (search?: string, page?: number, includeDeleted?: boolean) => Promise<void>;
   createApplication: (data: any) => Promise<DirectHireApplication | null>;
   updateApplication: (id: string, data: any) => Promise<DirectHireApplication | null>;
   deleteApplication: (id: string) => Promise<boolean>;
@@ -30,7 +30,7 @@ export function useDirectHireApplications(): UseDirectHireApplicationsReturn {
     totalPages: 0
   });
 
-  const fetchApplications = useCallback(async (search?: string, page: number = 1) => {
+  const fetchApplications = useCallback(async (search?: string, page: number = 1, includeDeleted?: boolean) => {
     setLoading(true);
     setError(null);
 
@@ -42,6 +42,10 @@ export function useDirectHireApplications(): UseDirectHireApplicationsReturn {
 
       if (search) {
         params.append('search', search);
+      }
+
+      if (includeDeleted) {
+        params.append('include_deleted', 'true');
       }
 
       const response = await fetch(`/api/direct-hire?${params}`);

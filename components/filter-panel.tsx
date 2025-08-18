@@ -36,6 +36,7 @@ export default function FilterPanel(props: FilterPanelProps) {
 	// Local state for native date inputs
 	const [startDate, setStartDate] = useState<string>("")
 	const [endDate, setEndDate] = useState<string>("")
+	const todayStr = new Date().toISOString().slice(0,10)
 
 	// Sync from applied value (e.g., when reopening panel)
 	useEffect(() => {
@@ -58,6 +59,12 @@ export default function FilterPanel(props: FilterPanelProps) {
 	}
 
 	const handleApply = () => {
+		// Validate dates: both set, start <= end, end <= today
+		if ((startDate && !endDate) || (!startDate && endDate)) return
+		if (startDate && endDate) {
+			if (startDate > endDate) return
+			if (endDate > todayStr) return
+		}
 		const parts: string[] = []
 		if (sex) parts.push(`sex:${sex}`)
 		if (typeHousehold && !typeProfessional) parts.push("job_type:household")
@@ -67,8 +74,9 @@ export default function FilterPanel(props: FilterPanelProps) {
 		if (position) parts.push(`position:${position}`)
 		if (evaluator) parts.push(`evaluator:${evaluator}`)
 		if (startDate && endDate) {
-			parts.push(`date_range:${startDate}|${endDate}`)
-			setDateWithin(`${startDate}|${endDate}`)
+			const toDate = endDate > todayStr ? todayStr : endDate
+			parts.push(`date_range:${startDate}|${toDate}`)
+			setDateWithin(`${startDate}|${toDate}`)
 		}
 		onApply(parts.join(","))
 		onClose()
@@ -135,9 +143,9 @@ export default function FilterPanel(props: FilterPanelProps) {
 				<div>
 					<Label className="text-sm font-medium mb-2 block">Date Range</Label>
 					<div className="flex items-center gap-2">
-						<input type="date" className="w-0 flex-1 min-w-0 border rounded px-3 py-2 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+						<input type="date" className="w-0 flex-1 min-w-0 border rounded px-3 py-2 text-sm" value={startDate} max={todayStr} onChange={(e) => setStartDate(e.target.value)} />
 						<span className="text-gray-500 shrink-0">-</span>
-						<input type="date" className="w-0 flex-1 min-w-0 border rounded px-3 py-2 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+						<input type="date" className="w-0 flex-1 min-w-0 border rounded px-3 py-2 text-sm" value={endDate} max={todayStr} onChange={(e) => setEndDate(e.target.value)} />
 					</div>
 				</div>
 

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ProcessingPathsChart from "./processing-paths-chart"
 import ApplicationsTable from "./applications-table"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
@@ -69,9 +69,15 @@ const directHireApplications = [
   },
 ]
 
-const directHireTotal = directHireApplications.length
-const directHireMale = directHireApplications.filter(a => a.sex === 'Male').length
-const directHireFemale = directHireApplications.filter(a => a.sex === 'Female').length
+type DashboardStats = {
+  directHire: number
+  directHireMale: number
+  directHireFemale: number
+  clearance: number
+  govToGov: number
+  infoSheet: number
+  pendingUsers: number
+}
 
 // Import data arrays from each module
 const govToGovData = [
@@ -120,10 +126,47 @@ const infoSheetFemaleCount = infoSheetData.filter(item => item.gender === "Femal
 export default function DirectHireTable() {
   const [activeTab, setActiveTab] = useState("overview")
   const [search, setSearch] = useState("")
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [dateFrom, setDateFrom] = useState<string>("")
+  const [dateTo, setDateTo] = useState<string>("")
+  const todayStr = new Date().toISOString().slice(0,10)
 
-  const filteredApplications = directHireApplications.filter(application =>
-    Object.values(application).some(value =>
-      String(value).toLowerCase().includes(search.toLowerCase())
+  const fetchStats = async (from?: string, to?: string) => {
+    setLoadingStats(true)
+    try {
+      const params = new URLSearchParams()
+      if (from && to) {
+        params.set('date_from', from)
+        params.set('date_to', to)
+      }
+      const res = await fetch(`/api/dashboard/stats?${params.toString()}`)
+      const data = await res.json()
+      if (data.success) setStats(data.data)
+    } finally {
+      setLoadingStats(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  const [recentApps, setRecentApps] = useState<any[]>([])
+  useEffect(() => {
+    const loadRecent = async () => {
+      try {
+        const res = await fetch('/api/dashboard/recent?limit=50')
+        const data = await res.json()
+        if (data.success) setRecentApps(data.data)
+      } catch {}
+    }
+    loadRecent()
+  }, [])
+
+  const filteredApplications = recentApps.filter((application: any) =>
+    Object.values(application).some((value: any) =>
+      String(value ?? '').toLowerCase().includes(search.toLowerCase())
     )
   )
 
@@ -162,23 +205,42 @@ export default function DirectHireTable() {
               />
             </div>
           )}
-          <div className="flex items-center border border-gray-300 rounded-md bg-white">
-            <span className="px-3 text-sm">All Time</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="lucide lucide-chevron-down"
-              >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              className="border border-gray-300 rounded-md bg-white h-9 px-2 text-sm"
+              value={dateFrom}
+              max={todayStr}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+            <span className="text-sm text-gray-600">to</span>
+            <input
+              type="date"
+              className="border border-gray-300 rounded-md bg-white h-9 px-2 text-sm"
+              value={dateTo}
+              max={todayStr}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+            <Button
+              className="bg-[#1976D2] hover:bg-[#1565C0] text-white h-9"
+              onClick={() => fetchStats(dateFrom || undefined, (dateTo && dateTo > todayStr) ? todayStr : (dateTo || undefined))}
+              disabled={(() => {
+                if (loadingStats) return true
+                if (!dateFrom || !dateTo) return true
+                if (dateFrom > dateTo) return true
+                if (dateTo > todayStr) return true
+                return false
+              })()}
+            >
+              Apply
+            </Button>
+            <Button
+              variant="outline"
+              className="h-9"
+              onClick={() => { setDateFrom(""); setDateTo(""); fetchStats() }}
+              disabled={loadingStats}
+            >
+              Clear
             </Button>
           </div>
         </div>
@@ -210,17 +272,17 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{directHireTotal}</h2>
+              <h2 className="text-2xl font-bold mb-4">{loadingStats ? '—' : (stats?.directHire ?? 0)}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
                 <Button variant="outline" className="text-xs h-8 rounded">
-                  Male ({directHireMale})
+                  Male ({loadingStats ? '—' : (stats?.directHireMale ?? 0)})
                 </Button>
                 <Button variant="outline" className="text-xs h-8 rounded">
-                  Female ({directHireFemale})
+                  Female ({loadingStats ? '—' : (stats?.directHireFemale ?? 0)})
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">{directHireTotal} total</p>
+              <p className="text-xs text-gray-500 mt-2">{loadingStats ? '—' : (stats?.directHire ?? 0)} total</p>
             </Card>
 
             {/* Balik Mangagagawa Card */}

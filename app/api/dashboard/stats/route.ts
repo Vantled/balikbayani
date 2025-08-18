@@ -5,7 +5,11 @@ import { ApiResponse } from '@/lib/types';
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
-    const stats = await DatabaseService.getDashboardStats();
+    const { searchParams } = new URL(request.url);
+    const dateFrom = searchParams.get('date_from') || undefined;
+    const dateTo = searchParams.get('date_to') || undefined;
+
+    const stats = await DatabaseService.getDashboardStats(dateFrom, dateTo);
 
     return NextResponse.json({
       success: true,

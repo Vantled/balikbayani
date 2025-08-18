@@ -660,24 +660,34 @@ export class DatabaseService {
   }
 
   // Dashboard Statistics
-  static async getDashboardStats() {
+  static async getDashboardStats(dateFrom?: string, dateTo?: string) {
     const stats = await db.transaction(async (client) => {
+      const dateFilterDH = dateFrom && dateTo ? ` AND created_at::date BETWEEN $1::date AND $2::date` : ''
+      const dateParamsDH: any[] = []
+      if (dateFrom && dateTo) { dateParamsDH.push(dateFrom, dateTo) }
+
       const [
         directHireCount,
+        directHireMaleCount,
+        directHireFemaleCount,
         clearanceCount,
         govToGovCount,
         infoSheetCount,
         pendingUsersCount
       ] = await Promise.all([
-        client.query('SELECT COUNT(*) FROM direct_hire_applications'),
-        client.query('SELECT COUNT(*) FROM balik_manggagawa_clearance'),
-        client.query('SELECT COUNT(*) FROM gov_to_gov_applications'),
-        client.query('SELECT COUNT(*) FROM information_sheet_records'),
+        client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL${dateFilterDH}`, dateParamsDH),
+        client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND LOWER(sex) = 'male'${dateFilterDH}`, dateParamsDH),
+        client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND LOWER(sex) = 'female'${dateFilterDH}`, dateParamsDH),
+        client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM gov_to_gov_applications${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM information_sheet_records${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query('SELECT COUNT(*) FROM users WHERE is_approved = false')
       ]);
 
       return {
         directHire: parseInt(directHireCount.rows[0].count),
+        directHireMale: parseInt(directHireMaleCount.rows[0].count),
+        directHireFemale: parseInt(directHireFemaleCount.rows[0].count),
         clearance: parseInt(clearanceCount.rows[0].count),
         govToGov: parseInt(govToGovCount.rows[0].count),
         infoSheet: parseInt(infoSheetCount.rows[0].count),

@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2 } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useState, useEffect } from "react"
@@ -11,6 +11,8 @@ import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { DirectHireApplication } from "@/lib/types"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { Document } from "@/lib/types"
+import StatusChecklist from "@/components/status-checklist"
+import CreateApplicationModal from "@/components/create-application-modal"
 
 interface DirectHireApplicationsTableProps {
   search: string
@@ -40,6 +42,8 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
   const [formStep, setFormStep] = useState(1)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
+  const [statusChecklistOpen, setStatusChecklistOpen] = useState(false)
+  const [selectedApplicationForStatus, setSelectedApplicationForStatus] = useState<DirectHireApplication | null>(null)
   const [formData, setFormData] = useState<any>({
     name: "",
     sex: "male",
@@ -49,6 +53,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
     salaryCurrency: "USD" as Currency,
     evaluator: "",
   })
+  const [showEditDraftModal, setShowEditDraftModal] = useState<{open: boolean, app: DirectHireApplication | null}>({ open: false, app: null })
 
   // Generate control number preview
   const generateControlNumberPreview = () => {
@@ -93,27 +98,99 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
     }
   }, [error, toast])
 
-  const getStatusBadge = (status: string) => {
-    const capitalizeWords = (str: string) => {
-      return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+  const getStatusBadge = (application: DirectHireApplication) => {
+    const { status, status_checklist } = application
+    
+    // If no status_checklist exists, fall back to the old status system
+    if (!status_checklist) {
+      const capitalizeWords = (str: string) => {
+        return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      }
+
+      switch (status) {
+        case "draft":
+          return <div className="bg-gray-100 text-gray-600 text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Draft</div>
+        case "pending":
+          return <div className="bg-[#FFF3E0] text-[#F57C00] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Pending</div>
+        case "evaluated":
+          return <div className="bg-[#E3F2FD] text-[#1976D2] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Evaluated</div>
+        case "for_confirmation":
+          return <div className="bg-[#F5F5F5] text-[#424242] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">For Confirmation</div>
+        case "for_interview":
+          return <div className="bg-[#FCE4EC] text-[#C2185B] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">For Interview</div>
+        case "approved":
+          return <div className="bg-[#E8F5E9] text-[#2E7D32] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Approved</div>
+        case "rejected":
+          return <div className="bg-[#FFEBEE] text-[#C62828] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Rejected</div>
+        default:
+          return <div className="bg-[#F5F5F5] text-[#424242] text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">{capitalizeWords(status)}</div>
+      }
     }
 
-    switch (status) {
-      case "pending":
-        return <div className="bg-[#FFF3E0] text-[#F57C00] text-xs px-2 py-1 rounded">Pending</div>
-      case "evaluated":
-        return <div className="bg-[#E3F2FD] text-[#1976D2] text-xs px-2 py-1 rounded">Evaluated</div>
-      case "for_confirmation":
-        return <div className="bg-[#F5F5F5] text-[#424242] text-xs px-2 py-1 rounded">For Confirmation</div>
-      case "for_interview":
-        return <div className="bg-[#FCE4EC] text-[#C2185B] text-xs px-2 py-1 rounded">For Interview</div>
-      case "approved":
-        return <div className="bg-[#E8F5E9] text-[#2E7D32] text-xs px-2 py-1 rounded">Approved</div>
-      case "rejected":
-        return <div className="bg-[#FFEBEE] text-[#C62828] text-xs px-2 py-1 rounded">Rejected</div>
-      default:
-        return <div className="bg-[#F5F5F5] text-[#424242] text-xs px-2 py-1 rounded">{capitalizeWords(status)}</div>
+    // Handle draft status with checklist
+    if (status === 'draft') {
+      return <div className="bg-gray-100 text-gray-600 text-sm px-3 py-1.5 rounded-full text-center w-fit font-medium">Draft</div>
     }
+
+    // Get the current status based on checklist
+    const checkedItems = Object.entries(status_checklist).filter(([_, status]) => status.checked)
+    let currentStatus = "No statuses checked"
+    let statusColor = "bg-gray-100 text-gray-800"
+
+    if (checkedItems.length > 0) {
+      const lastChecked = checkedItems[checkedItems.length - 1]
+      const statusKey = lastChecked[0]
+      
+      switch (statusKey) {
+        case "evaluated":
+          currentStatus = "Evaluated"
+          statusColor = "bg-blue-100 text-blue-800"
+          break
+        case "for_confirmation":
+          currentStatus = "For Confirmation"
+          statusColor = "bg-yellow-100 text-yellow-800"
+          break
+        case "emailed_to_dhad":
+          currentStatus = "Emailed to DHAD"
+          statusColor = "bg-purple-100 text-purple-800"
+          break
+        case "received_from_dhad":
+          currentStatus = "Received from DHAD"
+          statusColor = "bg-green-100 text-green-800"
+          break
+        case "for_interview":
+          currentStatus = "For Interview"
+          statusColor = "bg-pink-100 text-pink-800"
+          break
+        default:
+          currentStatus = "Unknown status"
+          statusColor = "bg-gray-100 text-gray-800"
+      }
+    }
+
+    return (
+      <div 
+        className={`${statusColor} text-sm px-3 py-1.5 rounded-full w-fit font-medium cursor-pointer hover:opacity-80 transition-opacity flex justify-center items-center`}
+        onClick={() => {
+          // Don't open status checklist for draft applications
+          if (application.status === 'draft') {
+            toast({
+              title: "Draft Application",
+              description: "This is a draft application. Complete the form to proceed with status updates.",
+              variant: "default"
+            });
+            return;
+          }
+          setSelectedApplicationForStatus(application)
+          setStatusChecklistOpen(true)
+        }}
+      >
+        {currentStatus}
+        {application.status !== 'draft' && (
+          <Settings className="h-3 w-3 ml-1" />
+        )}
+      </div>
+    )
   }
 
   return (
@@ -156,7 +233,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                     <td className={`py-3 px-4 text-center font-medium ${application.salary < 1000 ? 'text-red-500' : ''}`}>
                       ${application.salary.toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-center">{getStatusBadge(application.status)}</td>
+                    <td className="py-3 px-4 flex justify-center items-center">{getStatusBadge(application)}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex justify-center">
                         <DropdownMenu>
@@ -167,55 +244,39 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelected(application)
-                                setOpen(true)
-                              }}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                toast({
-                                  title: "Edit functionality coming soon",
-                                  description: "This feature will be available in the next update",
-                                })
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`)
-                                if (confirmDelete) {
-                                  const success = await deleteApplication(application.id)
-                                  if (success) {
-                                    toast({
-                                      title: "Application deleted successfully",
-                                      description: `${application.name}'s application has been removed`,
-                                    })
-                                  }
-                                }
-                              }}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                toast({
-                                  title: "Compliance form generated",
-                                  description: "The document has been prepared and is ready for download",
-                                })
-                              }}
-                            >
-                              <FileText className="h-4 w-4 mr-2" />
-                              Compliance Form
-                            </DropdownMenuItem>
+                            {application.status === 'draft' ? (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setShowEditDraftModal({ open: true, app: application })
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Continue Draft
+                                </DropdownMenuItem>
+                              </>
+                            ) : (
+                              <>
+                                <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  toast({ title: "Edit functionality coming soon", description: "This feature will be available in the next update" })
+                                }}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={async () => { const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`); if (confirmDelete) { const success = await deleteApplication(application.id); if (success) { toast({ title: "Application deleted successfully", description: `${application.name}'s application has been removed` }) } } }} className="text-red-600 focus:text-red-600">
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Compliance Form
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -256,7 +317,32 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                   </div>
                   <div>
                     <div className="text-gray-500">Status:</div>
-                    <div className="font-medium">{getStatusBadge(selected.status)}</div>
+                    <div className="font-medium">
+                      {(() => {
+                        const { status_checklist } = selected
+                        if (!status_checklist) {
+                          const capitalizeWords = (str: string) => {
+                            return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                          }
+                          return capitalizeWords(selected.status)
+                        }
+                        
+                        const checkedItems = Object.entries(status_checklist).filter(([_, status]) => (status as any).checked)
+                        if (checkedItems.length === 0) return "No statuses checked"
+                        
+                        const lastChecked = checkedItems[checkedItems.length - 1]
+                        const statusKey = lastChecked[0]
+                        
+                        switch (statusKey) {
+                          case "evaluated": return "Evaluated"
+                          case "for_confirmation": return "For Confirmation"
+                          case "emailed_to_dhad": return "Emailed to DHAD"
+                          case "received_from_dhad": return "Received from DHAD"
+                          case "for_interview": return "For Interview"
+                          default: return "Unknown status"
+                        }
+                      })()}
+                    </div>
                   </div>
                   <div>
                     <div className="text-gray-500">Jobsite:</div>
@@ -296,48 +382,64 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
               <div className="mb-6">
                 <div className="font-semibold text-gray-700 mb-2">Application Status</div>
                 <ul className="text-sm">
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'pending' ? 'text-orange-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'pending' ? 'text-orange-700' : 'text-gray-700'}`}>Pending</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'pending' ? 'text-orange-700' : 'text-gray-500'}`}>
-                      {selected.status === 'pending' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'evaluated' ? 'text-green-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'evaluated' ? 'text-green-700' : 'text-gray-700'}`}>Evaluated</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'evaluated' ? 'text-green-700' : 'text-gray-500'}`}>
-                      {selected.status === 'evaluated' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'for_confirmation' ? 'text-blue-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'for_confirmation' ? 'text-blue-700' : 'text-gray-700'}`}>For Confirmation</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'for_confirmation' ? 'text-blue-700' : 'text-gray-500'}`}>
-                      {selected.status === 'for_confirmation' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'for_interview' ? 'text-purple-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'for_interview' ? 'text-purple-700' : 'text-gray-700'}`}>For Interview</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'for_interview' ? 'text-purple-700' : 'text-gray-500'}`}>
-                      {selected.status === 'for_interview' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'approved' ? 'text-green-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'approved' ? 'text-green-700' : 'text-gray-700'}`}>Approved</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'approved' ? 'text-green-700' : 'text-gray-500'}`}>
-                      {selected.status === 'approved' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2 mb-1">
-                    <span className={`text-lg ${selected.status === 'rejected' ? 'text-red-600' : 'text-gray-400'}`}>●</span>
-                    <span className={`font-semibold ${selected.status === 'rejected' ? 'text-red-700' : 'text-gray-700'}`}>Rejected</span>
-                    <span className={`ml-auto text-xs ${selected.status === 'rejected' ? 'text-red-700' : 'text-gray-500'}`}>
-                      {selected.status === 'rejected' ? '(Current)' : 'N/A'}
-                    </span>
-                  </li>
+                  {(() => {
+                    const { status_checklist } = selected
+                    const statusOptions = [
+                      { key: 'evaluated', label: 'Evaluated', color: 'text-blue-600' },
+                      { key: 'for_confirmation', label: 'For Confirmation', color: 'text-yellow-600' },
+                      { key: 'emailed_to_dhad', label: 'Emailed to DHAD', color: 'text-purple-600' },
+                      { key: 'received_from_dhad', label: 'Received from DHAD', color: 'text-green-600' },
+                      { key: 'for_interview', label: 'For Interview', color: 'text-pink-600' }
+                    ]
+                    
+                    if (!status_checklist) {
+                      // Fallback to old status system
+                      const oldStatuses = [
+                        { key: 'pending', label: 'Pending', color: 'text-orange-600' },
+                        { key: 'evaluated', label: 'Evaluated', color: 'text-green-600' },
+                        { key: 'for_confirmation', label: 'For Confirmation', color: 'text-blue-600' },
+                        { key: 'for_interview', label: 'For Interview', color: 'text-purple-600' },
+                        { key: 'approved', label: 'Approved', color: 'text-green-600' },
+                        { key: 'rejected', label: 'Rejected', color: 'text-red-600' }
+                      ]
+                      
+                      return oldStatuses.map(status => (
+                        <li key={status.key} className="flex items-center gap-2 mb-1">
+                          <span className={`text-lg ${selected.status === status.key ? status.color : 'text-gray-400'}`}>●</span>
+                          <span className={`font-semibold ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
+                            {status.label}
+                          </span>
+                          <span className={`ml-auto text-xs ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-500'}`}>
+                            {selected.status === status.key ? '(Current)' : 'N/A'}
+                          </span>
+                        </li>
+                      ))
+                    }
+                    
+                    // Get current status from checklist
+                    const checkedItems = Object.entries(status_checklist).filter(([_, status]) => (status as any).checked)
+                    const currentStatusKey = checkedItems.length > 0 ? checkedItems[checkedItems.length - 1][0] : null
+                    
+                    return statusOptions.map(status => {
+                      const isChecked = status_checklist[status.key as keyof typeof status_checklist]?.checked
+                      const timestamp = status_checklist[status.key as keyof typeof status_checklist]?.timestamp
+                      const isCurrent = currentStatusKey === status.key
+                      
+                      return (
+                        <li key={status.key} className="flex items-center gap-2 mb-1">
+                          <span className={`text-lg ${isChecked ? status.color : 'text-gray-400'}`}>●</span>
+                          <span className={`font-semibold ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
+                            {status.label}
+                          </span>
+                          <span className={`ml-auto text-xs ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-500'}`}>
+                            {isChecked ? (
+                              timestamp ? new Date(timestamp).toLocaleString() : new Date().toLocaleString()
+                            ) : 'N/A'}
+                          </span>
+                        </li>
+                      )
+                    })
+                  })()}
                 </ul>
               </div>
               <hr className="my-4" />
@@ -395,6 +497,36 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
           />
         </DialogContent>
       </Dialog>
+
+      {/* Status Checklist Modal */}
+      {selectedApplicationForStatus && (
+        <StatusChecklist
+          applicationId={selectedApplicationForStatus.id}
+          currentStatus={selectedApplicationForStatus.status}
+          statusChecklist={selectedApplicationForStatus.status_checklist || {
+            evaluated: { checked: true, timestamp: new Date().toISOString() },
+            for_confirmation: { checked: false, timestamp: undefined },
+            emailed_to_dhad: { checked: false, timestamp: undefined },
+            received_from_dhad: { checked: false, timestamp: undefined },
+            for_interview: { checked: false, timestamp: undefined }
+          }}
+          onStatusUpdate={(newStatus, newChecklist) => {
+            // Update the application in the local state
+            const updatedApplications = applications.map(app => 
+              app.id === selectedApplicationForStatus.id 
+                ? { ...app, status_checklist: newChecklist }
+                : app
+            )
+            // This would need to be handled by the hook, but for now we'll just refresh
+            fetchApplications()
+          }}
+          isOpen={statusChecklistOpen}
+          onClose={() => {
+            setStatusChecklistOpen(false)
+            setSelectedApplicationForStatus(null)
+          }}
+        />
+      )}
 
       {/* Create Applicant Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -554,7 +686,7 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
                         formDataToSend.append('jobsite', formData.jobsite);
                         formDataToSend.append('position', formData.position);
                         formDataToSend.append('evaluator', formData.evaluator);
-                        formDataToSend.append('status', 'pending');
+                        formDataToSend.append('status', 'evaluated'); // Default to evaluated for new applications
 
                         // Add files if they exist
                         if (formData.passport) {
@@ -611,6 +743,21 @@ export default function DirectHireApplicationsTable({ search }: DirectHireApplic
           </div>
         </DialogContent>
       </Dialog>
+      {showEditDraftModal.open && showEditDraftModal.app && (
+        <CreateApplicationModal 
+          onClose={() => setShowEditDraftModal({ open: false, app: null })}
+          initialData={{
+            id: showEditDraftModal.app.id,
+            name: showEditDraftModal.app.name,
+            sex: showEditDraftModal.app.sex,
+            job_type: showEditDraftModal.app.job_type,
+            jobsite: showEditDraftModal.app.jobsite,
+            position: showEditDraftModal.app.position,
+            salary: Number(showEditDraftModal.app.salary)
+          }}
+          applicationId={showEditDraftModal.app.id}
+        />
+      )}
     </>
   )
 }

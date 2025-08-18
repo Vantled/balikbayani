@@ -57,15 +57,23 @@ export interface DirectHireApplication {
   name: string;
   sex: 'male' | 'female';
   salary: number;
-  status: 'pending' | 'evaluated' | 'for_confirmation' | 'for_interview' | 'approved' | 'rejected';
+  status: 'draft' | 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected';
   jobsite: string;
   position: string;
-  evaluator?: string;
+  job_type: 'household' | 'professional';
+  evaluator: string;
+  status_checklist: {
+    evaluated: { checked: boolean; timestamp?: string };
+    for_confirmation: { checked: boolean; timestamp?: string };
+    emailed_to_dhad: { checked: boolean; timestamp?: string };
+    received_from_dhad: { checked: boolean; timestamp?: string };
+    for_interview: { checked: boolean; timestamp?: string };
+  };
   personal_info?: PersonalInfo;
   employment_info?: EmploymentInfo;
   documents?: Document[];
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PersonalInfo {

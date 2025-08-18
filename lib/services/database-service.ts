@@ -100,12 +100,45 @@ export class DatabaseService {
   }
 
   // Direct Hire Applications
-  static async createDirectHireApplication(appData: Omit<DirectHireApplication, 'id' | 'created_at' | 'updated_at'>): Promise<DirectHireApplication> {
-    const { rows } = await db.query(
-      'INSERT INTO direct_hire_applications (control_number, name, sex, salary, status, jobsite, position, evaluator) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [appData.control_number, appData.name, appData.sex, appData.salary, appData.status, appData.jobsite, appData.position, appData.evaluator || '']
-    );
-    return rows[0];
+  static async createDirectHireApplication(data: {
+    control_number: string;
+    name: string;
+    sex: 'male' | 'female';
+    salary: number;
+    status: string;
+    jobsite: string;
+    position: string;
+    job_type: 'household' | 'professional';
+    evaluator: string;
+    status_checklist: any;
+  }): Promise<DirectHireApplication> {
+    const query = `
+      INSERT INTO direct_hire_applications 
+      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, status_checklist)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `;
+    
+    const values = [
+      data.control_number,
+      data.name,
+      data.sex,
+      data.salary,
+      data.status,
+      data.jobsite,
+      data.position,
+      data.job_type,
+      data.evaluator,
+      JSON.stringify(data.status_checklist)
+    ];
+    
+    const { rows } = await db.query(query, values);
+    const result = rows[0];
+    
+    // Parse status_checklist JSONB field
+    result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
+    
+    return result;
   }
 
   static async getDirectHireApplications(filters: FilterOptions = {}, pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<DirectHireApplication>> {
@@ -154,8 +187,14 @@ export class DatabaseService {
 
     const { rows } = await db.query(query, params);
 
+    // Parse status_checklist JSONB field for each row
+    const parsedRows = rows.map(row => ({
+      ...row,
+      status_checklist: row.status_checklist ? JSON.parse(JSON.stringify(row.status_checklist)) : null
+    }));
+
     return {
-      data: rows,
+      data: parsedRows,
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -167,17 +206,85 @@ export class DatabaseService {
 
   static async getDirectHireApplicationById(id: string): Promise<DirectHireApplication | null> {
     const { rows } = await db.query('SELECT * FROM direct_hire_applications WHERE id = $1', [id]);
-    return rows[0] || null;
+    if (!rows[0]) return null;
+    
+    // Parse status_checklist JSONB field
+    const row = rows[0];
+    return {
+      ...row,
+      status_checklist: row.status_checklist ? JSON.parse(JSON.stringify(row.status_checklist)) : null
+    };
   }
 
-  static async updateDirectHireApplication(id: string, updates: Partial<DirectHireApplication>): Promise<DirectHireApplication | null> {
-    const fields = Object.keys(updates).map((key, index) => `${key} = $${index + 2}`).join(', ');
-    const values = Object.values(updates);
-    const { rows } = await db.query(
-      `UPDATE direct_hire_applications SET ${fields} WHERE id = $1 RETURNING *`,
-      [id, ...values]
-    );
-    return rows[0] || null;
+  static async updateDirectHireApplication(id: string, updateData: Partial<DirectHireApplication>): Promise<DirectHireApplication | null> {
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    // Build dynamic query based on provided fields
+    if (updateData.name !== undefined) {
+      fields.push(`name = $${paramCount++}`);
+      values.push(updateData.name);
+    }
+    if (updateData.sex !== undefined) {
+      fields.push(`sex = $${paramCount++}`);
+      values.push(updateData.sex);
+    }
+    if (updateData.salary !== undefined) {
+      fields.push(`salary = $${paramCount++}`);
+      values.push(updateData.salary);
+    }
+    if (updateData.status !== undefined) {
+      fields.push(`status = $${paramCount++}`);
+      values.push(updateData.status);
+    }
+    if (updateData.jobsite !== undefined) {
+      fields.push(`jobsite = $${paramCount++}`);
+      values.push(updateData.jobsite);
+    }
+    if (updateData.position !== undefined) {
+      fields.push(`position = $${paramCount++}`);
+      values.push(updateData.position);
+    }
+    if (updateData.job_type !== undefined) {
+      fields.push(`job_type = $${paramCount++}`);
+      values.push(updateData.job_type);
+    }
+    if (updateData.evaluator !== undefined) {
+      fields.push(`evaluator = $${paramCount++}`);
+      values.push(updateData.evaluator);
+    }
+    if (updateData.status_checklist !== undefined) {
+      fields.push(`status_checklist = $${paramCount++}`);
+      values.push(JSON.stringify(updateData.status_checklist));
+    }
+
+    if (fields.length === 0) {
+      return null;
+    }
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(id);
+
+    const query = `
+      UPDATE direct_hire_applications 
+      SET ${fields.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `;
+
+    const { rows } = await db.query(query, values);
+    
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const result = rows[0];
+    
+    // Parse status_checklist JSONB field
+    result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
+    
+    return result;
   }
 
   static async deleteDirectHireApplication(id: string): Promise<boolean> {

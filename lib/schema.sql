@@ -30,10 +30,12 @@ CREATE TABLE direct_hire_applications (
     name VARCHAR(255) NOT NULL,
     sex VARCHAR(10) NOT NULL CHECK (sex IN ('male', 'female')),
     salary DECIMAL(12,2) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'evaluated', 'for_confirmation', 'for_interview', 'approved', 'rejected')),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('draft', 'pending', 'evaluated', 'for_confirmation', 'for_interview', 'approved', 'rejected')),
     jobsite VARCHAR(255) NOT NULL,
     position VARCHAR(255) NOT NULL,
+    job_type VARCHAR(20) NOT NULL DEFAULT 'professional' CHECK (job_type IN ('household', 'professional')),
     evaluator VARCHAR(255),
+    status_checklist JSONB DEFAULT '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

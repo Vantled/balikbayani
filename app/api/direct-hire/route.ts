@@ -57,20 +57,33 @@ export async function POST(request: NextRequest) {
       const name = formData.get('name') as string;
       const sex = formData.get('sex') as string;
       const salary = formData.get('salary') as string;
+      const status = formData.get('status') as string;
       const jobsite = formData.get('jobsite') as string;
       const position = formData.get('position') as string;
+      const job_type = formData.get('job_type') as string;
       const evaluator = formData.get('evaluator') as string;
-      const status = formData.get('status') as string || 'pending';
       
-      // Validate required fields
-      const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
-      for (const field of requiredFields) {
-        if (!formData.get(field)) {
+      // Validate required fields based on status
+      if (status === 'draft') {
+        // For drafts, only name is required
+        if (!formData.get('name')) {
           const response: ApiResponse = {
             success: false,
-            error: `Missing required field: ${field}`
+            error: 'Missing required field: name'
           };
           return NextResponse.json(response, { status: 400 });
+        }
+      } else {
+        // For regular applications, all fields are required
+        const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
+        for (const field of requiredFields) {
+          if (!formData.get(field)) {
+            const response: ApiResponse = {
+              success: false,
+              error: `Missing required field: ${field}`
+            };
+            return NextResponse.json(response, { status: 400 });
+          }
         }
       }
 
@@ -81,12 +94,26 @@ export async function POST(request: NextRequest) {
       const applicationData = {
         control_number: controlNumber,
         name,
-        sex,
-        salary: parseFloat(salary),
-        status,
-        jobsite,
-        position,
-        evaluator: evaluator || ''
+        sex: sex as 'male' | 'female' || 'male',
+        salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
+        status: status as 'draft' | 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected',
+        jobsite: status === 'draft' ? (jobsite || 'To be filled') : jobsite,
+        position: status === 'draft' ? (position || 'To be filled') : position,
+        job_type: job_type as 'household' | 'professional' || 'professional',
+        evaluator: evaluator || '',
+        status_checklist: status === 'draft' ? {
+          evaluated: { checked: false, timestamp: undefined },
+          for_confirmation: { checked: false, timestamp: undefined },
+          emailed_to_dhad: { checked: false, timestamp: undefined },
+          received_from_dhad: { checked: false, timestamp: undefined },
+          for_interview: { checked: false, timestamp: undefined }
+        } : {
+          evaluated: { checked: true, timestamp: new Date().toISOString() },
+          for_confirmation: { checked: false, timestamp: undefined },
+          emailed_to_dhad: { checked: false, timestamp: undefined },
+          received_from_dhad: { checked: false, timestamp: undefined },
+          for_interview: { checked: false, timestamp: undefined }
+        }
       };
 
       const application = await DatabaseService.createDirectHireApplication(applicationData);
@@ -208,12 +235,20 @@ export async function POST(request: NextRequest) {
       const applicationData = {
         control_number: controlNumber,
         name: body.name,
-        sex: body.sex,
+        sex: body.sex as 'male' | 'female',
         salary: parseFloat(body.salary),
-        status: body.status || 'pending',
+        status: (body.status || 'pending') as 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected',
         jobsite: body.jobsite,
         position: body.position,
-        evaluator: body.evaluator || ''
+        job_type: body.job_type as 'household' | 'professional' || 'professional',
+        evaluator: body.evaluator || '',
+        status_checklist: {
+          evaluated: { checked: true, timestamp: new Date().toISOString() },
+          for_confirmation: { checked: false, timestamp: undefined },
+          emailed_to_dhad: { checked: false, timestamp: undefined },
+          received_from_dhad: { checked: false, timestamp: undefined },
+          for_interview: { checked: false, timestamp: undefined }
+        }
       };
 
       const result = await DatabaseService.createDirectHireApplication(applicationData);

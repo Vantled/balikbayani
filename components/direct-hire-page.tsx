@@ -110,7 +110,7 @@ export default function DirectHirePage() {
           </div>
         </div>
 
-        <DirectHireApplicationsTable />
+        <DirectHireApplicationsTable search="" />
       </main>
 
       {/* Create Application Modal */}

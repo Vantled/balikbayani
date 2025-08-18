@@ -5,10 +5,11 @@ import { ApiResponse } from '@/lib/types';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const application = await DatabaseService.getDirectHireApplicationById(params.id);
+    const { id } = await params;
+    const application = await DatabaseService.getDirectHireApplicationById(id);
 
     if (!application) {
       const response: ApiResponse = {
@@ -38,13 +39,14 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     
     // Check if application exists
-    const existingApplication = await DatabaseService.getDirectHireApplicationById(params.id);
+    const existingApplication = await DatabaseService.getDirectHireApplicationById(id);
     if (!existingApplication) {
       const response: ApiResponse = {
         success: false,
@@ -61,9 +63,10 @@ export async function PUT(
     if (body.status) updateData.status = body.status;
     if (body.jobsite) updateData.jobsite = body.jobsite;
     if (body.position) updateData.position = body.position;
+    if (body.job_type) updateData.job_type = body.job_type;
     if (body.evaluator !== undefined) updateData.evaluator = body.evaluator;
 
-    const result = await DatabaseService.updateDirectHireApplication(params.id, updateData);
+    const result = await DatabaseService.updateDirectHireApplication(id, updateData);
 
     const response: ApiResponse = {
       success: true,
@@ -84,13 +87,16 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    const body = await request.json();
+    
     // Check if application exists
-    const existingApplication = await DatabaseService.getDirectHireApplicationById(params.id);
+    const existingApplication = await DatabaseService.getDirectHireApplicationById(id);
     if (!existingApplication) {
       const response: ApiResponse = {
         success: false,
@@ -99,7 +105,50 @@ export async function DELETE(
       return NextResponse.json(response, { status: 404 });
     }
 
-    const deleted = await DatabaseService.deleteDirectHireApplication(params.id);
+    // Prepare update data for status checklist
+    const updateData: any = {};
+    if (body.status_checklist) {
+      updateData.status_checklist = body.status_checklist;
+    }
+
+    const result = await DatabaseService.updateDirectHireApplication(id, updateData);
+
+    const response: ApiResponse = {
+      success: true,
+      data: result,
+      message: 'Direct hire application status checklist updated successfully'
+    };
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error updating direct hire application status checklist:', error);
+    
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to update direct hire application status checklist'
+    };
+
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    // Check if application exists
+    const existingApplication = await DatabaseService.getDirectHireApplicationById(id);
+    if (!existingApplication) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Direct hire application not found'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+
+    const deleted = await DatabaseService.deleteDirectHireApplication(id);
 
     if (!deleted) {
       const response: ApiResponse = {

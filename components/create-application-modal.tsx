@@ -15,6 +15,16 @@ import { getUser } from "@/lib/auth"
 
 interface CreateApplicationModalProps {
   onClose: () => void
+  initialData?: {
+    id?: string
+    name?: string
+    sex?: 'male' | 'female'
+    job_type?: 'household' | 'professional'
+    jobsite?: string
+    position?: string
+    salary?: number
+  } | null
+  applicationId?: string | null
 }
 
 interface UploadedFile {
@@ -26,10 +36,11 @@ interface UploadedFile {
   preview?: string
 }
 
-export default function CreateApplicationModal({ onClose }: CreateApplicationModalProps) {
+export default function CreateApplicationModal({ onClose, initialData = null, applicationId = null }: CreateApplicationModalProps) {
   const [activeTab, setActiveTab] = useState("form1")
   const [loading, setLoading] = useState(false)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
   const { toast } = useToast()
   const { createApplication } = useDirectHireApplications()
   
@@ -38,6 +49,7 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
     sex: "male",
     jobsite: "",
     position: "",
+    job_type: "professional" as 'household' | 'professional',
     salary: "",
     salaryCurrency: "USD" as Currency
   })
@@ -100,6 +112,64 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
   const getUSDEquivalentDisplay = (): string => {
     if (!formData.salary || isNaN(parseFloat(formData.salary))) return "";
     return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
+  };
+
+  // Validation function
+  const validateForm = (): string[] => {
+    const errors: string[] = [];
+    
+    // Form 1 validation
+    if (!formData.name.trim() || !formData.jobsite.trim() || !formData.position.trim() || 
+        !formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
+      errors.push("Form 1 is incomplete");
+    }
+    
+    return errors;
+  };
+
+  // Validation function for drafts (only requires name)
+  const validateDraftForm = (): string[] => {
+    const errors: string[] = [];
+    
+    // Draft validation - only requires worker name
+    if (!formData.name.trim()) {
+      errors.push("Worker name is required");
+    }
+    
+    return errors;
+  };
+
+  // Get field-specific validation errors
+  const getFieldErrors = (isDraft: boolean = false): {[key: string]: string} => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = "Name is required";
+    }
+    
+    // Only validate other fields if not saving as draft
+    if (!isDraft) {
+      if (!formData.jobsite.trim()) {
+        errors.jobsite = "Jobsite is required";
+      }
+      if (!formData.position.trim()) {
+        errors.position = "Position is required";
+      }
+      if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
+        errors.salary = "Valid salary is required";
+      }
+    }
+    
+    return errors;
+  };
+
+  // Clear error for a specific field when user starts typing
+  const clearFieldError = (fieldName: string) => {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
   };
 
   // Handle file upload
@@ -191,6 +261,21 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
     fetchPreview();
   }, []);
 
+  // Prefill form when editing a draft
+  useEffect(() => {
+    if (initialData) {
+      setFormData(prev => ({
+        ...prev,
+        name: initialData.name ?? '',
+        sex: initialData.sex ?? 'male',
+        job_type: initialData.job_type ?? 'professional',
+        jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
+        position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
+        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''
+      }))
+    }
+  }, [initialData])
+
   // Cleanup file previews on unmount
   useEffect(() => {
     return () => {
@@ -244,10 +329,16 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                 <Label className="text-sm font-medium">Name of Worker:</Label>
                 <Input 
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="mt-1" 
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    clearFieldError('name');
+                  }}
+                  className={`mt-1 ${validationErrors.name ? 'border-red-500 focus:border-red-500' : ''}`}
                   placeholder="Enter worker name" 
                 />
+                {validationErrors.name && (
+                  <p className="text-xs text-red-500 mt-1">{validationErrors.name}</p>
+                )}
               </div>
 
               {/* Sex */}
@@ -274,21 +365,47 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                 <Label className="text-sm font-medium">Jobsite:</Label>
                 <Input 
                   value={formData.jobsite}
-                  onChange={(e) => setFormData({ ...formData, jobsite: e.target.value })}
-                  className="mt-1" 
+                  onChange={(e) => {
+                    setFormData({ ...formData, jobsite: e.target.value });
+                    clearFieldError('jobsite');
+                  }}
+                  className={`mt-1 ${validationErrors.jobsite ? 'border-red-500 focus:border-red-500' : ''}`}
                   placeholder="Enter jobsite"
                 />
+                {validationErrors.jobsite && (
+                  <p className="text-xs text-red-500 mt-1">{validationErrors.jobsite}</p>
+                )}
               </div>
 
-              {/* Position */}
+              {/* Position with Job Type */}
               <div>
                 <Label className="text-sm font-medium">Position:</Label>
-                <Input 
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="mt-1" 
-                  placeholder="Enter position"
-                />
+                <div className="flex gap-2 mt-1">
+                  <div className="flex-1">
+                    <Input 
+                      value={formData.position}
+                      onChange={(e) => {
+                        setFormData({ ...formData, position: e.target.value });
+                        clearFieldError('position');
+                      }}
+                      className={`${validationErrors.position ? 'border-red-500 focus:border-red-500' : ''}`}
+                      placeholder="Enter position"
+                    />
+                  </div>
+                  <div className="w-32">
+                    <select 
+                      className="w-full border rounded px-3 py-2 text-sm"
+                      value={formData.job_type} 
+                      onChange={(e) => setFormData({ ...formData, job_type: e.target.value as 'household' | 'professional' })}
+                    >
+                      <option value="professional">Professional</option>
+                      <option value="household">Household</option>
+                    </select>
+                  </div>
+                </div>
+                {validationErrors.position && (
+                  <p className="text-xs text-red-500 mt-1">{validationErrors.position}</p>
+                )}
               </div>
 
               {/* Salary with Currency */}
@@ -298,9 +415,13 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                   <div className="flex-1">
                     <Input 
                       value={formData.salary}
-                      onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, salary: e.target.value });
+                        clearFieldError('salary');
+                      }}
                       type="number"
                       step="0.01"
+                      className={validationErrors.salary ? 'border-red-500 focus:border-red-500' : ''}
                       placeholder="Enter salary amount" 
                     />
                   </div>
@@ -318,6 +439,9 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                     </select>
                   </div>
                 </div>
+                {validationErrors.salary && (
+                  <p className="text-xs text-red-500 mt-1">{validationErrors.salary}</p>
+                )}
                 {formData.salary && formData.salaryCurrency !== "USD" && (
                   <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded-md">
                     <Calculator className="h-4 w-4 text-blue-600" />
@@ -541,12 +665,119 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
               </div>
 
               <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={onClose}>
-                  Save as Draft
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    // Validate form first
+                    const validationErrors = validateDraftForm();
+                    const fieldErrors = getFieldErrors(true);
+                    
+                    if (validationErrors.length > 0) {
+                      // Set field-specific errors for visual indicators
+                      setValidationErrors(fieldErrors);
+                      
+                      // Show first error message
+                      toast({
+                        title: 'Validation Error',
+                        description: validationErrors[0],
+                        variant: 'destructive'
+                      });
+                      return;
+                    }
+
+                    setLoading(true);
+                    try {
+                      // Convert salary to USD for storage
+                      const salaryInUSD = formData.salary ? (
+                        formData.salaryCurrency === "USD" 
+                          ? parseFloat(formData.salary)
+                          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
+                      ) : 0;
+
+                      if (applicationId) {
+                        // Update existing draft via PUT (no file uploads here)
+                        const response = await fetch(`/api/direct-hire/${applicationId}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: formData.name,
+                            sex: formData.sex,
+                            job_type: formData.job_type,
+                            jobsite: formData.jobsite || 'To be filled',
+                            position: formData.position || 'To be filled',
+                            salary: String(salaryInUSD),
+                            status: 'draft'
+                          })
+                        })
+                        const result = await response.json();
+                        if (!result.success) throw new Error(result.error || 'Failed to update draft')
+                        onClose();
+                        toast({ title: 'Draft updated', description: `${formData.name} has been updated` })
+                        return;
+                      }
+
+                      // Create FormData for new draft (with files)
+                      const formDataToSend = new FormData();
+                      formDataToSend.append('name', formData.name);
+                      formDataToSend.append('sex', formData.sex);
+                      formDataToSend.append('job_type', formData.job_type);
+                      formDataToSend.append('salary', salaryInUSD.toString());
+                      formDataToSend.append('jobsite', formData.jobsite);
+                      formDataToSend.append('position', formData.position);
+                      formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
+                      formDataToSend.append('status', 'draft');
+
+                      if (uploadedFiles.passport) formDataToSend.append('passport', uploadedFiles.passport.file);
+                      if (uploadedFiles.visa) formDataToSend.append('visa', uploadedFiles.visa.file);
+                      if (uploadedFiles.tesda) formDataToSend.append('tesda', uploadedFiles.tesda.file);
+
+                      const response = await fetch('/api/direct-hire', { method: 'POST', body: formDataToSend });
+                      const result = await response.json();
+
+                      if (result.success) {
+                        onClose();
+                        toast({ title: 'Draft saved successfully!', description: `${formData.name} has been saved as a draft` });
+                      } else {
+                        throw new Error(result.error || 'Failed to save draft');
+                      }
+                    } catch (error) {
+                      console.error('Error saving draft:', error);
+                      toast({ title: 'Error saving draft', description: 'Failed to save the draft. Please try again.', variant: 'destructive' });
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    applicationId ? 'Save Draft Changes' : 'Save as Draft'
+                  )}
                 </Button>
                 <Button 
                   className="bg-[#1976D2] hover:bg-[#1565C0]" 
                   onClick={async () => {
+                    // Validate form first
+                    const validationErrors = validateForm();
+                    const fieldErrors = getFieldErrors(false);
+                    
+                    if (validationErrors.length > 0) {
+                      // Set field-specific errors for visual indicators
+                      setValidationErrors(fieldErrors);
+                      
+                      // Show first error message
+                      toast({
+                        title: 'Validation Error',
+                        description: validationErrors[0],
+                        variant: 'destructive'
+                      });
+                      return;
+                    }
+
                     setLoading(true);
                     try {
                       // Convert salary to USD for storage
@@ -558,6 +789,7 @@ export default function CreateApplicationModal({ onClose }: CreateApplicationMod
                       const formDataToSend = new FormData();
                       formDataToSend.append('name', formData.name);
                       formDataToSend.append('sex', formData.sex);
+                      formDataToSend.append('job_type', formData.job_type);
                       formDataToSend.append('salary', salaryInUSD.toString());
                       formDataToSend.append('jobsite', formData.jobsite);
                       formDataToSend.append('position', formData.position);

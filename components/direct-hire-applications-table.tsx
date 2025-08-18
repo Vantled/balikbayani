@@ -575,7 +575,27 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
                 <div className="flex gap-2 mb-2">
-                  <Button variant="outline" className="text-xs">+ Merge</Button>
+                  <Button
+                    variant="outline"
+                    className="text-xs"
+                    onClick={async () => {
+                      if (!selected) return
+                      try {
+                        const res = await fetch(`/api/direct-hire/${selected.id}/generate`, { method: 'POST' })
+                        const result = await res.json()
+                        if (result.success) {
+                          setDocumentsRefreshTrigger(prev => prev + 1)
+                          toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
+                        } else {
+                          throw new Error(result.error || 'Generation failed')
+                        }
+                      } catch (err) {
+                        toast({ title: 'Generation error', description: 'Failed to generate the document.', variant: 'destructive' })
+                      }
+                    }}
+                  >
+                    Generate
+                  </Button>
                   <Button 
                     className="bg-[#1976D2] text-white text-xs"
                     onClick={() => setUploadModalOpen(true)}
@@ -898,6 +918,28 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
   const [editName, setEditName] = useState('')
   const { toast } = useToast()
 
+  const formatDocumentType = (raw: string): string => {
+    if (!raw) return ''
+    const key = raw.toLowerCase().trim()
+    const map: Record<string, string> = {
+      passport: 'Passport',
+      visa: 'Visa/Work Permit',
+      'visa/work permit': 'Visa/Work Permit',
+      'visa work permit': 'Visa/Work Permit',
+      tesda: 'TESDA NC/PRC License',
+      'tesda nc': 'TESDA NC/PRC License',
+      'tesda nc/prc license': 'TESDA NC/PRC License',
+      clearance: 'Clearance',
+    }
+    if (map[key]) return map[key]
+    return raw
+      .replace(/[_-]/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
+
   // Fetch documents for this application
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -1092,7 +1134,7 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
               </Button>
             </div>
           ) : (
-            <span className="flex-1 text-sm">{document.document_type}</span>
+            <span className="flex-1 text-sm">{formatDocumentType(document.document_type)}</span>
           )}
           <span className="ml-auto">
             <DropdownMenu>

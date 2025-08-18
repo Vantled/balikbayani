@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { FileUploadService } from '@/lib/file-upload-service';
 import { ApiResponse } from '@/lib/types';
+import createReport from 'docx-templates';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
       const job_type = formData.get('job_type') as string;
       const evaluator = formData.get('evaluator') as string;
       const employer = formData.get('employer') as string | null;
+      const salaryCurrency = formData.get('salaryCurrency') as string | null;
       
       // Validate required fields based on status
       if (status === 'draft') {
@@ -132,7 +136,6 @@ export async function POST(request: NextRequest) {
             application.id, 
             'passport'
           );
-          
           const documentData = {
             application_id: application.id,
             application_type: 'direct_hire',
@@ -142,7 +145,6 @@ export async function POST(request: NextRequest) {
             file_size: uploadResult.fileSize,
             mime_type: uploadResult.mimeType
           };
-          
           const document = await DatabaseService.createDocument(documentData);
           uploadedDocuments.push(document);
         } catch (error) {
@@ -159,7 +161,6 @@ export async function POST(request: NextRequest) {
             application.id, 
             'visa'
           );
-          
           const documentData = {
             application_id: application.id,
             application_type: 'direct_hire',
@@ -169,7 +170,6 @@ export async function POST(request: NextRequest) {
             file_size: uploadResult.fileSize,
             mime_type: uploadResult.mimeType
           };
-          
           const document = await DatabaseService.createDocument(documentData);
           uploadedDocuments.push(document);
         } catch (error) {
@@ -186,7 +186,6 @@ export async function POST(request: NextRequest) {
             application.id, 
             'tesda'
           );
-          
           const documentData = {
             application_id: application.id,
             application_type: 'direct_hire',
@@ -196,11 +195,50 @@ export async function POST(request: NextRequest) {
             file_size: uploadResult.fileSize,
             mime_type: uploadResult.mimeType
           };
-          
           const document = await DatabaseService.createDocument(documentData);
           uploadedDocuments.push(document);
         } catch (error) {
           console.error('Error uploading TESDA document:', error);
+        }
+      }
+
+      // Auto-generate clearance document (only for non-draft)
+      if (status !== 'draft') {
+        try {
+          const templatePath = join(process.cwd(), 'public', 'templates', 'direct-hire-clearance.docx');
+          const template = await readFile(templatePath);
+          const createdDate = new Date().toISOString().slice(0, 10);
+          const report = await createReport({
+            template,
+            data: {
+              control_number: controlNumber,
+              name,
+              sex,
+              job_type,
+              employer: employer || '',
+              jobsite,
+              position,
+              salary,
+              salary_currency: salaryCurrency || 'USD',
+              evaluator: evaluator || '',
+              created_date: createdDate
+            },
+            cmdDelimiter: ['{{', '}}']
+          });
+          // Save as DOCX (fallback attachment)
+          const docxUpload = await FileUploadService.uploadBuffer(Buffer.from(report), `DH-${controlNumber}-clearance.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', application.id, 'clearance');
+          const docxRecord = await DatabaseService.createDocument({
+            application_id: application.id,
+            application_type: 'direct_hire',
+            document_type: 'clearance',
+            file_name: docxUpload.fileName,
+            file_path: docxUpload.filePath,
+            file_size: docxUpload.fileSize,
+            mime_type: docxUpload.mimeType
+          });
+          uploadedDocuments.push(docxRecord);
+        } catch (err) {
+          console.error('Error generating clearance document:', err);
         }
       }
 

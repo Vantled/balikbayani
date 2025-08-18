@@ -759,8 +759,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       const formDataToSend = new FormData();
                       formDataToSend.append('name', formData.name);
                       formDataToSend.append('sex', formData.sex);
-                      formDataToSend.append('job_type', formData.job_type);
                       formDataToSend.append('salary', salaryInUSD.toString());
+                      formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
                       formDataToSend.append('jobsite', formData.jobsite);
                       formDataToSend.append('position', formData.position);
                       formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
@@ -831,8 +831,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       const formDataToSend = new FormData();
                       formDataToSend.append('name', formData.name);
                       formDataToSend.append('sex', formData.sex);
-                      formDataToSend.append('job_type', formData.job_type);
                       formDataToSend.append('salary', salaryInUSD.toString());
+                      formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
                       formDataToSend.append('jobsite', formData.jobsite);
                       formDataToSend.append('position', formData.position);
                       formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');

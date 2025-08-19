@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useState, useEffect } from "react"
-import { ChevronDown, Filter, Plus, Download, Search, MoreHorizontal, Eye, Edit } from "lucide-react"
+import { ChevronDown, Filter, Plus, Download, Search, MoreHorizontal, Eye, Edit, Loader2, RefreshCcw } from "lucide-react"
 import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-clearance"
 import { toast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
@@ -15,6 +15,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
+import PDFViewerModal from "@/components/pdf-viewer-modal"
+import type { Document } from "@/lib/types"
+import { useToast } from "@/hooks/use-toast"
 
 
 
@@ -69,6 +72,10 @@ export default function BalikManggagawaClearancePage() {
   const [activeTab, setActiveTab] = useState("form1")
   const [viewOpen, setViewOpen] = useState(false)
   const [selectedClearance, setSelectedClearance] = useState<any>(null)
+  const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string} | null>(null)
   const isTwoForm = selectedType === 'watchlisted_employer'
   const secondTabKey = isTwoForm ? 'form2' : 'review'
   const secondTabLabel = isTwoForm ? 'Form 2' : 'Preview'
@@ -765,10 +772,225 @@ export default function BalikManggagawaClearancePage() {
                   <div className="font-medium">{new Date((selectedClearance as any).created_at).toLocaleString()}</div>
                 </div>
               </div>
+              <hr className="my-4" />
+              <div>
+                <div className="font-semibold text-gray-700 mb-2">Documents</div>
+                <div className="flex gap-2 mb-3">
+                  <Button
+                    className="bg-[#1976D2] text-white text-xs"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/balik-manggagawa/clearance/${selectedClearance.id}/generate`, { method: 'POST' })
+                        const result = await res.json()
+                        if (result.success) {
+                          setDocumentsRefreshTrigger(prev => prev + 1)
+                          toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
+                        } else {
+                          throw new Error(result.error || 'Generation failed')
+                        }
+                      } catch (err) {
+                        toast({ title: 'Generation error', description: 'Failed to generate the document.', variant: 'destructive' })
+                      }
+                    }}
+                  >
+                    Generate
+                  </Button>
+                  <Button 
+                    className="bg-[#1976D2] text-white text-xs"
+                    onClick={() => setUploadModalOpen(true)}
+                  >
+                    + New
+                  </Button>
+                </div>
+                {selectedClearance && (
+                  <ApplicantDocumentsListBM 
+                    applicationId={selectedClearance.id}
+                    refreshTrigger={documentsRefreshTrigger}
+                    onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
+                    onViewPDF={(documentId, documentName) => {
+                      setSelectedDocument({ id: documentId, name: documentName })
+                      setPdfViewerOpen(true)
+                    }}
+                  />
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Upload Document Modal */}
+      <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Upload New Document</DialogTitle>
+          {selectedClearance && (
+            <DocumentUploadFormBM 
+              applicationId={selectedClearance.id}
+              onSuccess={() => {
+                setUploadModalOpen(false)
+                setDocumentsRefreshTrigger(prev => prev + 1)
+                toast({ title: 'Document uploaded', description: 'Document has been uploaded successfully' })
+              }}
+              onError={(error) => toast({ title: 'Upload Error', description: error, variant: 'destructive' })}
+              onCancel={() => setUploadModalOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Viewer */}
+      {selectedDocument && (
+        <PDFViewerModal
+          isOpen={pdfViewerOpen}
+          onClose={() => { setPdfViewerOpen(false); setSelectedDocument(null) }}
+          documentId={selectedDocument.id}
+          documentName={selectedDocument.name}
+        />
+      )}
     </div>
   )
 } 
+
+// BM Documents List (mirrors Direct Hire list with application_type filter)
+function ApplicantDocumentsListBM({ applicationId, refreshTrigger, onRefresh, onViewPDF }: { applicationId: string, refreshTrigger: number, onRefresh?: () => void, onViewPDF?: (id: string, name: string) => void }) {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingDocument, setEditingDocument] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=balik_manggagawa_clearance`)
+        const result = await response.json()
+        if (result.success) setDocuments(result.data)
+      } catch {
+        toast({ title: 'Error', description: 'Failed to load documents', variant: 'destructive' })
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (applicationId) fetchDocuments()
+  }, [applicationId, refreshTrigger])
+
+  const handleView = async (document: Document) => {
+    const isClearance = document.document_type.toLowerCase().includes('clearance')
+    const isPDF = document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')
+    if (isClearance && isPDF && onViewPDF) return onViewPDF(document.id, document.document_type)
+    try {
+      const res = await fetch(`/api/documents/${document.id}/download`)
+      if (!res.ok) throw new Error('View failed')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast({ title: 'View Error', description: 'Failed to view document', variant: 'destructive' })
+    }
+  }
+
+  const handleUpdateName = async (document: Document) => {
+    if (!editName.trim()) { toast({ title: 'Error', description: 'Document name cannot be empty', variant: 'destructive' }); return }
+    try {
+      const res = await fetch(`/api/documents/${document.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ documentName: editName.trim() }) })
+      const result = await res.json()
+      if (result.success) {
+        setDocuments(d => d.map(doc => doc.id === document.id ? { ...doc, document_type: editName.trim() } : doc))
+        setEditingDocument(null); setEditName(''); onRefresh?.(); toast({ title: 'Document updated', description: 'Document name has been updated' })
+      } else throw new Error(result.error || 'Update failed')
+    } catch (e) {
+      toast({ title: 'Update Error', description: e instanceof Error ? e.message : 'Failed to update document', variant: 'destructive' })
+    }
+  }
+
+  const handleDelete = async (document: Document) => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${document.file_name}?`)
+    if (!confirmDelete) return
+    try {
+      const res = await fetch(`/api/documents/${document.id}`, { method: 'DELETE' })
+      const result = await res.json()
+      if (result.success) { setDocuments(d => d.filter(doc => doc.id !== document.id)); onRefresh?.(); toast({ title: 'Document deleted', description: `${document.file_name} has been removed` }) }
+      else throw new Error(result.error || 'Delete failed')
+    } catch {
+      toast({ title: 'Delete Error', description: 'Failed to delete document', variant: 'destructive' })
+    }
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-4 text-sm text-gray-600">
+      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading documents...
+    </div>
+  )
+  if (documents.length === 0) return <div className="text-center py-4 text-gray-500 text-sm">No documents uploaded yet</div>
+
+  return (
+    <ul className="space-y-2">
+      {documents.map((document) => (
+        <li key={document.id} className="flex items-center gap-2">
+          <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
+          {editingDocument === document.id ? (
+            <div className="flex-1 flex items-center gap-2">
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 text-sm border rounded px-2 py-1" />
+              <Button size="sm" onClick={() => handleUpdateName(document)} className="h-6 px-2 text-xs">Save</Button>
+              <Button size="sm" variant="outline" onClick={() => { setEditingDocument(null); setEditName('') }} className="h-6 px-2 text-xs">Cancel</Button>
+            </div>
+          ) : (
+            <span className="flex-1 text-sm">{document.document_type}</span>
+          )}
+          <span className="ml-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal className="h-4 w-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleView(document)}><Eye className="h-4 w-4 mr-2" />View</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setEditingDocument(document.id); setEditName(document.document_type) }}><Edit className="h-4 w-4 mr-2" />Edit Name</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDelete(document)}><Download className="h-4 w-4 mr-2 rotate-180" />Delete</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function DocumentUploadFormBM({ applicationId, onSuccess, onError, onCancel }: { applicationId: string, onSuccess: () => void, onError: (e: string) => void, onCancel: () => void }) {
+  const [uploading, setUploading] = useState(false)
+  const [documentName, setDocumentName] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const handleUpload = async () => {
+    if (!selectedFile || !documentName.trim()) { onError('Please select a file and enter a document name'); return }
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('applicationId', applicationId)
+      formData.append('applicationType', 'balik_manggagawa_clearance')
+      formData.append('documentName', documentName.trim())
+      const response = await fetch('/api/documents/upload', { method: 'POST', body: formData })
+      const result = await response.json()
+      if (result.success) onSuccess(); else throw new Error(result.error || 'Upload failed')
+    } catch (e) { onError(e instanceof Error ? e.message : 'Upload failed') } finally { setUploading(false) }
+  }
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Document Name</Label>
+        <Input type="text" value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Enter document name (e.g., Clearance, Passport, Employment Contract)" />
+      </div>
+      <div>
+        <Label>File</Label>
+        <Input type="file" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} accept=".jpg,.jpeg,.png,.pdf,.doc,.docx" />
+        <p className="text-xs text-gray-500 mt-1">JPEG, PNG, PDF, DOC, DOCX (Max 5MB)</p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel} disabled={uploading}>Cancel</Button>
+        <Button onClick={handleUpload} disabled={uploading || !selectedFile || !documentName.trim()} className="bg-[#1976D2] text-white">
+          {uploading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...</>) : 'Upload'}
+        </Button>
+      </div>
+    </div>
+  )
+}

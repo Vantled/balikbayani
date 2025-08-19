@@ -81,7 +81,20 @@ export function useBalikManggagawaProcessing() {
 		}
 	}
 
+	const getProcessingById = async (id: string) => {
+		try {
+			const res = await fetch(`/api/balik-manggagawa/processing/${id}`)
+			const json = await res.json()
+			if (json.success) {
+				return { success: true, data: json.data }
+			}
+			return { success: false, error: json.error }
+		} catch (e) {
+			return { success: false, error: 'Failed to fetch processing record' }
+		}
+	}
+
 	useEffect(() => { fetchRecords() }, [])
 
-	return { records, loading, error, pagination, fetchRecords, createRecord, updateRecord, deleteRecord }
+	return { records, loading, error, pagination, fetchRecords, createRecord, updateRecord, deleteRecord, getProcessingById }
 }

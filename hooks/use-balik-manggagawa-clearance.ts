@@ -21,6 +21,20 @@ interface ClearanceData {
   destination: string;
   salary: number;
   clearanceType: string;
+  // Extended optional fields
+  position?: string | null;
+  monthsYears?: string | null;
+  withPrincipal?: string | null;
+  newPrincipalName?: string | null;
+  employmentDuration?: string | null;
+  dateArrival?: string | null;
+  dateDeparture?: string | null;
+  placeDateEmployment?: string | null;
+  dateBlacklisting?: string | null;
+  totalDeployedOfws?: number | null;
+  reasonBlacklisting?: string | null;
+  yearsWithPrincipal?: number | null;
+  remarks?: string | null;
 }
 
 export function useBalikManggagawaClearance() {

@@ -51,7 +51,20 @@ export async function PUT(
       employer,
       destination,
       salary,
-      clearanceType
+      clearanceType,
+      position,
+      monthsYears,
+      withPrincipal,
+      newPrincipalName,
+      employmentDuration,
+      dateArrival,
+      dateDeparture,
+      placeDateEmployment,
+      dateBlacklisting,
+      totalDeployedOfws,
+      reasonBlacklisting,
+      yearsWithPrincipal,
+      remarks
     } = body;
 
     // Validate required fields
@@ -92,13 +105,27 @@ export async function PUT(
     }
 
     // Update clearance record
+    const normalize = (v: any) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) ? null : v;
     const clearance = await DatabaseService.updateBalikManggagawaClearance(id, {
       nameOfWorker,
       sex,
       employer,
       destination,
       salary: parseFloat(salary),
-      clearanceType
+      clearanceType,
+      position: normalize(position),
+      monthsYears: normalize(monthsYears),
+      withPrincipal: normalize(withPrincipal),
+      newPrincipalName: normalize(newPrincipalName),
+      employmentDuration: normalize(employmentDuration),
+      dateArrival: normalize(dateArrival),
+      dateDeparture: normalize(dateDeparture),
+      placeDateEmployment: normalize(placeDateEmployment),
+      dateBlacklisting: normalize(dateBlacklisting),
+      totalDeployedOfws: totalDeployedOfws != null && String(totalDeployedOfws).trim() !== '' ? Number(totalDeployedOfws) : null,
+      reasonBlacklisting: normalize(reasonBlacklisting),
+      yearsWithPrincipal: yearsWithPrincipal != null && String(yearsWithPrincipal).trim() !== '' ? Number(yearsWithPrincipal) : null,
+      remarks: normalize(remarks)
     });
 
     if (!clearance) {
@@ -159,6 +186,31 @@ export async function DELETE(
       error: 'Failed to delete clearance'
     };
 
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    if (body && body.action === 'restore') {
+      const success = await DatabaseService.restoreBalikManggagawaClearance(id);
+      if (!success) {
+        const response: ApiResponse = { success: false, error: 'Clearance not found' };
+        return NextResponse.json(response, { status: 404 });
+      }
+      const response: ApiResponse = { success: true, message: 'Clearance restored successfully' };
+      return NextResponse.json(response);
+    }
+    const response: ApiResponse = { success: false, error: 'Invalid action' };
+    return NextResponse.json(response, { status: 400 });
+  } catch (error) {
+    console.error('Error restoring clearance:', error);
+    const response: ApiResponse = { success: false, error: 'Failed to restore clearance' };
     return NextResponse.json(response, { status: 500 });
   }
 }

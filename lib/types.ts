@@ -115,6 +115,20 @@ export interface BalikManggagawaClearance {
   destination: string;
   salary: number;
   clearance_type: 'watchlisted_employer' | 'seafarer_position' | 'non_compliant_country' | 'no_verified_contract' | 'for_assessment_country' | 'critical_skill' | 'watchlisted_similar_name';
+  status?: string;
+  // New fields for template
+  no_of_months_years?: string;
+  date_of_departure?: Date;
+  // Processing document fields (when linked from processing)
+  personal_letter_file?: string;
+  valid_passport_file?: string;
+  work_visa_file?: string;
+  employment_contract_file?: string;
+  employment_certificate_file?: string;
+  last_arrival_email_file?: string;
+  flight_ticket_file?: string;
+  documents_completed?: boolean;
+  completed_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -126,6 +140,18 @@ export interface BalikManggagawaProcessing {
   sex: 'male' | 'female';
   address: string;
   destination: string;
+  clearance_type?: string;
+  clearance_id?: string;
+  personal_letter_file?: string;
+  valid_passport_file?: string;
+  work_visa_file?: string;
+  employment_contract_file?: string;
+  employment_certificate_file?: string;
+  last_arrival_email_file?: string;
+  flight_ticket_file?: string;
+  documents_completed?: boolean;
+  completed_at?: Date;
+  documents_submitted?: number;
   counter_monitoring: CounterMonitoring[];
   created_at: Date;
   updated_at: Date;

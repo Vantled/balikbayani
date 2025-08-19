@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useState, useEffect } from "react"
-import { ChevronDown, Filter, Plus, Download, Search, MoreHorizontal, Eye, Edit, Loader2, RefreshCcw } from "lucide-react"
+import { ChevronDown, Filter, Plus, Download, Search, MoreHorizontal, Eye, Edit, Loader2, RefreshCcw, Trash2, CheckCircle, FileText } from "lucide-react"
 import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-clearance"
 import { toast } from "@/hooks/use-toast"
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle, DialogClose, DialogHeader } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -41,8 +42,15 @@ export default function BalikManggagawaClearancePage() {
     dateFrom: '',
     dateTo: '',
     jobsite: '',
-    position: ''
+    position: '',
+    includeDeleted: false as boolean
   })
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
+  const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [confirmingPassword, setConfirmingPassword] = useState(false)
+  const [confirmPurpose, setConfirmPurpose] = useState<'deleted' | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   // Create modal state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -62,11 +70,17 @@ export default function BalikManggagawaClearancePage() {
   const [withPrincipal, setWithPrincipal] = useState("")
   const [newPrincipalName, setNewPrincipalName] = useState("")
   const [employmentDuration, setEmploymentDuration] = useState("")
+  const [employmentDurationStart, setEmploymentDurationStart] = useState("")
+  const [employmentDurationEnd, setEmploymentDurationEnd] = useState("")
   const [dateBlacklisting, setDateBlacklisting] = useState("")
   const [reasonBlacklisting, setReasonBlacklisting] = useState("")
   const [placeDateEmployment, setPlaceDateEmployment] = useState("")
   const [totalDeployedOfws, setTotalDeployedOfws] = useState("")
   const [yearsWithPrincipal, setYearsWithPrincipal] = useState("")
+  const [employmentStartDate, setEmploymentStartDate] = useState("")
+  const [processingDate, setProcessingDate] = useState("")
+  const [noOfMonthsYears, setNoOfMonthsYears] = useState("")
+  const [dateOfDeparture, setDateOfDeparture] = useState("")
   const [controlPreview, setControlPreview] = useState("")
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
   const [activeTab, setActiveTab] = useState("form1")
@@ -76,9 +90,11 @@ export default function BalikManggagawaClearancePage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string} | null>(null)
-  const isTwoForm = selectedType === 'watchlisted_employer'
-  const secondTabKey = isTwoForm ? 'form2' : 'review'
-  const secondTabLabel = isTwoForm ? 'Form 2' : 'Preview'
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [clearanceToDelete, setClearanceToDelete] = useState<any>(null)
+  const isTwoForm = true
+  const secondTabKey = 'form2'
+  const secondTabLabel = 'Form 2'
 
   const {
     clearances,
@@ -88,8 +104,33 @@ export default function BalikManggagawaClearancePage() {
     fetchClearances,
     createClearance,
     updateClearance,
-    deleteClearance
+    deleteClearance,
+    getClearanceById
   } = useBalikManggagawaClearance()
+
+  // Initial load
+  useEffect(() => {
+    fetchClearances({
+      page: 1,
+      limit: 10,
+      search,
+      ...filters,
+      includeDeleted: showDeletedOnly,
+      showDeletedOnly: showDeletedOnly
+    })
+  }, [])
+
+  // Get current user
+  useEffect(() => {
+    let mounted = true
+    import('@/lib/auth').then(mod => {
+      const u = mod.getUser()
+      if (mounted) {
+        setCurrentUser(u)
+      }
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
   // Handle search
   const handleSearch = (searchTerm: string) => {
@@ -98,7 +139,9 @@ export default function BalikManggagawaClearancePage() {
       page: 1,
       limit: 10,
       search: searchTerm,
-      ...filters
+      ...filters,
+      includeDeleted: showDeletedOnly,
+      showDeletedOnly: showDeletedOnly
     })
   }
 
@@ -109,7 +152,9 @@ export default function BalikManggagawaClearancePage() {
       page: 1,
       limit: 10,
       search,
-      ...newFilters
+      ...newFilters,
+      includeDeleted: showDeletedOnly,
+      showDeletedOnly: showDeletedOnly
     })
   }
 
@@ -119,8 +164,68 @@ export default function BalikManggagawaClearancePage() {
       page,
       limit: 10,
       search,
-      ...filters
+      ...filters,
+      includeDeleted: showDeletedOnly,
+      showDeletedOnly: showDeletedOnly
     })
+  }
+
+  // Handle show deleted only toggle
+  const handleShowDeletedOnly = (show: boolean) => {
+    if (show) {
+      // Require password confirmation before enabling
+      setConfirmPurpose('deleted')
+      setConfirmPasswordOpen(true)
+    } else {
+      setShowDeletedOnly(false)
+      fetchClearances({
+        page: 1,
+        limit: 10,
+        search,
+        ...filters,
+        includeDeleted: false,
+        showDeletedOnly: false
+      })
+    }
+  }
+
+  // Handle password confirmation
+  const handleConfirmPassword = async () => {
+    const username = currentUser?.username || ''
+    if (!username || !confirmPassword) return
+    
+    setConfirmingPassword(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: confirmPassword })
+      })
+      const data = await res.json()
+      if (data.success) {
+        if (confirmPurpose === 'deleted') {
+          setShowDeletedOnly(true)
+          fetchClearances({
+            page: 1,
+            limit: 10,
+            search,
+            ...filters,
+            includeDeleted: true,
+            showDeletedOnly: true
+          })
+        }
+        setConfirmPasswordOpen(false)
+        setConfirmPassword("")
+        setConfirmPurpose(null)
+        toast({ title: 'Access granted', description: 'Password verified successfully' })
+      } else {
+        toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' })
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to verify password', variant: 'destructive' })
+    } finally {
+      setConfirmingPassword(false)
+    }
   }
 
   const resetForm = () => {
@@ -138,11 +243,17 @@ export default function BalikManggagawaClearancePage() {
     setWithPrincipal("")
     setNewPrincipalName("")
     setEmploymentDuration("")
+    setEmploymentDurationStart("")
+    setEmploymentDurationEnd("")
     setDateBlacklisting("")
     setReasonBlacklisting("")
     setPlaceDateEmployment("")
     setTotalDeployedOfws("")
     setYearsWithPrincipal("")
+    setEmploymentStartDate("")
+    setProcessingDate("")
+    setNoOfMonthsYears("")
+    setDateOfDeparture("")
   }
 
   const openCreateModal = (typeValue: string) => {
@@ -153,6 +264,17 @@ export default function BalikManggagawaClearancePage() {
       if (res?.success) setControlPreview(res.data.preview)
       else setControlPreview('')
     }).catch(()=> setControlPreview(''))
+  }
+
+  const validateForm1 = (): string[] => {
+    const errors: string[] = []
+    const fieldErrors: {[k:string]: string} = {}
+    if (!formName.trim()) { errors.push('Name is required'); (fieldErrors as any).name = 'Name is required' }
+    if (!formEmployer.trim()) { errors.push('Employer is required'); (fieldErrors as any).employer = 'Employer is required' }
+    if (!formDestination.trim()) { errors.push('Destination is required'); (fieldErrors as any).destination = 'Destination is required' }
+    if (!formSalary.trim() || isNaN(Number(formSalary)) || Number(formSalary) <= 0) { errors.push('Valid salary is required'); (fieldErrors as any).salary = 'Valid salary is required' }
+    setValidationErrors(fieldErrors)
+    return errors
   }
 
   const validateCreateForm = (): string[] => {
@@ -174,20 +296,62 @@ export default function BalikManggagawaClearancePage() {
       require(dateArrival, 'dateArrival', 'Date of Arrival')
       require(dateDeparture, 'dateDeparture', 'Date of Departure')
       require(yearsWithPrincipal, 'yearsWithPrincipal', 'No. of Years with the Principal')
-    } else if (t === 'non_compliant_country' || t === 'for_assessment_country') {
+    } else if (t === 'non_compliant_country') {
       require(monthsYears, 'monthsYears', 'No. of Month(s)/Year(s)')
       require(withPrincipal, 'withPrincipal', 'With the Principal')
       require(dateDeparture, 'dateDeparture', 'Date of Departure')
       require(position, 'position', 'Position')
-    } else if (t === 'no_verified_contract' || t === 'seafarer_position' || t === 'critical_skill') {
+    } else if (t === 'for_assessment_country') {
+      require(noOfMonthsYears, 'noOfMonthsYears', 'No. of Month(s)/Year(s) with the Principal')
+      require(dateOfDeparture, 'dateOfDeparture', 'Date of Departure')
+      require(employmentStartDate, 'employmentStartDate', 'Employment Start Date')
+      require(processingDate, 'processingDate', 'Processing Date')
+      require(dateArrival, 'dateArrival', 'Date of Arrival')
+    } else if (t === 'no_verified_contract' || t === 'seafarer_position') {
       require(dateArrival, 'dateArrival', 'Date of Arrival')
       require(dateDeparture, 'dateDeparture', 'Date of Departure')
       require(position, 'position', 'Position')
       require(newPrincipalName, 'newPrincipalName', 'Name of the New Principal')
       require(employmentDuration, 'employmentDuration', 'Employment Duration')
+    } else if (t === 'critical_skill') {
+      require(dateArrival, 'dateArrival', 'Date of Arrival')
+      require(dateDeparture, 'dateDeparture', 'Date of Departure')
+      require(position, 'position', 'Position')
+      require(newPrincipalName, 'newPrincipalName', 'Name of the New Principal')
+      require(employmentDurationStart, 'employmentDurationStart', 'Employment Duration (From)')
+      require(employmentDurationEnd, 'employmentDurationEnd', 'Employment Duration (To)')
     }
     setValidationErrors(fieldErrors)
     return errors
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!clearanceToDelete) return
+    
+    const result = await deleteClearance(clearanceToDelete.id)
+    if (result.success) {
+      await fetchClearances({
+        page: 1,
+        limit: 10,
+        search,
+        ...filters,
+        includeDeleted: false,
+        showDeletedOnly: false
+      })
+      toast({
+        title: "Success",
+        description: "Clearance deleted successfully",
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: result.error || "Failed to delete clearance",
+        variant: "destructive"
+      })
+    }
+    
+    setDeleteConfirmOpen(false)
+    setClearanceToDelete(null)
   }
 
   const handleCreate = async () => {
@@ -202,14 +366,46 @@ export default function BalikManggagawaClearancePage() {
       return
     }
 
-    const result = await createClearance({
+    // include extended fields (send only if filled; backend normalizes empties to null)
+    const payload: any = {
       nameOfWorker: formName,
       sex: formSex,
       employer: formEmployer,
       destination: formDestination,
-      salary: salaryNumber,
+      salary: (salaryCurrency && salaryCurrency !== 'USD') ? convertToUSD(salaryNumber, salaryCurrency as Currency) : salaryNumber,
       clearanceType: selectedType,
-    })
+    }
+    if (position) payload.position = position
+    if (monthsYears) payload.monthsYears = monthsYears
+    if (withPrincipal) payload.withPrincipal = withPrincipal
+    if (newPrincipalName) payload.newPrincipalName = newPrincipalName
+    if (employmentDurationStart && employmentDurationEnd && selectedType === 'critical_skill') {
+      // Format as 'DD MONTH YYYY TO DD MONTH YYYY' (uppercase month)
+      const fmt = (d: string) => {
+        const date = new Date(d)
+        const day = String(date.getDate()).padStart(2, '0')
+        const month = date.toLocaleString('en-US', { month: 'long' }).toUpperCase()
+        const year = date.getFullYear()
+        return `${day} ${month} ${year}`
+      }
+      payload.employmentDuration = `${fmt(employmentDurationStart)} TO ${fmt(employmentDurationEnd)}`
+    } else if (employmentDuration) {
+      payload.employmentDuration = employmentDuration
+    }
+    if (dateArrival) payload.dateArrival = dateArrival
+    if (dateDeparture) payload.dateDeparture = dateDeparture
+    if (placeDateEmployment) payload.placeDateEmployment = placeDateEmployment
+    if (dateBlacklisting) payload.dateBlacklisting = dateBlacklisting
+    if (totalDeployedOfws) payload.totalDeployedOfws = Number(totalDeployedOfws)
+    if (reasonBlacklisting) payload.reasonBlacklisting = reasonBlacklisting
+    if (yearsWithPrincipal) payload.yearsWithPrincipal = Number(yearsWithPrincipal)
+    if (employmentStartDate) payload.employmentStartDate = employmentStartDate
+    if (processingDate) payload.processingDate = processingDate
+    if (noOfMonthsYears) payload.noOfMonthsYears = noOfMonthsYears
+    if (dateOfDeparture) payload.dateOfDeparture = dateOfDeparture
+    if (remarks) payload.remarks = remarks
+
+    const result = await createClearance(payload)
 
     if (result.success) {
       toast({ title: "Created", description: "Clearance created successfully." })
@@ -407,7 +603,9 @@ export default function BalikManggagawaClearancePage() {
                         page: 1,
                         limit: 10,
                         search,
-                        ...clearedFilters
+                        ...clearedFilters,
+                        includeDeleted: showDeletedOnly,
+                        showDeletedOnly: showDeletedOnly
                       })
                     }}
                   >
@@ -425,7 +623,20 @@ export default function BalikManggagawaClearancePage() {
           </div>
         </div>
         {/* Table */}
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto rounded-xl border bg-white">
+        <div className="bg-white rounded-md border overflow-hidden">
+          {/* Superadmin controls */}
+          <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={showDeletedOnly}
+                onChange={(e) => handleShowDeletedOnly(e.target.checked)}
+              />
+              Show deleted only
+            </label>
+          </div>
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#1976D2] text-white">
@@ -459,23 +670,31 @@ export default function BalikManggagawaClearancePage() {
                 </tr>
               ) : (
                 clearances.map((clearance) => (
-                  <tr key={clearance.id} className="hover:bg-gray-50">
+                  <tr key={clearance.id} className={`hover:bg-gray-50 ${(clearance as any).deleted_at ? 'bg-red-50' : ''}`}>
                     <td className="py-3 px-4 text-center">{clearance.control_number}</td>
                     <td className="py-3 px-4 text-center">{clearance.name_of_worker}</td>
                     <td className="py-3 px-4 text-center capitalize">{clearance.sex}</td>
                     <td className="py-3 px-4 text-center">{clearance.employer}</td>
                     <td className="py-3 px-4 text-center">{clearance.destination}</td>
                     <td className="py-3 px-4 text-center">${clearance.salary.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => { setSelectedClearance(clearance as any); setViewOpen(true) }}>
+                  <td className="py-3 px-4 text-center">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={async () => {
+                            const result = await getClearanceById((clearance as any).id)
+                            if (result.success) {
+                              setSelectedClearance(result.data)
+                              setViewOpen(true)
+                            } else {
+                              toast({ title: 'Error', description: result.error || 'Failed to load details', variant: 'destructive' })
+                            }
+                          }}>
                             <Eye className="h-4 w-4 mr-2" />
                             View
                           </DropdownMenuItem>
@@ -483,40 +702,86 @@ export default function BalikManggagawaClearancePage() {
                             <Edit className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Download className="h-4 w-4 mr-2" />
-                            Download PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-red-600"
-                            onClick={async () => {
-                              const result = await deleteClearance(clearance.id)
-                              if (result.success) {
-                                toast({
-                                  title: "Success",
-                                  description: "Clearance deleted successfully",
-                                })
-                              } else {
-                                toast({
-                                  title: "Error",
-                                  description: result.error || "Failed to delete clearance",
-                                  variant: "destructive"
-                                })
-                              }
-                            }}
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
+                          {showDeletedOnly ? (
+                            <DropdownMenuItem 
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/balik-manggagawa/clearance/${clearance.id}`, { 
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'restore' })
+                                  })
+                                  const result = await res.json()
+                                  if (result.success) {
+                                                                       await fetchClearances({
+                                     page: 1,
+                                     limit: 10,
+                                     search,
+                                     ...filters,
+                                     includeDeleted: true,
+                                     showDeletedOnly: true
+                                   })
+                                    toast({ title: 'Clearance restored', description: `${clearance.name_of_worker} has been restored` })
+                                  } else {
+                                    throw new Error(result.error || 'Restore failed')
+                                  }
+                                } catch (err) {
+                                  toast({ title: 'Restore error', description: 'Failed to restore clearance', variant: 'destructive' })
+                                }
+                              }}
+                            >
+                              <RefreshCcw className="h-4 w-4 mr-2" />
+                              Restore
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem 
+                              className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
+                              onClick={() => {
+                                setClearanceToDelete(clearance)
+                                setDeleteConfirmOpen(true)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
+                </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+        </div>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Clearance</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the clearance for <strong>{clearanceToDelete?.name_of_worker}</strong>? 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setDeleteConfirmOpen(false)
+              setClearanceToDelete(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create Clearance Modal */}
       <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) { resetForm(); setActiveTab('form1'); setValidationErrors({}) } }}>
@@ -537,11 +802,41 @@ export default function BalikManggagawaClearancePage() {
                 <TabsTrigger value={secondTabKey}>{secondTabLabel}</TabsTrigger>
               </TabsList>
               <TabsContent value="form1">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <Label>Control No. (Preview)</Label>
                     <Input value={controlPreview || ''} disabled className="bg-gray-50 font-mono text-sm mt-1" />
                     <p className="text-xs text-gray-500 mt-1">This is a preview. The actual control number will be generated upon creation.</p>
+                  </div>
+                  <div>
+                    <Label>Name of Worker</Label>
+                    <Input value={formName} onChange={(e)=> { setFormName(e.target.value.toUpperCase()); setValidationErrors(v=>({ ...v, name: '' })) }} className="mt-1" placeholder="First Name M.I Last Name" />
+                    {validationErrors.name && <span className="text-xs text-red-500">{validationErrors.name}</span>}
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Sex</Label>
+                    <div className="mt-1.5 h-10 flex items-center px-1">
+                      <RadioGroup value={formSex} onValueChange={(v)=> { setFormSex(v as any); setValidationErrors(val=>({ ...val, sex: '' })) }} className="flex gap-6">
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="male" id="bm-clearance-sex-male" />
+                          <Label htmlFor="bm-clearance-sex-male" className="m-0">Male</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="female" id="bm-clearance-sex-female" />
+                          <Label htmlFor="bm-clearance-sex-female" className="m-0">Female</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    {validationErrors.sex && <span className="text-xs text-red-500">{validationErrors.sex}</span>}
+                  </div>
+                  <div>
+                    <Label>Jobsite</Label>
+                    <Input value={formDestination} onChange={(e)=> { setFormDestination(e.target.value.toUpperCase()); setValidationErrors(v=>({ ...v, destination: '' })) }} className="mt-1" placeholder="Country" />
+                    {validationErrors.destination && <span className="text-xs text-red-500">{validationErrors.destination}</span>}
+                  </div>
+                  <div>
+                    <Label>Position</Label>
+                    <Input className="mt-1" placeholder="Position" value={position} onChange={(e)=> setPosition(e.target.value.toUpperCase())} />
                   </div>
                   <div>
                     <Label>Salary</Label>
@@ -560,123 +855,27 @@ export default function BalikManggagawaClearancePage() {
                     )}
                   </div>
                   <div>
-                    <Label>Name of Worker</Label>
-                    <Input value={formName} onChange={(e)=> { setFormName(e.target.value.toUpperCase()); setValidationErrors(v=>({ ...v, name: '' })) }} className="mt-1" placeholder="First Name M.I Last Name" />
-                    {validationErrors.name && <span className="text-xs text-red-500">{validationErrors.name}</span>}
-                  </div>
-                  <div>
-                    <Label className="mb-1 block">Sex</Label>
-                    <div className="mt-1.5 h-10 flex items-center border rounded px-3">
-                      <RadioGroup value={formSex} onValueChange={(v)=> { setFormSex(v as any); setValidationErrors(val=>({ ...val, sex: '' })) }} className="flex gap-6">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="male" id="bm-clearance-sex-male" />
-                          <Label htmlFor="bm-clearance-sex-male" className="m-0">Male</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="female" id="bm-clearance-sex-female" />
-                          <Label htmlFor="bm-clearance-sex-female" className="m-0">Female</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                    {validationErrors.sex && <span className="text-xs text-red-500">{validationErrors.sex}</span>}
-                  </div>
-                  <div>
-                    <Label>Destination</Label>
-                    <Input value={formDestination} onChange={(e)=> { setFormDestination(e.target.value.toUpperCase()); setValidationErrors(v=>({ ...v, destination: '' })) }} className="mt-1" placeholder="Country" />
-                    {validationErrors.destination && <span className="text-xs text-red-500">{validationErrors.destination}</span>}
-                  </div>
-                  <div>
                     <Label>Employer</Label>
                     <Input value={formEmployer} onChange={(e)=> { setFormEmployer(e.target.value.toUpperCase()); setValidationErrors(v=>({ ...v, employer: '' })) }} className="mt-1" placeholder="Employer name" />
                     {validationErrors.employer && <span className="text-xs text-red-500">{validationErrors.employer}</span>}
                   </div>
+                  
                 </div>
                 {/* Type-specific sections */}
-                {selectedType === 'watchlisted_employer' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <Label>Place and Date of Employment</Label>
-                      <Input className="mt-1" placeholder="Place and date of employment" value={placeDateEmployment} onChange={(e)=> setPlaceDateEmployment(e.target.value.toUpperCase())} />
-                    </div>
-                    <div>
-                      <Label>Date of Blacklisting</Label>
-                      <Input type="date" className="mt-1" value={dateBlacklisting} onChange={(e)=> setDateBlacklisting(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Total Deployed OFWs</Label>
-                      <Input type="number" className="mt-1" placeholder="0" value={totalDeployedOfws} onChange={(e)=> setTotalDeployedOfws(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Reason of Blacklisting</Label>
-                      <Textarea className="mt-1" placeholder="Reason of blacklisting" value={reasonBlacklisting} onChange={(e)=> setReasonBlacklisting(e.target.value)} />
-                    </div>
-                  </div>
-                )}
-                {(selectedType === 'non_compliant_country' || selectedType === 'for_assessment_country') && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <Label>Position</Label>
-                      <Input className="mt-1" placeholder="Position" value={position} onChange={(e)=> setPosition(e.target.value.toUpperCase())} />
-                    </div>
-                    <div>
-                      <Label>No. of Month(s) / Year(s)</Label>
-                      <Input className="mt-1" placeholder="e.g., 6 months / 2 years" value={monthsYears} onChange={(e)=> setMonthsYears(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>With the Principal</Label>
-                      <Input className="mt-1" placeholder="With the principal" value={withPrincipal} onChange={(e)=> setWithPrincipal(e.target.value.toUpperCase())} />
-                    </div>
-                    <div>
-                      <Label>Date of Departure</Label>
-                      <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label>Remarks</Label>
-                      <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
-                    </div>
-                  </div>
-                )}
-                {(selectedType === 'no_verified_contract' || selectedType === 'seafarer_position' || selectedType === 'critical_skill' || selectedType === 'watchlisted_similar_name') && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <Label>Position</Label>
-                      <Input className="mt-1" placeholder="Position" value={position} onChange={(e)=> setPosition(e.target.value.toUpperCase())} />
-                    </div>
-                    <div>
-                      <Label>Date of Arrival</Label>
-                      <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Name of the New Principal</Label>
-                      <Input className="mt-1" placeholder="Name of the new principal" value={newPrincipalName} onChange={(e)=> setNewPrincipalName(e.target.value.toUpperCase())} />
-                    </div>
-                    <div>
-                      <Label>Date of Departure</Label>
-                      <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Employment Duration</Label>
-                      <Input className="mt-1" placeholder="Employment duration" value={employmentDuration} onChange={(e)=> setEmploymentDuration(e.target.value.toUpperCase())} />
-                    </div>
-                    <div className="md:col-span-1">
-                      <Label>Remarks</Label>
-                      <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
-                    </div>
-                  </div>
-                )}
+                {/* All type-specific fields are moved to Form 2 now */}
                 <div className="flex justify-end gap-2 mt-6">
                   <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm() }}>Cancel</Button>
                   <Button className="bg-[#1976D2] text-white px-8" onClick={() => {
-                    const errs = validateCreateForm();
+                    const errs = validateForm1();
                     if (errs.length) { toast({ title: 'Validation Error', description: errs[0], variant: 'destructive' }); return }
                     setActiveTab(secondTabKey)
                   }}>Next</Button>
                 </div>
               </TabsContent>
               <TabsContent value={secondTabKey}>
-                {isTwoForm ? (
+                {selectedType === 'watchlisted_employer' ? (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       <div>
                         <Label>Date of Arrival</Label>
                         <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
@@ -702,16 +901,101 @@ export default function BalikManggagawaClearancePage() {
                       </div>
                     </div>
                   </>
+                ) : selectedType === 'critical_skill' ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <Label>Date of Arrival</Label>
+                        <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Name of the New Principal</Label>
+                        <Input className="mt-1" placeholder="Name of the new principal" value={newPrincipalName} onChange={(e)=> setNewPrincipalName(e.target.value.toUpperCase())} />
+                      </div>
+                      <div>
+                        <Label>Date of Departure</Label>
+                        <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Employment Duration</Label>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Input type="date" className="w-auto" value={employmentDurationStart} onChange={(e)=> setEmploymentDurationStart(e.target.value)} />
+                          <span className="text-gray-600">to</span>
+                          <Input type="date" className="w-auto" value={employmentDurationEnd} onChange={(e)=> setEmploymentDurationEnd(e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="md:col-span-1">
+                        <Label>Remarks</Label>
+                        <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                      <div />
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setActiveTab('form1')}>Back</Button>
+                        <Button onClick={handleCreate} className="bg-[#1976D2] text-white px-8" disabled={loading}>{loading ? 'Creating...' : 'Create'}</Button>
+                      </div>
+                    </div>
+                  </>
+                ) : selectedType === 'for_assessment_country' ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <Label>Employment Start Date (based on the Employment Certificate)</Label>
+                        <Input type="date" className="mt-1" value={employmentStartDate} onChange={(e)=> setEmploymentStartDate(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Applicant Processed Date</Label>
+                        <Input type="date" className="mt-1" value={processingDate} onChange={(e)=> setProcessingDate(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Date of Arrival</Label>
+                        <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>No. of Month(s)/Year(s) with the Principal</Label>
+                        <Input className="mt-1" placeholder="e.g., 2 years 6 months" value={noOfMonthsYears} onChange={(e)=> setNoOfMonthsYears(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Date of Departure</Label>
+                        <Input type="date" className="mt-1" value={dateOfDeparture} onChange={(e)=> setDateOfDeparture(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Remarks</Label>
+                        <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                      <div />
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setActiveTab('form1')}>Back</Button>
+                        <Button onClick={handleCreate} className="bg-[#1976D2] text-white px-8" disabled={loading}>{loading ? 'Creating...' : 'Create'}</Button>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <>
-                    <div className="grid gap-2 py-2 text-sm">
-                      <div className="flex justify-between"><span className="text-gray-600">Type</span><span>{clearanceTypes.find(ct => ct.value === selectedType)?.label}</span></div>
-                      {controlPreview && (<div className="flex justify-between"><span className="text-gray-600">Control No. (Preview)</span><span className="font-mono">{controlPreview}</span></div>)}
-                      <div className="flex justify-between"><span className="text-gray-600">Name</span><span>{formName}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Sex</span><span className="capitalize">{formSex}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Employer</span><span>{formEmployer}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Destination</span><span>{formDestination}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Salary</span><span>{formSalary}</span></div>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <Label>Date of Arrival</Label>
+                        <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Name of the New Principal</Label>
+                        <Input className="mt-1" placeholder="Name of the new principal" value={newPrincipalName} onChange={(e)=> setNewPrincipalName(e.target.value.toUpperCase())} />
+                      </div>
+                      <div>
+                        <Label>Date of Departure</Label>
+                        <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Employment Duration</Label>
+                        <Input className="mt-1" placeholder="Employment duration" value={employmentDuration} onChange={(e)=> setEmploymentDuration(e.target.value.toUpperCase())} />
+                      </div>
+                      <div className="md:col-span-1">
+                        <Label>Remarks</Label>
+                        <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
+                      </div>
                     </div>
                     <div className="flex items-center justify-between mt-6">
                       <div />
@@ -772,46 +1056,325 @@ export default function BalikManggagawaClearancePage() {
                   <div className="font-medium">{new Date((selectedClearance as any).created_at).toLocaleString()}</div>
                 </div>
               </div>
+              {/* Type-specific / additional fields */}
+              {(selectedClearance.position || selectedClearance.months_years || selectedClearance.with_principal || selectedClearance.new_principal_name || selectedClearance.employment_duration || selectedClearance.date_arrival || selectedClearance.date_departure || selectedClearance.place_date_employment || selectedClearance.date_blacklisting || selectedClearance.total_deployed_ofws === 0 || selectedClearance.total_deployed_ofws || selectedClearance.reason_blacklisting || selectedClearance.years_with_principal === 0 || selectedClearance.years_with_principal || selectedClearance.remarks) && (
+              <div className="mt-6">
+                <div className="font-semibold text-gray-700 mb-2">Additional details</div>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  {selectedClearance.position && (
+                    <div>
+                      <div className="text-gray-500">Position:</div>
+                      <div className="font-medium">{selectedClearance.position}</div>
+                    </div>
+                  )}
+                  {selectedClearance.months_years && (
+                    <div>
+                      <div className="text-gray-500">Months/Years:</div>
+                      <div className="font-medium">{selectedClearance.months_years}</div>
+                    </div>
+                  )}
+                  {selectedClearance.with_principal && (
+                    <div>
+                      <div className="text-gray-500">With Principal:</div>
+                      <div className="font-medium">{selectedClearance.with_principal}</div>
+                    </div>
+                  )}
+                  {selectedClearance.new_principal_name && (
+                    <div>
+                      <div className="text-gray-500">New Principal Name:</div>
+                      <div className="font-medium">{selectedClearance.new_principal_name}</div>
+                    </div>
+                  )}
+                  {selectedClearance.employment_duration && (
+                    <div>
+                      <div className="text-gray-500">Employment Duration:</div>
+                      <div className="font-medium">{selectedClearance.employment_duration}</div>
+                    </div>
+                  )}
+                  {selectedClearance.date_arrival && (
+                    <div>
+                      <div className="text-gray-500">Date of Arrival:</div>
+                      <div className="font-medium">{new Date(selectedClearance.date_arrival).toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                    </div>
+                  )}
+                  {selectedClearance.date_departure && (
+                    <div>
+                      <div className="text-gray-500">Date of Departure:</div>
+                      <div className="font-medium">{new Date(selectedClearance.date_departure).toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                    </div>
+                  )}
+                  {selectedClearance.place_date_employment && (
+                    <div>
+                      <div className="text-gray-500">Place and Date of Employment:</div>
+                      <div className="font-medium">{selectedClearance.place_date_employment}</div>
+                    </div>
+                  )}
+                  {selectedClearance.date_blacklisting && (
+                    <div>
+                      <div className="text-gray-500">Date of Blacklisting:</div>
+                      <div className="font-medium">{new Date(selectedClearance.date_blacklisting).toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                    </div>
+                  )}
+                  {(selectedClearance.total_deployed_ofws || selectedClearance.total_deployed_ofws === 0) && (
+                    <div>
+                      <div className="text-gray-500">Total Deployed OFWs:</div>
+                      <div className="font-medium">{selectedClearance.total_deployed_ofws}</div>
+                    </div>
+                  )}
+                  {selectedClearance.reason_blacklisting && (
+                    <div>
+                      <div className="text-gray-500">Reason of Blacklisting:</div>
+                      <div className="font-medium">{selectedClearance.reason_blacklisting}</div>
+                    </div>
+                  )}
+                  {(selectedClearance.years_with_principal || selectedClearance.years_with_principal === 0) && (
+                    <div>
+                      <div className="text-gray-500">Years with Principal:</div>
+                      <div className="font-medium">{selectedClearance.years_with_principal}</div>
+                    </div>
+                  )}
+                  {selectedClearance.remarks && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500">Remarks:</div>
+                      <div className="font-medium">{selectedClearance.remarks}</div>
+                    </div>
+                  )}
+                  {selectedClearance.completed_at && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500">Documents Completed:</div>
+                      <div className="font-medium text-green-600">
+                        {new Date(selectedClearance.completed_at).toLocaleDateString('en-US', { 
+                          day: '2-digit', 
+                          month: 'long', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
               <hr className="my-4" />
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
-                <div className="flex gap-2 mb-3">
-                  <Button
-                    className="bg-[#1976D2] text-white text-xs"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/balik-manggagawa/clearance/${selectedClearance.id}/generate`, { method: 'POST' })
-                        const result = await res.json()
-                        if (result.success) {
-                          setDocumentsRefreshTrigger(prev => prev + 1)
-                          toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
-                        } else {
-                          throw new Error(result.error || 'Generation failed')
+                
+                {/* Generate and New buttons - Always show for For Assessment Country */}
+                {selectedClearance?.clearance_type === 'for_assessment_country' && (
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      className="bg-[#1976D2] text-white text-xs"
+                      onClick={async () => {
+                        try {
+                          console.log('Generating document for clearance ID:', selectedClearance.id)
+                          const res = await fetch(`/api/balik-manggagawa/clearance/${selectedClearance.id}/generate`, { method: 'POST' })
+                          console.log('Response status:', res.status)
+                          const result = await res.json()
+                          console.log('Response result:', result)
+                          if (result.success) {
+                            setDocumentsRefreshTrigger(prev => prev + 1)
+                            toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
+                          } else {
+                            throw new Error(result.error || 'Generation failed')
+                          }
+                        } catch (err) {
+                          console.error('Generation error:', err)
+                          toast({ title: 'Generation error', description: err instanceof Error ? err.message : 'Failed to generate the document.', variant: 'destructive' })
                         }
-                      } catch (err) {
-                        toast({ title: 'Generation error', description: 'Failed to generate the document.', variant: 'destructive' })
-                      }
-                    }}
-                  >
-                    Generate
-                  </Button>
-                  <Button 
-                    className="bg-[#1976D2] text-white text-xs"
-                    onClick={() => setUploadModalOpen(true)}
-                  >
-                    + New
-                  </Button>
-                </div>
-                {selectedClearance && (
-                  <ApplicantDocumentsListBM 
-                    applicationId={selectedClearance.id}
-                    refreshTrigger={documentsRefreshTrigger}
-                    onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
-                    onViewPDF={(documentId, documentName) => {
-                      setSelectedDocument({ id: documentId, name: documentName })
-                      setPdfViewerOpen(true)
-                    }}
-                  />
+                      }}
+                    >
+                      Generate
+                    </Button>
+                    <Button 
+                      className="bg-[#1976D2] text-white text-xs"
+                      onClick={() => setUploadModalOpen(true)}
+                    >
+                      + New
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Processing Documents Section - Show if applicant came from processing */}
+                {selectedClearance?.documents_completed && (
+                  <div className="mb-6">
+                    <div className="text-sm font-medium text-green-700 mb-3 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Processing Documents (Completed)
+                    </div>
+                    <div className="space-y-2">
+                      {selectedClearance.personal_letter_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Personal Letter</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.personal_letter_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.valid_passport_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Valid Passport</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.valid_passport_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.work_visa_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Work Visa</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.work_visa_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.employment_contract_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Employment Contract</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.employment_contract_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.employment_certificate_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Employment Certificate</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.employment_certificate_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.last_arrival_email_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Last Arrival Email</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.last_arrival_email_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                      {selectedClearance.flight_ticket_file && (
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Flight Ticket</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/api/documents/download/${selectedClearance.flight_ticket_file}`, '_blank')}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 text-xs text-gray-500">
+                      Completed on: {selectedClearance.completed_at ? new Date(selectedClearance.completed_at).toLocaleDateString() : 'N/A'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Show regular documents section for For Assessment Country (additional documents) */}
+                {selectedClearance?.clearance_type === 'for_assessment_country' && (
+                  <div className="mt-4">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Additional Documents</div>
+                    {selectedClearance && (
+                      <ApplicantDocumentsListBM 
+                        applicationId={selectedClearance.id}
+                        refreshTrigger={documentsRefreshTrigger}
+                        onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
+                        onViewPDF={(documentId, documentName) => {
+                          setSelectedDocument({ id: documentId, name: documentName })
+                          setPdfViewerOpen(true)
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Show regular documents section for non-For Assessment Country types */}
+                {selectedClearance?.clearance_type !== 'for_assessment_country' && (
+                  <>
+                    <div className="flex gap-2 mb-3">
+                      <Button
+                        className="bg-[#1976D2] text-white text-xs"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/balik-manggagawa/clearance/${selectedClearance.id}/generate`, { method: 'POST' })
+                            const result = await res.json()
+                            if (result.success) {
+                              setDocumentsRefreshTrigger(prev => prev + 1)
+                              toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
+                            } else {
+                              throw new Error(result.error || 'Generation failed')
+                            }
+                          } catch (err) {
+                            toast({ title: 'Generation error', description: 'Failed to generate the document.', variant: 'destructive' })
+                          }
+                        }}
+                      >
+                        Generate
+                      </Button>
+                      <Button 
+                        className="bg-[#1976D2] text-white text-xs"
+                        onClick={() => setUploadModalOpen(true)}
+                      >
+                        + New
+                      </Button>
+                    </div>
+                    {selectedClearance && (
+                      <ApplicantDocumentsListBM 
+                        applicationId={selectedClearance.id}
+                        refreshTrigger={documentsRefreshTrigger}
+                        onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
+                        onViewPDF={(documentId, documentName) => {
+                          setSelectedDocument({ id: documentId, name: documentName })
+                          setPdfViewerOpen(true)
+                        }}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -831,7 +1394,10 @@ export default function BalikManggagawaClearancePage() {
                 setDocumentsRefreshTrigger(prev => prev + 1)
                 toast({ title: 'Document uploaded', description: 'Document has been uploaded successfully' })
               }}
-              onError={(error) => toast({ title: 'Upload Error', description: error, variant: 'destructive' })}
+              onError={(error) => {
+                console.error('Upload error:', error)
+                toast({ title: 'Upload Error', description: error, variant: 'destructive' })
+              }}
               onCancel={() => setUploadModalOpen(false)}
             />
           )}
@@ -847,6 +1413,51 @@ export default function BalikManggagawaClearancePage() {
           documentName={selectedDocument.name}
         />
       )}
+
+      {/* Password Confirmation Dialog */}
+      <Dialog open={confirmPasswordOpen} onOpenChange={(open) => {
+        setConfirmPasswordOpen(open)
+        if (!open) setConfirmPassword("")
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Confirm Access</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">Enter your password to view deleted clearances.</p>
+            <input
+              type="password"
+              className="w-full border rounded px-3 py-2"
+              placeholder="Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleConfirmPassword()
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setConfirmPasswordOpen(false); setConfirmPassword("") }}>Cancel</Button>
+              <Button
+                className="bg-[#1976D2] text-white"
+                onClick={handleConfirmPassword}
+                disabled={confirmingPassword || !confirmPassword}
+              >
+                {confirmingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Confirm'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 
@@ -874,19 +1485,41 @@ function ApplicantDocumentsListBM({ applicationId, refreshTrigger, onRefresh, on
     if (applicationId) fetchDocuments()
   }, [applicationId, refreshTrigger])
 
-  const handleView = async (document: Document) => {
-    const isClearance = document.document_type.toLowerCase().includes('clearance')
-    const isPDF = document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')
-    if (isClearance && isPDF && onViewPDF) return onViewPDF(document.id, document.document_type)
+  const getExtension = (fileName: string, mime: string) => {
+    const lower = (fileName || '').toLowerCase()
+    const idx = lower.lastIndexOf('.')
+    let ext = idx > -1 ? lower.slice(idx + 1) : ''
+    if (!ext) {
+      if ((mime || '').includes('pdf')) ext = 'pdf'
+      else if ((mime || '').includes('png')) ext = 'png'
+      else if ((mime || '').includes('jpeg') || (mime || '').includes('jpg')) ext = 'jpg'
+      else if ((mime || '').includes('wordprocessingml')) ext = 'docx'
+      else if ((mime || '').includes('msword')) ext = 'doc'
+    }
+    return ext
+  }
+
+  const formatDisplayName = (doc: Document) => {
+    const ext = getExtension(doc.file_name, doc.mime_type)
+    return ext ? `${doc.document_type}.${ext}` : doc.document_type
+  }
+
+  const handleDownload = async (doc: Document) => {
     try {
-      const res = await fetch(`/api/documents/${document.id}/download`)
-      if (!res.ok) throw new Error('View failed')
+      const res = await fetch(`/api/documents/${doc.id}/download`)
+      if (!res.ok) throw new Error('Download failed')
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
-      window.open(url, '_blank')
+      const filename = doc.file_name || formatDisplayName(doc)
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = filename
+      window.document.body.appendChild(link)
+      link.click()
+      window.document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch {
-      toast({ title: 'View Error', description: 'Failed to view document', variant: 'destructive' })
+      toast({ title: 'Download Error', description: 'Failed to download document', variant: 'destructive' })
     }
   }
 
@@ -925,34 +1558,43 @@ function ApplicantDocumentsListBM({ applicationId, refreshTrigger, onRefresh, on
   if (documents.length === 0) return <div className="text-center py-4 text-gray-500 text-sm">No documents uploaded yet</div>
 
   return (
-    <ul className="space-y-2">
+    <div className="space-y-2">
       {documents.map((document) => (
-        <li key={document.id} className="flex items-center gap-2">
-          <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-          {editingDocument === document.id ? (
-            <div className="flex-1 flex items-center gap-2">
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 text-sm border rounded px-2 py-1" />
-              <Button size="sm" onClick={() => handleUpdateName(document)} className="h-6 px-2 text-xs">Save</Button>
-              <Button size="sm" variant="outline" onClick={() => { setEditingDocument(null); setEditName('') }} className="h-6 px-2 text-xs">Cancel</Button>
-            </div>
-          ) : (
-            <span className="flex-1 text-sm">{document.document_type}</span>
-          )}
-          <span className="ml-auto">
+        <div key={document.id} className="relative flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
+          <div className="flex items-center space-x-3">
+            <FileText className="h-4 w-4 text-green-600" />
+            {editingDocument === document.id ? (
+              <div className="flex items-center gap-2">
+                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="text-sm border rounded px-2 py-1" />
+                <Button size="sm" onClick={() => handleUpdateName(document)} className="h-6 px-2 text-xs">Save</Button>
+                <Button size="sm" variant="outline" onClick={() => { setEditingDocument(null); setEditName('') }} className="h-6 px-2 text-xs">Cancel</Button>
+              </div>
+            ) : (
+              <span className="text-sm font-medium">{formatDisplayName(document)}</span>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleView(document)}><Eye className="h-4 w-4 mr-2" />View</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload(document)}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {(() => {
+                    const ext = getExtension(document.file_name, document.mime_type)
+                    const label = ext ? ext.toUpperCase() : 'FILE'
+                    return `Download ${label}`
+                  })()}
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => { setEditingDocument(document.id); setEditName(document.document_type) }}><Edit className="h-4 w-4 mr-2" />Edit Name</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDelete(document)}><Download className="h-4 w-4 mr-2 rotate-180" />Delete</DropdownMenuItem>
+                <DropdownMenuItem className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(document)}><Trash2 className="h-4 w-4 mr-2" />Delete</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </span>
-        </li>
+          </div>
+        </div>
       ))}
-    </ul>
+    </div>
   )
 }
 
@@ -993,4 +1635,4 @@ function DocumentUploadFormBM({ applicationId, onSuccess, onError, onCancel }: {
       </div>
     </div>
   )
-}
+} 

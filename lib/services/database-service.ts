@@ -278,6 +278,23 @@ export class DatabaseService {
     destination: string;
     salary: number;
     clearanceType: string;
+    position?: string | null;
+    monthsYears?: string | null;
+    withPrincipal?: string | null;
+    newPrincipalName?: string | null;
+    employmentDuration?: string | null;
+    dateArrival?: string | null;
+    dateDeparture?: string | null;
+    placeDateEmployment?: string | null;
+    dateBlacklisting?: string | null;
+    totalDeployedOfws?: number | null;
+    reasonBlacklisting?: string | null;
+    yearsWithPrincipal?: number | null;
+    employmentStartDate?: string | null;
+    processingDate?: string | null;
+    remarks?: string | null;
+    noOfMonthsYears?: string | null;
+    dateOfDeparture?: string | null;
   }): Promise<BalikManggagawaClearance> {
     // Generate control number based on clearance type with monthly and yearly sequences
     const now = new Date();
@@ -344,8 +361,26 @@ export class DatabaseService {
     const controlNumber = `${prefix}${delimiter}${year}-${month}${day}-${monthlyCount}-${yearlyCount}`;
     
     const { rows } = await db.query(
-      'INSERT INTO balik_manggagawa_clearance (control_number, name_of_worker, sex, employer, destination, salary, clearance_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType]
+      `INSERT INTO balik_manggagawa_clearance (
+        control_number, name_of_worker, sex, employer, destination, salary, clearance_type,
+        position, months_years, with_principal, new_principal_name, employment_duration,
+        date_arrival, date_departure, place_date_employment, date_blacklisting,
+        total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
+        no_of_months_years, date_of_departure
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,
+        $8,$9,$10,$11,$12,
+        $13,$14,$15,$16,
+        $17,$18,$19,$20,$21,$22,
+        $23,$24
+      ) RETURNING *`,
+      [
+        controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType,
+        clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
+        clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
+        clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
+        clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null
+      ]
     );
     return rows[0];
   }
@@ -360,42 +395,63 @@ export class DatabaseService {
     dateTo?: string;
     jobsite?: string;
     position?: string;
+    include_deleted?: boolean;
+    show_deleted_only?: boolean;
   }): Promise<PaginatedResponse<BalikManggagawaClearance>> {
-    let query = 'SELECT * FROM balik_manggagawa_clearance WHERE 1=1';
+    let query = `
+      SELECT c.*, p.personal_letter_file, p.valid_passport_file, p.work_visa_file,
+             p.employment_contract_file, p.employment_certificate_file, p.last_arrival_email_file,
+             p.flight_ticket_file, p.documents_completed, p.completed_at
+      FROM balik_manggagawa_clearance c
+      LEFT JOIN balik_manggagawa_processing p ON c.id = p.clearance_id
+      WHERE 1=1
+    `;
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Handle deleted records logic
+    if (filters.show_deleted_only) {
+      // Show only deleted records
+      query += ' AND c.deleted_at IS NOT NULL';
+    } else if (!filters.include_deleted) {
+      // Exclude deleted by default
+      query += ' AND c.deleted_at IS NULL';
+    }
+
     if (filters.search) {
-      query += ` AND (name_of_worker ILIKE $${paramIndex} OR control_number ILIKE $${paramIndex} OR employer ILIKE $${paramIndex} OR destination ILIKE $${paramIndex})`;
+      query += ` AND (c.name_of_worker ILIKE $${paramIndex} OR c.control_number ILIKE $${paramIndex} OR c.employer ILIKE $${paramIndex} OR c.destination ILIKE $${paramIndex})`;
       params.push(`%${filters.search}%`);
       paramIndex++;
     }
 
     if (filters.clearanceType) {
-      query += ` AND clearance_type = $${paramIndex}`;
+      query += ` AND c.clearance_type = $${paramIndex}`;
       params.push(filters.clearanceType);
       paramIndex++;
     }
 
     if (filters.sex) {
-      query += ` AND sex = $${paramIndex}`;
+      query += ` AND c.sex = $${paramIndex}`;
       params.push(filters.sex);
       paramIndex++;
     }
 
     if (filters.dateFrom && filters.dateTo) {
-      query += ` AND created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
+      query += ` AND c.created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
       params.push(filters.dateFrom, filters.dateTo);
       paramIndex += 2;
     }
 
+    // Only show clearances that are completed (have documents_completed = true) or don't have processing records
+    query += ` AND (p.documents_completed = true OR p.documents_completed IS NULL)`;
+
     // Get total count
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');
+    const countQuery = query.replace(/SELECT.*FROM/, 'SELECT COUNT(*) FROM');
     const { rows: countRows } = await db.query(countQuery, params);
     const total = parseInt(countRows[0].count);
 
     // Add pagination and ordering
-    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY c.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(filters.limit, (filters.page - 1) * filters.limit);
 
     const { rows } = await db.query(query, params);
@@ -412,7 +468,14 @@ export class DatabaseService {
   }
 
   static async getBalikManggagawaClearanceById(id: string): Promise<BalikManggagawaClearance | null> {
-    const { rows } = await db.query('SELECT * FROM balik_manggagawa_clearance WHERE id = $1', [id]);
+    const { rows } = await db.query(`
+      SELECT c.*, p.personal_letter_file, p.valid_passport_file, p.work_visa_file,
+             p.employment_contract_file, p.employment_certificate_file, p.last_arrival_email_file,
+             p.flight_ticket_file, p.documents_completed, p.completed_at
+      FROM balik_manggagawa_clearance c
+      LEFT JOIN balik_manggagawa_processing p ON c.id = p.clearance_id
+      WHERE c.id = $1 AND c.deleted_at IS NULL
+    `, [id]);
     return rows[0] || null;
   }
 
@@ -423,16 +486,45 @@ export class DatabaseService {
     destination: string;
     salary: number;
     clearanceType: string;
+    position?: string | null;
+    monthsYears?: string | null;
+    withPrincipal?: string | null;
+    newPrincipalName?: string | null;
+    employmentDuration?: string | null;
+    dateArrival?: string | null;
+    dateDeparture?: string | null;
+    placeDateEmployment?: string | null;
+    dateBlacklisting?: string | null;
+    totalDeployedOfws?: number | null;
+    reasonBlacklisting?: string | null;
+    yearsWithPrincipal?: number | null;
+    remarks?: string | null;
   }): Promise<BalikManggagawaClearance | null> {
     const { rows } = await db.query(
-      'UPDATE balik_manggagawa_clearance SET name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, clearance_type = $6 WHERE id = $7 RETURNING *',
-      [clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType, id]
+      `UPDATE balik_manggagawa_clearance SET
+        name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, clearance_type = $6,
+        position = $7, months_years = $8, with_principal = $9, new_principal_name = $10, employment_duration = $11,
+        date_arrival = $12, date_departure = $13, place_date_employment = $14, date_blacklisting = $15,
+        total_deployed_ofws = $16, reason_blacklisting = $17, years_with_principal = $18, remarks = $19
+       WHERE id = $20 RETURNING *`,
+      [
+        clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType,
+        clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
+        clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
+        clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.remarks ?? null,
+        id
+      ]
     );
     return rows[0] || null;
   }
 
   static async deleteBalikManggagawaClearance(id: string): Promise<boolean> {
-    const { rowCount } = await db.query('DELETE FROM balik_manggagawa_clearance WHERE id = $1', [id]);
+    const { rowCount } = await db.query('UPDATE balik_manggagawa_clearance SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
+    return (rowCount || 0) > 0;
+  }
+
+  static async restoreBalikManggagawaClearance(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('UPDATE balik_manggagawa_clearance SET deleted_at = NULL WHERE id = $1', [id]);
     return (rowCount || 0) > 0;
   }
 
@@ -495,6 +587,8 @@ export class DatabaseService {
     sex: 'male' | 'female';
     address: string;
     destination: string;
+    clearanceType?: string;
+    clearanceId?: string;
   }): Promise<BalikManggagawaProcessing> {
     // Generate OR number OR-YYYY-#### (daily incremental not required here)
     const now = new Date();
@@ -504,26 +598,61 @@ export class DatabaseService {
     const orNumber = `OR-${year}-${seq}`;
 
     const { rows } = await db.query(
-      'INSERT INTO balik_manggagawa_processing (or_number, name_of_worker, sex, address, destination) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [orNumber, processingData.nameOfWorker, processingData.sex, processingData.address, processingData.destination]
+      'INSERT INTO balik_manggagawa_processing (or_number, name_of_worker, sex, address, destination, clearance_type, clearance_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [orNumber, processingData.nameOfWorker, processingData.sex, processingData.address, processingData.destination, processingData.clearanceType || null, processingData.clearanceId || null]
     );
     return rows[0];
   }
 
   static async getBalikManggagawaProcessingById(id: string): Promise<BalikManggagawaProcessing | null> {
-    const { rows } = await db.query('SELECT * FROM balik_manggagawa_processing WHERE id = $1', [id]);
+    const { rows } = await db.query(`
+      SELECT p.*, c.control_number as clearance_control_number, c.employer, c.salary, 
+             c.position, c.date_arrival, c.remarks
+      FROM balik_manggagawa_processing p
+      LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
+      WHERE p.id = $1
+    `, [id]);
     return rows[0] || null;
   }
 
   static async updateBalikManggagawaProcessing(id: string, data: {
-    nameOfWorker: string;
-    sex: 'male' | 'female';
-    address: string;
-    destination: string;
+    nameOfWorker?: string;
+    sex?: 'male' | 'female';
+    address?: string;
+    destination?: string;
+    personalLetterFile?: string;
+    validPassportFile?: string;
+    workVisaFile?: string;
+    employmentContractFile?: string;
+    employmentCertificateFile?: string;
+    lastArrivalEmailFile?: string;
+    flightTicketFile?: string;
+    documentsCompleted?: boolean;
   }): Promise<BalikManggagawaProcessing | null> {
     const { rows } = await db.query(
-      'UPDATE balik_manggagawa_processing SET name_of_worker = $1, sex = $2, address = $3, destination = $4 WHERE id = $5 RETURNING *',
-      [data.nameOfWorker, data.sex, data.address, data.destination, id]
+      `UPDATE balik_manggagawa_processing SET 
+        name_of_worker = COALESCE($1, name_of_worker), 
+        sex = COALESCE($2, sex), 
+        address = COALESCE($3, address), 
+        destination = COALESCE($4, destination),
+        personal_letter_file = COALESCE($5, personal_letter_file),
+        valid_passport_file = COALESCE($6, valid_passport_file),
+        work_visa_file = COALESCE($7, work_visa_file),
+        employment_contract_file = COALESCE($8, employment_contract_file),
+        employment_certificate_file = COALESCE($9, employment_certificate_file),
+        last_arrival_email_file = COALESCE($10, last_arrival_email_file),
+        flight_ticket_file = COALESCE($11, flight_ticket_file),
+        documents_completed = COALESCE($12, documents_completed),
+        completed_at = CASE WHEN $12 = true THEN NOW() ELSE completed_at END,
+        updated_at = NOW() 
+       WHERE id = $13 RETURNING *`,
+      [
+        data.nameOfWorker, data.sex, data.address, data.destination,
+        data.personalLetterFile, data.validPassportFile, data.workVisaFile,
+        data.employmentContractFile, data.employmentCertificateFile,
+        data.lastArrivalEmailFile, data.flightTicketFile, data.documentsCompleted,
+        id
+      ]
     );
     return rows[0] || null;
   }
@@ -534,12 +663,34 @@ export class DatabaseService {
   }
 
   static async getProcessingRecords(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<BalikManggagawaProcessing>> {
-    const { rows } = await db.query(
-      'SELECT * FROM balik_manggagawa_processing ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-      [pagination.limit, (pagination.page - 1) * pagination.limit]
-    );
+    const { rows } = await db.query(`
+      SELECT p.*, c.control_number as clearance_control_number,
+             CASE 
+               WHEN p.personal_letter_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.valid_passport_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.work_visa_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.employment_contract_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.employment_certificate_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.last_arrival_email_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE 
+               WHEN p.flight_ticket_file IS NOT NULL THEN 1 ELSE 0 END as documents_submitted
+      FROM balik_manggagawa_processing p
+      LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
+      WHERE (p.documents_completed = false OR p.documents_completed IS NULL)
+        AND p.clearance_type = 'for_assessment_country'
+      ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
+    `, [pagination.limit, (pagination.page - 1) * pagination.limit]);
 
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM balik_manggagawa_processing');
+    const { rows: countRows } = await db.query(`
+      SELECT COUNT(*) FROM balik_manggagawa_processing 
+      WHERE (documents_completed = false OR documents_completed IS NULL)
+        AND clearance_type = 'for_assessment_country'
+    `);
     const total = parseInt(countRows[0].count);
 
     return {
@@ -551,6 +702,29 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async moveProcessingToClearance(processingId: string): Promise<boolean> {
+    try {
+      // Get the processing record
+      const processingRecord = await this.getBalikManggagawaProcessingById(processingId);
+      if (!processingRecord || !processingRecord.documents_completed) {
+        return false;
+      }
+
+      // Update the clearance record to mark it as completed
+      if (processingRecord.clearance_id) {
+        await db.query(
+          'UPDATE balik_manggagawa_clearance SET status = $1, updated_at = NOW() WHERE id = $2',
+          ['completed', processingRecord.clearance_id]
+        );
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error moving processing to clearance:', error);
+      return false;
+    }
   }
 
   // Gov to Gov Applications

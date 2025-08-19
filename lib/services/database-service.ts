@@ -271,12 +271,169 @@ export class DatabaseService {
   }
 
   // Balik Manggagawa Clearance
-  static async createClearance(clearanceData: Omit<BalikManggagawaClearance, 'id' | 'created_at' | 'updated_at'>): Promise<BalikManggagawaClearance> {
+  static async createBalikManggagawaClearance(clearanceData: {
+    nameOfWorker: string;
+    sex: 'male' | 'female';
+    employer: string;
+    destination: string;
+    salary: number;
+    clearanceType: string;
+  }): Promise<BalikManggagawaClearance> {
+    // Generate control number based on clearance type with monthly and yearly sequences
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    // counts per type within current month and within current year
+    const { rows: monthlyRows } = await db.query(
+      `SELECT COUNT(*)
+       FROM balik_manggagawa_clearance
+       WHERE clearance_type = $1
+         AND EXTRACT(YEAR FROM created_at) = $2
+         AND EXTRACT(MONTH FROM created_at) = $3`,
+      [clearanceData.clearanceType, year, parseInt(month)]
+    );
+    const { rows: yearlyRows } = await db.query(
+      `SELECT COUNT(*)
+       FROM balik_manggagawa_clearance
+       WHERE clearance_type = $1
+         AND EXTRACT(YEAR FROM created_at) = $2`,
+      [clearanceData.clearanceType, year]
+    );
+    const monthlyCount = String(parseInt(monthlyRows[0].count) + 1).padStart(3, '0');
+    const yearlyCount = String(parseInt(yearlyRows[0].count) + 1).padStart(3, '0');
+
+    // Prefix and delimiter mapping per type (matches provided examples)
+    let prefix = '';
+    let delimiter = ' ';
+    switch (clearanceData.clearanceType) {
+      case 'watchlisted_employer':
+        prefix = 'WE';
+        delimiter = ' ';
+        break;
+      case 'seafarer_position':
+        prefix = 'SP';
+        delimiter = '-';
+        break;
+      case 'non_compliant_country':
+        prefix = 'NCC';
+        delimiter = ' ';
+        break;
+      case 'no_verified_contract':
+        prefix = 'NVEC';
+        delimiter = '-';
+        break;
+      case 'for_assessment_country':
+        prefix = 'FAC';
+        delimiter = ' ';
+        break;
+      case 'critical_skill':
+        prefix = 'CS';
+        delimiter = '-';
+        break;
+      case 'watchlisted_similar_name':
+        prefix = 'WSN';
+        delimiter = '-';
+        break;
+      default:
+        prefix = 'BM';
+        delimiter = '-';
+    }
+
+    const controlNumber = `${prefix}${delimiter}${year}-${month}${day}-${monthlyCount}-${yearlyCount}`;
+    
     const { rows } = await db.query(
       'INSERT INTO balik_manggagawa_clearance (control_number, name_of_worker, sex, employer, destination, salary, clearance_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [clearanceData.control_number, clearanceData.name_of_worker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearance_type]
+      [controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType]
     );
     return rows[0];
+  }
+
+  static async getBalikManggagawaClearances(filters: {
+    page: number;
+    limit: number;
+    search?: string;
+    clearanceType?: string;
+    sex?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    jobsite?: string;
+    position?: string;
+  }): Promise<PaginatedResponse<BalikManggagawaClearance>> {
+    let query = 'SELECT * FROM balik_manggagawa_clearance WHERE 1=1';
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters.search) {
+      query += ` AND (name_of_worker ILIKE $${paramIndex} OR control_number ILIKE $${paramIndex} OR employer ILIKE $${paramIndex} OR destination ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    if (filters.clearanceType) {
+      query += ` AND clearance_type = $${paramIndex}`;
+      params.push(filters.clearanceType);
+      paramIndex++;
+    }
+
+    if (filters.sex) {
+      query += ` AND sex = $${paramIndex}`;
+      params.push(filters.sex);
+      paramIndex++;
+    }
+
+    if (filters.dateFrom && filters.dateTo) {
+      query += ` AND created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
+      params.push(filters.dateFrom, filters.dateTo);
+      paramIndex += 2;
+    }
+
+    // Get total count
+    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');
+    const { rows: countRows } = await db.query(countQuery, params);
+    const total = parseInt(countRows[0].count);
+
+    // Add pagination and ordering
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(filters.limit, (filters.page - 1) * filters.limit);
+
+    const { rows } = await db.query(query, params);
+
+    return {
+      data: rows,
+      pagination: {
+        page: filters.page,
+        limit: filters.limit,
+        total,
+        totalPages: Math.ceil(total / filters.limit)
+      }
+    };
+  }
+
+  static async getBalikManggagawaClearanceById(id: string): Promise<BalikManggagawaClearance | null> {
+    const { rows } = await db.query('SELECT * FROM balik_manggagawa_clearance WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  static async updateBalikManggagawaClearance(id: string, clearanceData: {
+    nameOfWorker: string;
+    sex: 'male' | 'female';
+    employer: string;
+    destination: string;
+    salary: number;
+    clearanceType: string;
+  }): Promise<BalikManggagawaClearance | null> {
+    const { rows } = await db.query(
+      'UPDATE balik_manggagawa_clearance SET name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, clearance_type = $6 WHERE id = $7 RETURNING *',
+      [clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType, id]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteBalikManggagawaClearance(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('DELETE FROM balik_manggagawa_clearance WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
   }
 
   static async getClearances(filters: FilterOptions = {}, pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<BalikManggagawaClearance>> {
@@ -331,6 +488,49 @@ export class DatabaseService {
       [processingData.or_number, processingData.name_of_worker, processingData.sex, processingData.address, processingData.destination]
     );
     return rows[0];
+  }
+
+  static async createBalikManggagawaProcessing(processingData: {
+    nameOfWorker: string;
+    sex: 'male' | 'female';
+    address: string;
+    destination: string;
+  }): Promise<BalikManggagawaProcessing> {
+    // Generate OR number OR-YYYY-#### (daily incremental not required here)
+    const now = new Date();
+    const year = now.getFullYear();
+    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM balik_manggagawa_processing WHERE EXTRACT(YEAR FROM created_at) = $1', [year]);
+    const seq = String(parseInt(countRows[0].count) + 1).padStart(4, '0');
+    const orNumber = `OR-${year}-${seq}`;
+
+    const { rows } = await db.query(
+      'INSERT INTO balik_manggagawa_processing (or_number, name_of_worker, sex, address, destination) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [orNumber, processingData.nameOfWorker, processingData.sex, processingData.address, processingData.destination]
+    );
+    return rows[0];
+  }
+
+  static async getBalikManggagawaProcessingById(id: string): Promise<BalikManggagawaProcessing | null> {
+    const { rows } = await db.query('SELECT * FROM balik_manggagawa_processing WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  static async updateBalikManggagawaProcessing(id: string, data: {
+    nameOfWorker: string;
+    sex: 'male' | 'female';
+    address: string;
+    destination: string;
+  }): Promise<BalikManggagawaProcessing | null> {
+    const { rows } = await db.query(
+      'UPDATE balik_manggagawa_processing SET name_of_worker = $1, sex = $2, address = $3, destination = $4 WHERE id = $5 RETURNING *',
+      [data.nameOfWorker, data.sex, data.address, data.destination, id]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteBalikManggagawaProcessing(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('DELETE FROM balik_manggagawa_processing WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
   }
 
   static async getProcessingRecords(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<BalikManggagawaProcessing>> {

@@ -4,8 +4,14 @@ import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Filter, Plus, Download, Search, MoreHorizontal } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useBalikManggagawaProcessing } from "@/hooks/use-balik-manggagawa-processing"
+import { toast } from "@/hooks/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const processingRows = [
   {
@@ -63,6 +69,26 @@ export default function BalikManggagawaProcessingPage() {
   const [showFilter, setShowFilter] = useState(false)
   const [search, setSearch] = useState("")
   const [rows, setRows] = useState(processingRows)
+  const { records, loading, error, pagination, fetchRecords, createRecord, deleteRecord } = useBalikManggagawaProcessing()
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [formName, setFormName] = useState("")
+  const [formSex, setFormSex] = useState<'male' | 'female' | ''>("")
+  const [formAddress, setFormAddress] = useState("")
+  const [formDestination, setFormDestination] = useState("")
+  const [orPreview, setOrPreview] = useState("")
+  const [activeTab, setActiveTab] = useState("form1")
+  const [validationErrors, setValidationErrors] = useState<{[k:string]: string}>({})
+
+  const resetForm = () => { setFormName(""); setFormSex(""); setFormAddress(""); setFormDestination("") }
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      fetch('/api/balik-manggagawa/processing/preview').then(r=>r.json()).then(res=>{
+        if (res?.success) setOrPreview(res.data.preview)
+        else setOrPreview('')
+      }).catch(()=> setOrPreview(''))
+    }
+  }, [isCreateOpen])
 
   const filteredRows = rows.filter(row =>
     Object.values(row).some(value =>
@@ -107,7 +133,7 @@ export default function BalikManggagawaProcessingPage() {
                 <DropdownMenuItem>Export as Excel</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2">
+            <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={() => setIsCreateOpen(true)}>
               Create <Plus className="h-4 w-4" />
             </Button>
             {/* Filter Panel */}
@@ -146,11 +172,15 @@ export default function BalikManggagawaProcessingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredRows.map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 text-center">{row.orNo}</td>
-                  <td className="py-3 px-4 text-center">{row.name}</td>
-                  <td className="py-3 px-4 text-center">{row.sex}</td>
+              {loading ? (
+                <tr><td colSpan={6} className="py-8 text-center text-gray-500">Loading...</td></tr>
+              ) : error ? (
+                <tr><td colSpan={6} className="py-8 text-center text-red-500">{error}</td></tr>
+              ) : (records.length ? records : []).map((row: any, i: number) => (
+                <tr key={row.id ?? i} className="hover:bg-gray-50">
+                  <td className="py-3 px-4 text-center">{row.or_number}</td>
+                  <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
+                  <td className="py-3 px-4 text-center capitalize">{row.sex}</td>
                   <td className="py-3 px-4 text-center">{row.address}</td>
                   <td className="py-3 px-4 text-center">{row.destination}</td>
                   <td className="py-3 px-4 text-center">
@@ -174,6 +204,100 @@ export default function BalikManggagawaProcessingPage() {
           </table>
         </div>
       </main>
+
+      {/* Create Processing Modal */}
+      <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if (!o) { resetForm(); setValidationErrors({}) } }}>
+        <DialogContent className="p-0 overflow-hidden max-w-2xl w-[95vw]">
+          <DialogTitle className="sr-only">Processing Form</DialogTitle>
+          <div className="bg-[#1976D2] text-white px-6 py-4">
+            <h2 className="text-lg font-semibold">Processing Form</h2>
+          </div>
+          <div className="p-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid grid-cols-2 w-full mb-4">
+                <TabsTrigger value="form1">Form 1</TabsTrigger>
+                <TabsTrigger value="review">Preview</TabsTrigger>
+              </TabsList>
+              <TabsContent value="form1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>O.R. No. (Preview)</Label>
+                    <Input value={orPreview || ''} disabled className="bg-gray-50 font-mono text-sm mt-1" />
+                    <p className="text-xs text-gray-500 mt-1">This is a preview. The actual O.R. number will be generated upon creation.</p>
+                  </div>
+                  <div>
+                    <Label>Destination</Label>
+                    <Input value={formDestination} onChange={(e)=> setFormDestination(e.target.value.toUpperCase())} className="mt-1" placeholder="COUNTRY" />
+                  </div>
+                  <div>
+                    <Label>Name of Worker</Label>
+                    <Input value={formName} onChange={(e)=> setFormName(e.target.value.toUpperCase())} className="mt-1" placeholder="LAST, FIRST MIDDLE" />
+                  </div>
+                  <div>
+                    <Label>Sex</Label>
+                    <Select value={formSex} onValueChange={(v)=> setFormSex(v as 'male' | 'female')}>
+                      <SelectTrigger className="mt-1"><SelectValue placeholder="Select sex" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="male">Male</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Address</Label>
+                    <Input value={formAddress} onChange={(e)=> setFormAddress(e.target.value.toUpperCase())} className="mt-1" placeholder="ADDRESS" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-6">
+                  <Button variant="outline" onClick={() => {
+                    try {
+                      const key = `bm_processing_draft`
+                      const payload = { formName, formSex, formAddress, formDestination }
+                      if (typeof window !== 'undefined') localStorage.setItem(key, JSON.stringify(payload))
+                      toast({ title: 'Draft saved', description: 'Draft saved locally in this browser.' })
+                    } catch {}
+                  }}>Save as Draft</Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm() }}>Cancel</Button>
+                    <Button className="bg-[#1976D2] text-white px-8" onClick={() => {
+                      if (!formName || !formSex || !formAddress || !formDestination) {
+                        toast({ title: 'Missing fields', description: 'Please complete all fields.', variant: 'destructive' });
+                        return;
+                      }
+                      setActiveTab('review')
+                    }}>Next</Button>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="review">
+                <div className="grid gap-2 py-2 text-sm">
+                  {orPreview && (<div className="flex justify-between"><span className="text-gray-600">O.R. No. (Preview)</span><span className="font-mono">{orPreview}</span></div>)}
+                  <div className="flex justify-between"><span className="text-gray-600">Name</span><span>{formName}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Sex</span><span className="capitalize">{formSex}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Address</span><span>{formAddress}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Destination</span><span>{formDestination}</span></div>
+                </div>
+                <div className="flex items-center justify-between mt-6">
+                  <div />
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setActiveTab('form1')}>Back</Button>
+                    <Button className="bg-[#1976D2] text-white px-8" onClick={async () => {
+                      const res = await createRecord({ nameOfWorker: formName, sex: formSex as any, address: formAddress, destination: formDestination })
+                      if ((res as any).success) {
+                        toast({ title: 'Created', description: 'Processing record created successfully.' })
+                        setIsCreateOpen(false)
+                        resetForm()
+                      } else {
+                        toast({ title: 'Error', description: (res as any).error || 'Failed to create', variant: 'destructive' })
+                      }
+                    }}>Create</Button>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

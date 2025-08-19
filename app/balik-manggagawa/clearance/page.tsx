@@ -1022,6 +1022,7 @@ export default function BalikManggagawaClearancePage() {
           </div>
           {selectedClearance && (
             <div className="px-8 py-6 max-h-[80vh] overflow-y-auto">
+              <div className="font-semibold text-gray-700 mb-2">Personal Information</div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
                 <div>
                   <div className="text-gray-500">Control No.:</div>
@@ -1056,6 +1057,7 @@ export default function BalikManggagawaClearancePage() {
                   <div className="font-medium">{new Date((selectedClearance as any).created_at).toLocaleString()}</div>
                 </div>
               </div>
+              <hr className="border-gray-300 my-6" />
               {/* Type-specific / additional fields */}
               {(selectedClearance.position || selectedClearance.months_years || selectedClearance.with_principal || selectedClearance.new_principal_name || selectedClearance.employment_duration || selectedClearance.date_arrival || selectedClearance.date_departure || selectedClearance.place_date_employment || selectedClearance.date_blacklisting || selectedClearance.total_deployed_ofws === 0 || selectedClearance.total_deployed_ofws || selectedClearance.reason_blacklisting || selectedClearance.years_with_principal === 0 || selectedClearance.years_with_principal || selectedClearance.remarks) && (
               <div className="mt-6">
@@ -1156,7 +1158,7 @@ export default function BalikManggagawaClearancePage() {
                 </div>
               </div>
               )}
-              <hr className="my-4" />
+              <hr className="border-gray-300 my-6" />
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
                 

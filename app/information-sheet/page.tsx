@@ -444,15 +444,27 @@ export default function InformationSheetPage() {
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="text-xs font-medium">Family Name:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.familyName} onChange={e => setFormData({ ...formData, familyName: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.familyName} 
+                    onChange={e => setFormData({ ...formData, familyName: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">First Name:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.firstName} 
+                    onChange={e => setFormData({ ...formData, firstName: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Middle Name:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.middleName} onChange={e => setFormData({ ...formData, middleName: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.middleName} 
+                    onChange={e => setFormData({ ...formData, middleName: e.target.value.toUpperCase() })} 
+                  />
                 </div>
               </div>
               <div className="flex gap-4">
@@ -466,11 +478,19 @@ export default function InformationSheetPage() {
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Jobsite:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.jobsite} onChange={e => setFormData({ ...formData, jobsite: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.jobsite} 
+                    onChange={e => setFormData({ ...formData, jobsite: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Name of Agency:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.agency} onChange={e => setFormData({ ...formData, agency: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.agency} 
+                    onChange={e => setFormData({ ...formData, agency: e.target.value.toUpperCase() })} 
+                  />
                 </div>
               </div>
               <div className="flex gap-4">
@@ -489,7 +509,12 @@ export default function InformationSheetPage() {
                     <option>Others</option>
                   </select>
                   {formData.purpose === "Others" && (
-                    <input className="w-full border rounded px-3 py-2 mt-1" placeholder="Specify purpose" value={formData.purposeOther} onChange={e => setFormData({ ...formData, purposeOther: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      placeholder="Specify purpose" 
+                      value={formData.purposeOther} 
+                      onChange={e => setFormData({ ...formData, purposeOther: e.target.value.toUpperCase() })} 
+                    />
                   )}
                 </div>
                 <div className="flex-1">
@@ -527,27 +552,48 @@ export default function InformationSheetPage() {
                   <option>Others</option>
                 </select>
                 {formData.documents.includes("Others") && (
-                  <input className="w-full border rounded px-3 py-2 mt-1" placeholder="Specify document" value={formData.documentsOther} onChange={e => setFormData({ ...formData, documentsOther: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    placeholder="Specify document" 
+                    value={formData.documentsOther} 
+                    onChange={e => setFormData({ ...formData, documentsOther: e.target.value.toUpperCase() })} 
+                  />
                 )}
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="text-xs font-medium">Actions Taken:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.actionsTaken} onChange={e => setFormData({ ...formData, actionsTaken: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.actionsTaken} 
+                    onChange={e => setFormData({ ...formData, actionsTaken: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Time Received:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.timeReceived} onChange={e => setFormData({ ...formData, timeReceived: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.timeReceived} 
+                    onChange={e => setFormData({ ...formData, timeReceived: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Time Released:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.timeReleased} onChange={e => setFormData({ ...formData, timeReleased: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.timeReleased} 
+                    onChange={e => setFormData({ ...formData, timeReleased: e.target.value.toUpperCase() })} 
+                  />
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="text-xs font-medium">TOTAL PCT:</label>
-                  <input className="w-full border rounded px-3 py-2 mt-1" value={formData.totalPct} onChange={e => setFormData({ ...formData, totalPct: e.target.value })} />
+                  <input 
+                    className="w-full border rounded px-3 py-2 mt-1" 
+                    value={formData.totalPct} 
+                    onChange={e => setFormData({ ...formData, totalPct: e.target.value.toUpperCase() })} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-medium">Remarks:</label>
@@ -560,7 +606,12 @@ export default function InformationSheetPage() {
                     <option>Others</option>
                   </select>
                   {formData.remarks === "Others" && (
-                    <input className="w-full border rounded px-3 py-2 mt-1" placeholder="Specify remark" value={formData.remarksOther} onChange={e => setFormData({ ...formData, remarksOther: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      placeholder="Specify remark" 
+                      value={formData.remarksOther} 
+                      onChange={e => setFormData({ ...formData, remarksOther: e.target.value.toUpperCase() })} 
+                    />
                   )}
                 </div>
               </div>

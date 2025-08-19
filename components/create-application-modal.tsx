@@ -346,7 +346,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 <Input 
                   value={formData.name}
                   onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
+                    setFormData({ ...formData, name: e.target.value.toUpperCase() });
                     clearFieldError('name');
                   }}
                   className={`mt-1 ${validationErrors.name ? 'border-red-500 focus:border-red-500' : ''}`}
@@ -382,7 +382,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 <Input 
                   value={formData.jobsite}
                   onChange={(e) => {
-                    setFormData({ ...formData, jobsite: e.target.value });
+                    setFormData({ ...formData, jobsite: e.target.value.toUpperCase() });
                     clearFieldError('jobsite');
                   }}
                   className={`mt-1 ${validationErrors.jobsite ? 'border-red-500 focus:border-red-500' : ''}`}
@@ -408,7 +408,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 <Input 
                   value={formData.position}
                       onChange={(e) => {
-                        setFormData({ ...formData, position: e.target.value });
+                        setFormData({ ...formData, position: e.target.value.toUpperCase() });
                         clearFieldError('position');
                       }}
                       className={`${validationErrors.position ? 'border-red-500 focus:border-red-500' : ''}`}
@@ -489,7 +489,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 <Label className="text-sm font-medium">Employer:</Label>
                 <Input 
                   value={formData.employer}
-                  onChange={(e) => setFormData({ ...formData, employer: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, employer: e.target.value.toUpperCase() })}
                   className="mt-1"
                   placeholder="Enter employer name" 
                 />

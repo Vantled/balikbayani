@@ -59,7 +59,7 @@ export async function PUT(
     
     const response: ApiResponse = {
       success: false,
-      error: 'Failed to update document'
+      error: error instanceof Error ? error.message : 'Failed to update document'
     };
 
     return NextResponse.json(response, { status: 500 });

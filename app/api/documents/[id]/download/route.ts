@@ -11,6 +11,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const format = searchParams.get('format') || 'original';
     
     // Get document info from database
     const document = await DatabaseService.getDocumentById(id);
@@ -33,14 +35,43 @@ export async function GET(
       );
     }
 
-    // Read file
-    const fileBuffer = await readFile(filePath);
+    let fileBuffer: Buffer;
+    let contentType: string;
+    let fileName: string;
+
+    // Read the original file
+    fileBuffer = await readFile(filePath);
+    contentType = document.mime_type;
+    fileName = document.file_name;
+    
+    // Handle format conversion requests
+    if (format === 'pdf' && (document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx'))) {
+      // Return error for DOCX to PDF conversion since it's not implemented
+      return NextResponse.json(
+        { 
+          error: 'PDF conversion is not currently supported. Please download the original document format.',
+          originalFormat: 'docx',
+          requestedFormat: 'pdf'
+        },
+        { status: 400 }
+      );
+    } else if (format === 'docx' && (document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf'))) {
+      // Return error for PDF to DOCX conversion since it's not implemented
+      return NextResponse.json(
+        { 
+          error: 'DOCX conversion is not currently supported. Please download the original document format.',
+          originalFormat: 'pdf',
+          requestedFormat: 'docx'
+        },
+        { status: 400 }
+      );
+    }
     
     // Set appropriate headers
     const headers = new Headers();
-    headers.set('Content-Type', document.mime_type);
-    headers.set('Content-Disposition', `inline; filename="${document.file_name}"`);
-    headers.set('Content-Length', document.file_size.toString());
+    headers.set('Content-Type', contentType);
+    headers.set('Content-Disposition', `attachment; filename="${fileName}"`);
+    headers.set('Content-Length', fileBuffer.length.toString());
     
     // Return file
     return new NextResponse(fileBuffer, {

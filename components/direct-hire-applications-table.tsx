@@ -1,8 +1,8 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useState, useEffect } from "react"
 import type { User } from "@/lib/auth"
@@ -14,6 +14,7 @@ import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } f
 import { Document } from "@/lib/types"
 import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
+import PDFViewerModal from "@/components/pdf-viewer-modal"
 // Defer auth role check to client to avoid hydration mismatch
 
 interface DirectHireApplicationsTableProps {
@@ -25,6 +26,7 @@ interface ApplicantDocumentsTabProps {
   applicationId: string
   refreshTrigger?: number
   onRefresh?: () => void
+  onViewPDF?: (documentId: string, documentName: string) => void
 }
 
 export default function DirectHireApplicationsTable({ search, filterQuery = "" }: DirectHireApplicationsTableProps) {
@@ -66,6 +68,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   const [confirmPassword, setConfirmPassword] = useState("")
   const [confirmingPassword, setConfirmingPassword] = useState(false)
   const [confirmPurpose, setConfirmPurpose] = useState<'deleted' | 'finished' | null>(null)
+  
+  // PDF Viewer Modal state
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string} | null>(null)
 
   // Resolve superadmin on client after mount to keep SSR markup stable
   useEffect(() => {
@@ -794,6 +800,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                   applicationId={selected.id} 
                   refreshTrigger={documentsRefreshTrigger}
                   onRefresh={() => setDocumentsRefreshTrigger(prev => prev + 1)}
+                  onViewPDF={(documentId, documentName) => {
+                    setSelectedDocument({ id: documentId, name: documentName })
+                    setPdfViewerOpen(true)
+                  }}
                 />
               </div>
             </div>
@@ -980,7 +990,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                   </div>
                   <div>
                     <label className="text-xs font-medium flex items-center gap-2"><span>Name of Worker:</span></label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      value={formData.name} 
+                      onChange={e => setFormData({ ...formData, name: e.target.value.toUpperCase() })} 
+                    />
                   </div>
                   <div className="flex gap-4">
                     <div className="flex-1">
@@ -993,11 +1007,19 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                   </div>
                   <div>
                     <label className="text-xs font-medium">Jobsite:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.jobsite} onChange={e => setFormData({ ...formData, jobsite: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      value={formData.jobsite} 
+                      onChange={e => setFormData({ ...formData, jobsite: e.target.value.toUpperCase() })} 
+                    />
                   </div>
                   <div>
                     <label className="text-xs font-medium">Position:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.position} onChange={e => setFormData({ ...formData, position: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      value={formData.position} 
+                      onChange={e => setFormData({ ...formData, position: e.target.value.toUpperCase() })} 
+                    />
                   </div>
                   <div>
                     <label className="text-xs font-medium">Salary:</label>
@@ -1036,7 +1058,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                   </div>
                   <div>
                     <label className="text-xs font-medium">Evaluator:</label>
-                    <input className="w-full border rounded px-3 py-2 mt-1" value={formData.evaluator} onChange={e => setFormData({ ...formData, evaluator: e.target.value })} />
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      value={formData.evaluator} 
+                      onChange={e => setFormData({ ...formData, evaluator: e.target.value.toUpperCase() })} 
+                    />
                   </div>
                   <div className="flex justify-end mt-6">
                     <Button 
@@ -1193,20 +1219,37 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
         />
       )}
+      
+      {/* PDF Viewer Modal */}
+      {selectedDocument && (
+        <PDFViewerModal
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false)
+            setSelectedDocument(null)
+          }}
+          documentId={selectedDocument.id}
+          documentName={selectedDocument.name}
+        />
+      )}
     </>
   )
 }
 
 // Applicant Documents List Component
-function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: ApplicantDocumentsTabProps) {
+function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onViewPDF }: ApplicantDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [editingDocument, setEditingDocument] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const { toast } = useToast()
 
-  const formatDocumentType = (raw: string): string => {
+  const formatDocumentType = (raw: string, fileName: string): string => {
     if (!raw) return ''
+    
+    // Get file extension from the actual file name
+    const fileExtension = fileName.split('.').pop()?.toLowerCase() || ''
+    
     const key = raw.toLowerCase().trim()
     const map: Record<string, string> = {
       passport: 'Passport',
@@ -1218,13 +1261,21 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
       'tesda nc/prc license': 'TESDA NC/PRC License',
       clearance: 'Clearance',
     }
-    if (map[key]) return map[key]
-    return raw
-      .replace(/[_-]/g, ' ')
-      .split(' ')
-      .filter(Boolean)
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
+    
+    let formattedName = ''
+    if (map[key]) {
+      formattedName = map[key]
+    } else {
+      formattedName = raw
+        .replace(/[_-]/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+    }
+    
+    // Append file extension if it exists
+    return fileExtension ? `${formattedName}.${fileExtension}` : formattedName
   }
 
   // Fetch documents for this application
@@ -1259,29 +1310,97 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
 
   // Handle document view/download
   const handleView = async (document: Document) => {
-    try {
-      const response = await fetch(`/api/documents/${document.id}/download`)
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        window.open(url, '_blank')
-        window.URL.revokeObjectURL(url)
-      } else {
-        throw new Error('View failed')
+    // Check if this is a Clearance document and if it's actually a PDF
+    const isClearance = document.document_type.toLowerCase().includes('clearance')
+    const isPDF = document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')
+    
+    if (isClearance && isPDF && onViewPDF) {
+      // Use PDF viewer for Clearance documents that are actually PDFs
+      onViewPDF(document.id, document.document_type)
+    } else {
+      // Download other documents as before
+      try {
+        const response = await fetch(`/api/documents/${document.id}/download`)
+        if (response.ok) {
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          window.open(url, '_blank')
+          window.URL.revokeObjectURL(url)
+        } else {
+          throw new Error('View failed')
+        }
+      } catch (error) {
+        toast({
+          title: 'View Error',
+          description: 'Failed to view document',
+          variant: 'destructive'
+        })
       }
-    } catch (error) {
-      toast({
-        title: 'View Error',
-        description: 'Failed to view document',
-        variant: 'destructive'
-      })
     }
   }
 
   // Handle document edit
   const handleEdit = (document: Document) => {
     setEditingDocument(document.id)
+    // Extract just the document type name without the file extension
+    // The document_type field contains the original name without extension
     setEditName(document.document_type)
+  }
+
+  // Handle document download
+  const handleDownload = async (doc: Document, format: 'pdf' | 'docx' | 'original') => {
+    try {
+      const response = await fetch(`/api/documents/${doc.id}/download?format=${format}`)
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        
+        // Generate appropriate filename based on format and original file type
+        let filename: string
+        if (format === 'original') {
+          // Use the original file name and extension
+          filename = doc.file_name
+        } else {
+          // For format conversion requests, use the requested format
+          const baseName = doc.file_name.split('.')[0]
+          const extension = format === 'pdf' ? 'pdf' : 'docx'
+          filename = `${baseName}.${extension}`
+        }
+        
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        
+        const formatText = format === 'original' ? 'original format' : format.toUpperCase()
+        toast({
+          title: 'Download Started',
+          description: `${doc.document_type} has been downloaded in ${formatText}`,
+        })
+      } else {
+        // Handle conversion error responses
+        const errorData = await response.json()
+        if (errorData.error && errorData.originalFormat && errorData.requestedFormat) {
+          toast({
+            title: 'Conversion Not Supported',
+            description: errorData.error,
+            variant: 'destructive'
+          })
+        } else {
+          throw new Error('Download failed')
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Download Error',
+        description: `Failed to download document`,
+        variant: 'destructive'
+      })
+    }
   }
 
   // Handle document name update
@@ -1303,6 +1422,12 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
         },
         body: JSON.stringify({ documentName: editName.trim() })
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+      
       const result = await response.json()
 
       if (result.success) {
@@ -1323,9 +1448,10 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
         throw new Error(result.error || 'Update failed')
       }
     } catch (error) {
+      console.error('Error updating document name:', error)
       toast({
         title: 'Update Error',
-        description: 'Failed to update document name',
+        description: error instanceof Error ? error.message : 'Failed to update document name',
         variant: 'destructive'
       })
     }
@@ -1421,7 +1547,7 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
               </Button>
             </div>
           ) : (
-            <span className="flex-1 text-sm">{formatDocumentType(document.document_type)}</span>
+            <span className="flex-1 text-sm">{formatDocumentType(document.document_type, document.file_name)}</span>
           )}
           <span className="ml-auto">
             <DropdownMenu>
@@ -1431,10 +1557,33 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh }: Ap
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleView(document)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  View
-                </DropdownMenuItem>
+                {!(document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx')) && (
+                  <DropdownMenuItem onClick={() => handleView(document)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
+                  </DropdownMenuItem>
+                )}
+                {(() => {
+                  const fileExtension = document.file_name.split('.').pop()?.toLowerCase() || ''
+                  let downloadText = 'Download'
+                  
+                  if (document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx')) {
+                    downloadText = 'Download DOCX'
+                  } else if (document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')) {
+                    downloadText = 'Download PDF'
+                  } else if (document.mime_type.includes('image') || document.file_name.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+                    downloadText = `Download ${fileExtension.toUpperCase()}`
+                  } else {
+                    downloadText = `Download ${fileExtension.toUpperCase()}`
+                  }
+                  
+                  return (
+                    <DropdownMenuItem onClick={() => handleDownload(document, 'original')}>
+                      <Download className="h-4 w-4 mr-2" />
+                      {downloadText}
+                    </DropdownMenuItem>
+                  )
+                })()}
                 <DropdownMenuItem onClick={() => handleEdit(document)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Name

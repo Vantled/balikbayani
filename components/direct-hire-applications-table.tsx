@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useState, useEffect } from "react"
 import type { User } from "@/lib/auth"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -72,6 +73,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   // PDF Viewer Modal state
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string} | null>(null)
+  
+  // Delete confirmation state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [applicationToDelete, setApplicationToDelete] = useState<DirectHireApplication | null>(null)
 
   // Resolve superadmin on client after mount to keep SSR markup stable
   useEffect(() => {
@@ -184,6 +189,24 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     for_interview: 'for interview',
     approved: 'approved',
     rejected: 'rejected',
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!applicationToDelete) return
+    
+    const success = await deleteApplication(applicationToDelete.id)
+    if (success) {
+      if (showDeletedOnly) {
+        await fetchApplications(search, 1, true)
+      }
+      toast({ 
+        title: "Application deleted successfully", 
+        description: `${applicationToDelete.name}'s application has been removed` 
+      })
+    }
+    
+    setDeleteConfirmOpen(false)
+    setApplicationToDelete(null)
   }
 
   const matchesFilter = (application: DirectHireApplication, key: string, value: string): boolean => {
@@ -573,15 +596,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                               <Edit className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
-                                <DropdownMenuItem onClick={async () => { const confirmDelete = window.confirm(`Are you sure you want to delete the application for ${application.name}?`); if (confirmDelete) { const success = await deleteApplication(application.id); if (success) { 
-                                  if (showDeletedOnly) {
-                                    await fetchApplications(search, 1, true)
-                                  }
-                                  toast({ title: "Application deleted successfully", description: `${application.name}'s application has been removed` }) 
-                                } } }} className="text-red-600 focus:text-red-600">
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
+                                  onClick={() => {
+                                    setApplicationToDelete(application)
+                                    setDeleteConfirmOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
                                 {userIsSuperadmin && (application as any).deleted_at && (
                                   <DropdownMenuItem onClick={async () => {
                                     try {
@@ -1232,6 +1256,33 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           documentName={selectedDocument.name}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the application for <strong>{applicationToDelete?.name}</strong>? 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setDeleteConfirmOpen(false)
+              setApplicationToDelete(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
@@ -1506,50 +1557,52 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
   }
 
   return (
-    <ul className="space-y-2">
+    <div className="space-y-2">
       {documents.map((document) => (
-        <li key={document.id} className="flex items-center gap-2">
-          <input type="checkbox" checked readOnly className="accent-[#1976D2]" />
-          {editingDocument === document.id ? (
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="flex-1 text-sm border rounded px-2 py-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleUpdateName(document)
-                  } else if (e.key === 'Escape') {
+        <div key={document.id} className="relative flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
+          <div className="flex items-center space-x-3">
+            <FileText className="h-4 w-4 text-green-600" />
+            {editingDocument === document.id ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="text-sm border rounded px-2 py-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleUpdateName(document)
+                    } else if (e.key === 'Escape') {
+                      setEditingDocument(null)
+                      setEditName('')
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleUpdateName(document)}
+                  className="h-6 px-2 text-xs"
+                >
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
                     setEditingDocument(null)
                     setEditName('')
-                  }
-                }}
-                autoFocus
-              />
-              <Button
-                size="sm"
-                onClick={() => handleUpdateName(document)}
-                className="h-6 px-2 text-xs"
-              >
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditingDocument(null)
-                  setEditName('')
-                }}
-                className="h-6 px-2 text-xs"
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <span className="flex-1 text-sm">{formatDocumentType(document.document_type, document.file_name)}</span>
-          )}
-          <span className="ml-auto">
+                  }}
+                  className="h-6 px-2 text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <span className="text-sm font-medium">{formatDocumentType(document.document_type, document.file_name)}</span>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -1588,16 +1641,16 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Name
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDelete(document)}>
+                <DropdownMenuItem className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(document)}>
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </span>
-        </li>
+          </div>
+        </div>
       ))}
-    </ul>
+    </div>
   )
 }
 

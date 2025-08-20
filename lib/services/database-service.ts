@@ -1097,6 +1097,8 @@ export class DatabaseService {
         directHireMaleCount,
         directHireFemaleCount,
         clearanceCount,
+        clearanceMaleCount,
+        clearanceFemaleCount,
         govToGovCount,
         infoSheetCount,
         pendingUsersCount
@@ -1104,7 +1106,9 @@ export class DatabaseService {
         client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL${dateFilterDH}`, dateParamsDH),
         client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND LOWER(sex) = 'male'${dateFilterDH}`, dateParamsDH),
         client.query(`SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND LOWER(sex) = 'female'${dateFilterDH}`, dateParamsDH),
-        client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'male'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'female'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM gov_to_gov_applications${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM information_sheet_records${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query('SELECT COUNT(*) FROM users WHERE is_approved = false')
@@ -1115,6 +1119,8 @@ export class DatabaseService {
         directHireMale: parseInt(directHireMaleCount.rows[0].count),
         directHireFemale: parseInt(directHireFemaleCount.rows[0].count),
         clearance: parseInt(clearanceCount.rows[0].count),
+        clearanceMale: parseInt(clearanceMaleCount.rows[0].count),
+        clearanceFemale: parseInt(clearanceFemaleCount.rows[0].count),
         govToGov: parseInt(govToGovCount.rows[0].count),
         infoSheet: parseInt(infoSheetCount.rows[0].count),
         pendingUsers: parseInt(pendingUsersCount.rows[0].count)
@@ -1122,5 +1128,93 @@ export class DatabaseService {
     });
 
     return stats;
+  }
+
+  // Timeline Data for Charts
+  static async getTimelineData(months: number = 6) {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+    
+    const timelineData = await db.transaction(async (client) => {
+      const labels: string[] = [];
+      const directHireData: number[] = [];
+      const clearanceData: number[] = [];
+      const govToGovData: number[] = [];
+      const infoSheetData: number[] = [];
+
+      // Generate labels and data for each month
+      for (let i = 0; i < months; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setMonth(startDate.getMonth() + i);
+        
+        const monthLabel = currentDate.toLocaleDateString('en-US', { month: 'short' });
+        labels.push(monthLabel);
+        
+        const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        
+        // Get counts for each category for this month
+        const [
+          directHireCount,
+          clearanceCount,
+          govToGovCount,
+          infoSheetCount
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          )
+        ]);
+
+        directHireData.push(parseInt(directHireCount.rows[0].count));
+        clearanceData.push(parseInt(clearanceCount.rows[0].count));
+        govToGovData.push(parseInt(govToGovCount.rows[0].count));
+        infoSheetData.push(parseInt(infoSheetCount.rows[0].count));
+      }
+
+      return {
+        labels,
+        datasets: [
+          {
+            label: "Direct Hire",
+            data: directHireData,
+            borderColor: "#1976D2",
+            backgroundColor: "#1976D2"
+          },
+          {
+            label: "Balik Manggagawa",
+            data: clearanceData,
+            borderColor: "#4CAF50",
+            backgroundColor: "#4CAF50"
+          },
+          {
+            label: "Gov to Gov",
+            data: govToGovData,
+            borderColor: "#FF9800",
+            backgroundColor: "#FF9800"
+          },
+          {
+            label: "Information Sheet",
+            data: infoSheetData,
+            borderColor: "#00BCD4",
+            backgroundColor: "#00BCD4"
+          }
+        ]
+      };
+    });
+
+    return timelineData;
   }
 }

@@ -12,32 +12,31 @@ import {
   Legend,
   type ChartOptions,
 } from "chart.js"
-import { useMemo } from "react"
+import { useMemo, useEffect, useState } from "react"
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
-// Total data from cards
-const applicationData = {
-  "Direct Hire": {
-    total: 6,
-    monthlyData: [2, 1, 1, 1, 0, 1] // Jan to Jun
-  },
-  "Balik Manggagawa": {
-    total: 6,
-    monthlyData: [1, 1, 1, 1, 1, 1] // Jan to Jun
-  },
-  "Gov to Gov": {
-    total: 4,
-    monthlyData: [1, 0, 1, 1, 1, 0] // Jan to Jun
-  },
-  "Information Sheet": {
-    total: 2,
-    monthlyData: [1, 1, 0, 0, 0, 0] // Jan to Jun
-  }
-}
-
 export default function ProcessingPathsChart() {
-  const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+  const [timelineData, setTimelineData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchTimelineData = async () => {
+      try {
+        const res = await fetch('/api/dashboard/timeline?months=6')
+        const data = await res.json()
+        if (data.success) {
+          setTimelineData(data.data)
+        }
+      } catch (error) {
+        console.error('Error fetching timeline data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTimelineData()
+  }, [])
 
   const options: ChartOptions<"line"> = {
     responsive: true,
@@ -75,69 +74,41 @@ export default function ProcessingPathsChart() {
   }
 
   const chartData = useMemo(() => {
-    // Define colors for each category
-    const colors = {
-      "Direct Hire": "#1976D2",
-      "Balik Manggagawa": "#4CAF50",
-      "Gov to Gov": "#FF9800",
-      "Information Sheet": "#00BCD4"
+    if (!timelineData) {
+      return {
+        labels: [],
+        datasets: []
+      }
     }
 
-    // Create datasets in the specified order
-    const datasets = [
-      {
-        label: "Direct Hire",
-        data: applicationData["Direct Hire"].monthlyData,
-        borderColor: colors["Direct Hire"],
-        backgroundColor: colors["Direct Hire"],
-        tension: 0.4,
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      },
-      {
-        label: "Balik Manggagawa",
-        data: applicationData["Balik Manggagawa"].monthlyData,
-        borderColor: colors["Balik Manggagawa"],
-        backgroundColor: colors["Balik Manggagawa"],
-        tension: 0.4,
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      },
-      {
-        label: "Gov to Gov",
-        data: applicationData["Gov to Gov"].monthlyData,
-        borderColor: colors["Gov to Gov"],
-        backgroundColor: colors["Gov to Gov"],
-        tension: 0.4,
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      },
-      {
-        label: "Information Sheet",
-        data: applicationData["Information Sheet"].monthlyData,
-        borderColor: colors["Information Sheet"],
-        backgroundColor: colors["Information Sheet"],
-        tension: 0.4,
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      }
-    ]
+    // Create datasets with proper styling
+    const datasets = timelineData.datasets.map((dataset: any) => ({
+      ...dataset,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    }))
 
     return {
-      labels,
+      labels: timelineData.labels,
       datasets,
     }
-  }, [])
+  }, [timelineData])
+
+  if (loading) {
+    return (
+      <div className="h-[300px] w-full flex items-center justify-center">
+        <div className="text-gray-500">Loading chart data...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-[300px] w-full">
       <Line options={options} data={chartData} />
-      <div className="flex flex-wrap justify-center mt-4 text-xs gap-4">
-        {chartData.datasets.map((dataset) => (
+      <div className="flex flex-wrap justify-center mt-8 text-xs gap-4">
+        {chartData.datasets.map((dataset: any) => (
           <div key={dataset.label} className="flex items-center">
             <div 
               className="w-3 h-3 rounded-full mr-1" 

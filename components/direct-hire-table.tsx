@@ -307,17 +307,17 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{balikManggagawaCount}</h2>
+              <h2 className="text-2xl font-bold mb-4">{loadingStats ? '—' : (stats?.clearance ?? 0)}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
                 <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Male ({balikManggagawaMaleCount})
+                  Male ({loadingStats ? '—' : (stats?.clearanceMale ?? 0)})
                 </Button>
                 <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Female ({balikManggagawaFemaleCount})
+                  Female ({loadingStats ? '—' : (stats?.clearanceFemale ?? 0)})
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">{balikManggagawaCount} total</p>
+              <p className="text-xs text-gray-500 mt-2">{loadingStats ? '—' : (stats?.clearance ?? 0)} total</p>
             </Card>
 
             {/* Gov to Gov Card */}

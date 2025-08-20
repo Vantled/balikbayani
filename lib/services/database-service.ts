@@ -671,35 +671,78 @@ export class DatabaseService {
     return (rowCount || 0) > 0;
   }
 
-  static async getProcessingRecords(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<BalikManggagawaProcessing>> {
-    const { rows } = await db.query(`
+  static async getProcessingRecords(
+    pagination: PaginationOptions = { page: 1, limit: 10 },
+    filters?: { search?: string; types?: string; sexes?: string; dateFrom?: string; dateTo?: string; destination?: string; address?: string }
+  ): Promise<PaginatedResponse<BalikManggagawaProcessing>> {
+    let query = `
       SELECT p.*, c.control_number as clearance_control_number,
-             CASE 
-               WHEN p.personal_letter_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.valid_passport_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.work_visa_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.employment_contract_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.employment_certificate_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.last_arrival_email_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE 
-               WHEN p.flight_ticket_file IS NOT NULL THEN 1 ELSE 0 END as documents_submitted
+             CASE WHEN p.personal_letter_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.valid_passport_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.work_visa_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.employment_contract_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.employment_certificate_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.last_arrival_email_file IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN p.flight_ticket_file IS NOT NULL THEN 1 ELSE 0 END as documents_submitted
       FROM balik_manggagawa_processing p
       LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
       WHERE (p.documents_completed = false OR p.documents_completed IS NULL)
         AND p.clearance_type IN ('for_assessment_country', 'non_compliant_country', 'watchlisted_similar_name')
-      ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
-    `, [pagination.limit, (pagination.page - 1) * pagination.limit]);
+    `;
+    const params: any[] = [];
+    let idx = 1;
 
-    const { rows: countRows } = await db.query(`
-      SELECT COUNT(*) FROM balik_manggagawa_processing 
-      WHERE (documents_completed = false OR documents_completed IS NULL)
-        AND clearance_type IN ('for_assessment_country', 'non_compliant_country', 'watchlisted_similar_name')
-    `);
+    if (filters?.search) {
+      query += ` AND (p.name_of_worker ILIKE $${idx} OR p.or_number ILIKE $${idx} OR p.destination ILIKE $${idx} OR p.address ILIKE $${idx})`;
+      params.push(`%${filters.search}%`);
+      idx++;
+    }
+
+    if (filters?.types) {
+      const types = String(filters.types).split(',').filter(Boolean)
+      if (types.length > 0) {
+        query += ` AND p.clearance_type = ANY($${idx}::text[])`;
+        params.push(types);
+        idx++;
+      }
+    }
+
+    if (filters?.sexes) {
+      const sexes = String(filters.sexes).split(',').filter(Boolean);
+      if (sexes.length > 0) {
+        query += ` AND p.sex = ANY($${idx}::text[])`;
+        params.push(sexes);
+        idx++;
+      }
+    }
+
+    if (filters?.dateFrom && filters?.dateTo) {
+      query += ` AND p.created_at::date BETWEEN $${idx} AND $${idx + 1}`;
+      params.push(filters.dateFrom, filters.dateTo);
+      idx += 2;
+    }
+
+    if (filters?.destination) {
+      query += ` AND p.destination ILIKE $${idx}`;
+      params.push(`%${filters.destination}%`);
+      idx++;
+    }
+
+    if (filters?.address) {
+      query += ` AND p.address ILIKE $${idx}`;
+      params.push(`%${filters.address}%`);
+      idx++;
+    }
+
+    // Count
+    const countQuery = `SELECT COUNT(*) FROM (${query}) q`;
+
+    // Pagination
+    query += ` ORDER BY p.created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`;
+    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, params.length - 2));
     const total = parseInt(countRows[0].count);
 
     return {

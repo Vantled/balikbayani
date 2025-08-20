@@ -71,6 +71,18 @@ const processingRows = [
 export default function BalikManggagawaProcessingPage() {
   const [showFilter, setShowFilter] = useState(false)
   const [search, setSearch] = useState("")
+  const [pendingFilters, setPendingFilters] = useState({
+    types: [
+      'for_assessment_country',
+      'non_compliant_country',
+      'watchlisted_similar_name'
+    ] as string[],
+    sexes: [] as string[],
+    dateFrom: '',
+    dateTo: '',
+    destination: '',
+    address: ''
+  })
   const [rows, setRows] = useState(processingRows)
   const { records, loading, error, pagination, fetchRecords, createRecord, deleteRecord, getProcessingById } = useBalikManggagawaProcessing()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -325,38 +337,78 @@ export default function BalikManggagawaProcessingPage() {
                 <Filter className="h-4 w-4" />
               </Button>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="bg-white border-gray-300 h-9">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Sheet
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem>Export as Excel</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={() => setIsCreateOpen(true)}>
-              Create <Plus className="h-4 w-4" />
-            </Button>
+            
             {/* Filter Panel */}
             {showFilter && (
               <div className="absolute right-0 top-12 z-40 w-[380px] bg-white border rounded-xl shadow-xl p-6 text-xs flex flex-col gap-3">
+                <div className="font-semibold mb-1">Types of Clearance:</div>
+                <div className="grid grid-cols-1 gap-1 mb-2">
+                  {[
+                    { label: 'For Assessment Country', value: 'for_assessment_country' },
+                    { label: 'Non Compliant Country', value: 'non_compliant_country' },
+                    { label: 'Watchlisted OFW', value: 'watchlisted_similar_name' }
+                  ].map(opt => (
+                    <label key={opt.value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pendingFilters.types.includes(opt.value)}
+                        onChange={(e)=> {
+                          setPendingFilters(prev => {
+                            const set = new Set(prev.types)
+                            if (e.target.checked) set.add(opt.value); else set.delete(opt.value)
+                            return { ...prev, types: Array.from(set) }
+                          })
+                        }}
+                      /> {opt.label}
+                    </label>
+                  ))}
+                </div>
                 <div className="font-semibold mb-1">Sex:</div>
                 <div className="flex gap-4 mb-2">
-                  <label className="flex items-center gap-2"><input type="checkbox" /> Female</label>
-                  <label className="flex items-center gap-2"><input type="checkbox" /> Male</label>
+                  {[
+                    { label: 'Female', value: 'female' },
+                    { label: 'Male', value: 'male' }
+                  ].map(opt => (
+                    <label key={opt.value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pendingFilters.sexes.includes(opt.value)}
+                        onChange={(e) => {
+                          setPendingFilters(prev => {
+                            const set = new Set(prev.sexes)
+                            if (e.target.checked) set.add(opt.value); else set.delete(opt.value)
+                            return { ...prev, sexes: Array.from(set) }
+                          })
+                        }}
+                      /> {opt.label}
+                    </label>
+                  ))}
                 </div>
                 <div className="font-semibold mb-1">Date Within</div>
-                <Input type="date" className="mb-2" />
+                <Input type="date" className="mb-2" value={pendingFilters.dateFrom} onChange={(e)=> setPendingFilters(p=>({...p, dateFrom: e.target.value}))} />
+                <Input type="date" className="mb-2" value={pendingFilters.dateTo} onChange={(e)=> setPendingFilters(p=>({...p, dateTo: e.target.value}))} />
                 <div className="font-semibold mb-1">Destination</div>
-                <Input type="text" className="mb-2" />
+                <Input type="text" className="mb-2" value={pendingFilters.destination} onChange={(e)=> setPendingFilters(p=>({...p, destination: e.target.value}))} />
                 <div className="font-semibold mb-1">Address</div>
-                <Input type="text" className="mb-2" />
+                <Input type="text" className="mb-2" value={pendingFilters.address} onChange={(e)=> setPendingFilters(p=>({...p, address: e.target.value}))} />
                 <div className="flex justify-between gap-2 mt-2">
-                  <Button variant="outline" className="w-1/2">Clear</Button>
-                  <Button className="w-1/2 bg-[#1976D2] text-white">Search</Button>
+                  <Button variant="outline" className="w-1/2" onClick={() => {
+                    setPendingFilters({ types: ['for_assessment_country','non_compliant_country','watchlisted_similar_name'], sexes: [], dateFrom: '', dateTo: '', destination: '', address: '' })
+                    fetchRecords(1, pagination.limit, { search, types: ['for_assessment_country','non_compliant_country','watchlisted_similar_name'] })
+                    setShowFilter(false)
+                  }}>Clear</Button>
+                  <Button className="w-1/2 bg-[#1976D2] text-white" onClick={() => {
+                    fetchRecords(1, pagination.limit, {
+                      search,
+                      types: pendingFilters.types,
+                      sexes: pendingFilters.sexes,
+                      dateFrom: pendingFilters.dateFrom,
+                      dateTo: pendingFilters.dateTo,
+                      destination: pendingFilters.destination,
+                      address: pendingFilters.address
+                    })
+                    setShowFilter(false)
+                  }}>Apply</Button>
                 </div>
               </div>
             )}
@@ -378,10 +430,12 @@ export default function BalikManggagawaProcessingPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
-                <tr><td colSpan={6} className="py-8 text-center text-gray-500">Loading...</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-gray-500">Loading...</td></tr>
               ) : error ? (
-                <tr><td colSpan={6} className="py-8 text-center text-red-500">{error}</td></tr>
-              ) : (records.length ? records : []).map((row: any, i: number) => (
+                <tr><td colSpan={7} className="py-8 text-center text-red-500">{error}</td></tr>
+              ) : records.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-gray-500">No processing records found</td></tr>
+              ) : records.map((row: any, i: number) => (
                 <tr key={row.id ?? i} className="hover:bg-gray-50">
                   <td className="py-3 px-4 text-center">{row.clearance_control_number || row.or_number}</td>
                   <td className="py-3 px-4 text-center">{row.name_of_worker}</td>

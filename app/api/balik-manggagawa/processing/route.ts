@@ -8,8 +8,15 @@ export async function GET(request: NextRequest) {
 		const { searchParams } = new URL(request.url);
 		const page = parseInt(searchParams.get('page') || '1');
 		const limit = parseInt(searchParams.get('limit') || '10');
+		const search = searchParams.get('search') || '';
+		const types = searchParams.get('types') || '';
+		const sexes = searchParams.get('sexes') || '';
+		const dateFrom = searchParams.get('dateFrom') || '';
+		const dateTo = searchParams.get('dateTo') || '';
+		const destination = searchParams.get('destination') || '';
+		const address = searchParams.get('address') || '';
 
-		const result = await DatabaseService.getProcessingRecords({ page, limit });
+		const result = await DatabaseService.getProcessingRecords({ page, limit }, { search, types, sexes, dateFrom, dateTo, destination, address });
 
 		const response: ApiResponse = { success: true, data: result };
 		return NextResponse.json(response);

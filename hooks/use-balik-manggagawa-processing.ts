@@ -8,11 +8,25 @@ export function useBalikManggagawaProcessing() {
 	const [error, setError] = useState<string | null>(null)
 	const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 })
 
-	const fetchRecords = async (page = 1, limit = 10) => {
+	const fetchRecords = async (
+		page = 1,
+		limit = 10,
+		filters?: { search?: string; types?: string[]; sexes?: string[]; dateFrom?: string; dateTo?: string; destination?: string; address?: string }
+	) => {
 		setLoading(true)
 		setError(null)
 		try {
-			const res = await fetch(`/api/balik-manggagawa/processing?page=${page}&limit=${limit}`)
+			const params = new URLSearchParams()
+			params.set('page', String(page))
+			params.set('limit', String(limit))
+			if (filters?.search) params.set('search', filters.search)
+			if (filters?.types && filters.types.length) params.set('types', filters.types.join(','))
+			if (filters?.sexes && filters.sexes.length) params.set('sexes', filters.sexes.join(','))
+			if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom)
+			if (filters?.dateTo) params.set('dateTo', filters.dateTo)
+			if (filters?.destination) params.set('destination', filters.destination)
+			if (filters?.address) params.set('address', filters.address)
+			const res = await fetch(`/api/balik-manggagawa/processing?${params.toString()}`)
 			const json = await res.json()
 			if (json.success) {
 				setRecords(json.data.data)

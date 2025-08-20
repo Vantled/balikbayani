@@ -887,16 +887,41 @@ export default function BalikManggagawaClearancePage() {
                   <>
                     <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <Label>Date of Arrival</Label>
-                        <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                        <Label>Place and Date of Employment</Label>
+                        <Input className="mt-1" placeholder="COUNTRY / YYYY or similar" value={placeDateEmployment} onChange={(e)=> setPlaceDateEmployment(e.target.value.toUpperCase())} />
+                        {validationErrors.placeDateEmployment && <span className="text-xs text-red-500">{validationErrors.placeDateEmployment}</span>}
                       </div>
                       <div>
-                        <Label>Date of Departure</Label>
-                        <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                        <Label>Total Deployed OFWs</Label>
+                        <Input type="number" min="0" step="1" className="mt-1" placeholder="0" value={totalDeployedOfws} onChange={(e)=> setTotalDeployedOfws(e.target.value)} />
+                        {validationErrors.totalDeployedOfws && <span className="text-xs text-red-500">{validationErrors.totalDeployedOfws}</span>}
+                      </div>
+                      <div>
+                        <Label>Date of Blacklisting</Label>
+                        <Input type="date" className="mt-1" value={dateBlacklisting} onChange={(e)=> setDateBlacklisting(e.target.value)} />
+                        {validationErrors.dateBlacklisting && <span className="text-xs text-red-500">{validationErrors.dateBlacklisting}</span>}
+                      </div>
+                      <div>
+                        <Label>Reason for Blacklisting</Label>
+                        <Textarea className="mt-1" placeholder="Reason" value={reasonBlacklisting} onChange={(e)=> setReasonBlacklisting(e.target.value)} />
+                        {validationErrors.reasonBlacklisting && <span className="text-xs text-red-500">{validationErrors.reasonBlacklisting}</span>}
                       </div>
                       <div>
                         <Label>No. of Years with the Principal</Label>
-                        <Input type="number" className="mt-1" placeholder="0" value={yearsWithPrincipal} onChange={(e)=> setYearsWithPrincipal(e.target.value)} />
+                        <Input type="number" min="0" step="1" className="mt-1" placeholder="0" value={yearsWithPrincipal} onChange={(e)=> setYearsWithPrincipal(e.target.value)} />
+                        {validationErrors.yearsWithPrincipal && <span className="text-xs text-red-500">{validationErrors.yearsWithPrincipal}</span>}
+                      </div>
+                      <div className="flex items-start gap-4">
+                        <div>
+                          <Label>Date of Arrival</Label>
+                          <Input type="date" className="mt-1 w-auto" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                          {validationErrors.dateArrival && <span className="text-xs text-red-500">{validationErrors.dateArrival}</span>}
+                        </div>
+                        <div>
+                          <Label>Date of Departure</Label>
+                          <Input type="date" className="mt-1 w-auto" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                          {validationErrors.dateDeparture && <span className="text-xs text-red-500">{validationErrors.dateDeparture}</span>}
+                        </div>
                       </div>
                       <div>
                         <Label>Remarks</Label>

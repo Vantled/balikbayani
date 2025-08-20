@@ -54,6 +54,7 @@ export async function POST(
     const dateArrivalRaw: any = (clearance as any).date_arrival
     const dateDepartureRaw: any = (clearance as any).date_departure
     const dateOfDepartureRaw: any = (clearance as any).date_of_departure
+    const dateBlacklistingRaw: any = (clearance as any).date_blacklisting
     const employmentStartDateRaw: any = (clearance as any).employment_start_date
     const processingDateRaw: any = (clearance as any).processing_date
     
@@ -70,6 +71,7 @@ export async function POST(
     const arrival = norm(dateArrivalRaw)
     const departure = norm(dateDepartureRaw)
     const dateOfDeparture = norm(dateOfDepartureRaw)
+    const blacklisting = norm(dateBlacklistingRaw)
     const employmentStart = norm(employmentStartDateRaw)
     const processing = norm(processingDateRaw)
 
@@ -124,7 +126,8 @@ export async function POST(
         new_principal_name: (clearance as any).new_principal_name || '',
         employment_duration: (clearance as any).employment_duration || '',
         place_date_employment: (clearance as any).place_date_employment || '',
-        date_blacklisting: (clearance as any).date_blacklisting || '',
+        date_blacklisting: blacklisting.iso || (clearance as any).date_blacklisting || '',
+        date_blacklisting_long: blacklisting.long,
         total_deployed_ofws: (clearance as any).total_deployed_ofws || '',
         reason_blacklisting: (clearance as any).reason_blacklisting || '',
         years_with_principal: (clearance as any).years_with_principal || '',
@@ -145,7 +148,7 @@ export async function POST(
       no_verified_contract: 'NO VERIFIED CONTRACT CLEARANCE REQUEST',
       non_compliant_country: 'NON COMPLIANT COUNTRY CLEARANCE REQUEST',
       seafarer_position: "SEAFARER'S POSITION PROCESS REQUEST",
-      watchlisted_employer: 'WATCHLISTED EMPLOYER PROECSS REQUEST',
+      watchlisted_employer: 'WATCHLISTED EMPLOYER PROCESS REQUEST',
       watchlisted_similar_name: 'WATCHLISTED OFW CLEARANCE REQUEST',
     }
     const rawDocName = typeToDocName[clearance.clearance_type] || 'CLEARANCE REQUEST'

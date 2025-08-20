@@ -146,19 +146,19 @@ export async function POST(request: NextRequest) {
       dateOfDeparture: normalize(dateOfDeparture)
     });
 
-    // For "For Assessment Country" type, also create a processing record
-    if (clearanceType === 'for_assessment_country') {
+    // For "For Assessment Country" and "Non Compliant Country" types, also create a processing record
+    if (clearanceType === 'for_assessment_country' || clearanceType === 'non_compliant_country') {
       try {
         await DatabaseService.createBalikManggagawaProcessing({
           nameOfWorker,
           sex,
           address: '', // Will be filled later when applicant provides address
           destination,
-          clearanceType: 'for_assessment_country',
+          clearanceType,
           clearanceId: clearance.id
         });
       } catch (processingError) {
-        console.error('Failed to create processing record for For Assessment Country:', processingError);
+        console.error('Failed to create processing record for BM type requiring processing:', processingError);
         // Don't fail the clearance creation if processing record creation fails
       }
     }

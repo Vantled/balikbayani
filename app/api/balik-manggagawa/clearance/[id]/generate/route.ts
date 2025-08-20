@@ -29,7 +29,7 @@ export async function POST(
     const typeToTemplate: Record<string, string> = {
       watchlisted_employer: 'watchlisted employer.docx',
       seafarer_position: 'seafarer.docx',
-      non_compliant_country: 'non-complaint-country.docx', // Note: file is actually named "non-complaint-country.docx"
+      non_compliant_country: 'non-compliant-country.docx',
       no_verified_contract: 'no-verified-contract.docx',
       for_assessment_country: 'for-assessment-country.docx',
       critical_skill: 'critical-skills.docx',
@@ -73,6 +73,9 @@ export async function POST(
     const employmentStart = norm(employmentStartDateRaw)
     const processing = norm(processingDateRaw)
 
+    // Prefer no_of_months_years if available (used by some types), fallback to months_years
+    const monthsYearsValue = (clearance as any).no_of_months_years || (clearance as any).months_years || ''
+
     const report = await createReport({
       template,
       data: {
@@ -95,9 +98,10 @@ export async function POST(
         DATE: createdDateStr,
         DATE_LONG: createdDateLong,
         date_arrival: arrival.iso,
-        date_departure: departure.iso,
+        // Prefer date_of_departure if present, fallback to date_departure
+        date_departure: dateOfDeparture.iso || departure.iso,
         date_arrival_long: arrival.long,
-        date_departure_long: departure.long,
+        date_departure_long: dateOfDeparture.long || departure.long,
         // Add more aliases for common template patterns
         departure_date: departure.iso,
         departure_date_long: departure.long,
@@ -108,9 +112,9 @@ export async function POST(
         date_of_departure_long: dateOfDeparture.long || departure.long, // Use new field if available
         date_of_arrival: arrival.iso,
         date_of_arrival_long: arrival.long,
-        months_years: (clearance as any).months_years || '',
-        months_years_long: (clearance as any).months_years || '', // Add alias
-        months_years_text: (clearance as any).months_years || '', // Add another alias
+        months_years: monthsYearsValue,
+        months_years_long: monthsYearsValue, // Add alias
+        months_years_text: monthsYearsValue, // Add another alias
         with_principal: (clearance as any).with_principal || '',
         with_principal_long: (clearance as any).with_principal || '', // Add alias
         with_principal_text: (clearance as any).with_principal || '', // Add another alias

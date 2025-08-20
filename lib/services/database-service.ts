@@ -682,14 +682,14 @@ export class DatabaseService {
       FROM balik_manggagawa_processing p
       LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
       WHERE (p.documents_completed = false OR p.documents_completed IS NULL)
-        AND p.clearance_type = 'for_assessment_country'
+        AND p.clearance_type IN ('for_assessment_country', 'non_compliant_country')
       ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
     `, [pagination.limit, (pagination.page - 1) * pagination.limit]);
 
     const { rows: countRows } = await db.query(`
       SELECT COUNT(*) FROM balik_manggagawa_processing 
       WHERE (documents_completed = false OR documents_completed IS NULL)
-        AND clearance_type = 'for_assessment_country'
+        AND clearance_type IN ('for_assessment_country', 'non_compliant_country')
     `);
     const total = parseInt(countRows[0].count);
 

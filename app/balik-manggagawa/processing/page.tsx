@@ -389,7 +389,7 @@ export default function BalikManggagawaProcessingPage() {
                   <td className="py-3 px-4 text-center">
                     {row.clearance_type ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : row.clearance_type}
+                        {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (row.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : row.clearance_type)}
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>
@@ -544,7 +544,7 @@ export default function BalikManggagawaProcessingPage() {
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">
-              {selectedRecord?.clearance_type === 'for_assessment_country' ? 'For Assessment Country Details' : 'Processing Details'}
+              {selectedRecord?.clearance_type === 'for_assessment_country' ? 'For Assessment Country Details' : (selectedRecord?.clearance_type === 'non_compliant_country' ? 'Non Compliant Country Details' : 'Processing Details')}
             </DialogTitle>
             <DialogClose asChild>
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
@@ -562,7 +562,7 @@ export default function BalikManggagawaProcessingPage() {
                   </div>
                   <div>
                     <div className="text-gray-500">Type:</div>
-                    <div className="font-medium">{selectedRecord.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : selectedRecord.clearance_type}</div>
+                    <div className="font-medium">{selectedRecord.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (selectedRecord.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : selectedRecord.clearance_type)}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Name of Worker:</div>

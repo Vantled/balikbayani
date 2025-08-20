@@ -297,10 +297,12 @@ export default function BalikManggagawaClearancePage() {
       require(dateDeparture, 'dateDeparture', 'Date of Departure')
       require(yearsWithPrincipal, 'yearsWithPrincipal', 'No. of Years with the Principal')
     } else if (t === 'non_compliant_country') {
-      require(monthsYears, 'monthsYears', 'No. of Month(s)/Year(s)')
-      require(withPrincipal, 'withPrincipal', 'With the Principal')
-      require(dateDeparture, 'dateDeparture', 'Date of Departure')
-      require(position, 'position', 'Position')
+      // Mirror For Assessment Country requirements
+      require(noOfMonthsYears, 'noOfMonthsYears', 'No. of Month(s)/Year(s) with the Principal')
+      require(dateOfDeparture, 'dateOfDeparture', 'Date of Departure')
+      require(employmentStartDate, 'employmentStartDate', 'Employment Start Date')
+      require(processingDate, 'processingDate', 'Processing Date')
+      require(dateArrival, 'dateArrival', 'Date of Arrival')
     } else if (t === 'for_assessment_country') {
       require(noOfMonthsYears, 'noOfMonthsYears', 'No. of Month(s)/Year(s) with the Principal')
       require(dateOfDeparture, 'dateOfDeparture', 'Date of Departure')
@@ -986,7 +988,7 @@ export default function BalikManggagawaClearancePage() {
                       </div>
                     </div>
                   </>
-                ) : selectedType === 'for_assessment_country' ? (
+                ) : selectedType === 'for_assessment_country' || selectedType === 'non_compliant_country' ? (
                   <>
                     <div className="grid grid-cols-1 gap-4">
                       <div>
@@ -1211,8 +1213,8 @@ export default function BalikManggagawaClearancePage() {
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
                 
-                {/* Generate and New buttons - Always show for For Assessment Country */}
-                {selectedClearance?.clearance_type === 'for_assessment_country' && (
+                {/* Generate and New buttons - Always show for types requiring processing */}
+                {(selectedClearance?.clearance_type === 'for_assessment_country' || selectedClearance?.clearance_type === 'non_compliant_country') && (
                   <div className="flex gap-2 mb-3">
                     <Button
                       className="bg-[#1976D2] text-white text-xs"
@@ -1366,8 +1368,8 @@ export default function BalikManggagawaClearancePage() {
                   </div>
                 )}
 
-                {/* Show regular documents section for For Assessment Country (additional documents) */}
-                {selectedClearance?.clearance_type === 'for_assessment_country' && (
+                {/* Show regular documents section for types requiring processing (additional documents) */}
+                {(selectedClearance?.clearance_type === 'for_assessment_country' || selectedClearance?.clearance_type === 'non_compliant_country') && (
                   <div className="mt-4">
                     <div className="text-sm font-medium text-gray-700 mb-2">Additional Documents</div>
                     {selectedClearance && (
@@ -1384,8 +1386,8 @@ export default function BalikManggagawaClearancePage() {
                   </div>
                 )}
 
-                {/* Show regular documents section for non-For Assessment Country types */}
-                {selectedClearance?.clearance_type !== 'for_assessment_country' && (
+                {/* Show regular documents section for other types */}
+                {selectedClearance?.clearance_type !== 'for_assessment_country' && selectedClearance?.clearance_type !== 'non_compliant_country' && (
                   <>
                     <div className="flex gap-2 mb-3">
                       <Button

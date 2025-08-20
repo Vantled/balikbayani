@@ -307,7 +307,14 @@ export default function BalikManggagawaClearancePage() {
       require(employmentStartDate, 'employmentStartDate', 'Employment Start Date')
       require(processingDate, 'processingDate', 'Processing Date')
       require(dateArrival, 'dateArrival', 'Date of Arrival')
-    } else if (t === 'no_verified_contract' || t === 'seafarer_position') {
+    } else if (t === 'no_verified_contract') {
+      require(dateArrival, 'dateArrival', 'Date of Arrival')
+      require(dateDeparture, 'dateDeparture', 'Date of Departure')
+      require(position, 'position', 'Position')
+      require(newPrincipalName, 'newPrincipalName', 'Name of the New Principal')
+      require(employmentDurationStart, 'employmentDurationStart', 'Employment Duration (From)')
+      require(employmentDurationEnd, 'employmentDurationEnd', 'Employment Duration (To)')
+    } else if (t === 'seafarer_position') {
       require(dateArrival, 'dateArrival', 'Date of Arrival')
       require(dateDeparture, 'dateDeparture', 'Date of Departure')
       require(position, 'position', 'Position')
@@ -379,7 +386,7 @@ export default function BalikManggagawaClearancePage() {
     if (monthsYears) payload.monthsYears = monthsYears
     if (withPrincipal) payload.withPrincipal = withPrincipal
     if (newPrincipalName) payload.newPrincipalName = newPrincipalName
-    if (employmentDurationStart && employmentDurationEnd && selectedType === 'critical_skill') {
+    if (employmentDurationStart && employmentDurationEnd && (selectedType === 'critical_skill' || selectedType === 'no_verified_contract')) {
       // Format as 'DD MONTH YYYY TO DD MONTH YYYY' (uppercase month)
       const fmt = (d: string) => {
         const date = new Date(d)
@@ -923,6 +930,48 @@ export default function BalikManggagawaClearancePage() {
                           <span className="text-gray-600">to</span>
                           <Input type="date" className="w-auto" value={employmentDurationEnd} onChange={(e)=> setEmploymentDurationEnd(e.target.value)} />
                         </div>
+                        {(validationErrors.employmentDurationStart || validationErrors.employmentDurationEnd) && (
+                          <span className="text-xs text-red-500">{validationErrors.employmentDurationStart || validationErrors.employmentDurationEnd}</span>
+                        )}
+                      </div>
+                      <div className="md:col-span-1">
+                        <Label>Remarks</Label>
+                        <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                      <div />
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setActiveTab('form1')}>Back</Button>
+                        <Button onClick={handleCreate} className="bg-[#1976D2] text-white px-8" disabled={loading}>{loading ? 'Creating...' : 'Create'}</Button>
+                      </div>
+                    </div>
+                  </>
+                ) : selectedType === 'no_verified_contract' ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <Label>Date of Arrival</Label>
+                        <Input type="date" className="mt-1" value={dateArrival} onChange={(e)=> setDateArrival(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Name of the New Principal</Label>
+                        <Input className="mt-1" placeholder="Name of the new principal" value={newPrincipalName} onChange={(e)=> setNewPrincipalName(e.target.value.toUpperCase())} />
+                      </div>
+                      <div>
+                        <Label>Date of Departure</Label>
+                        <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Employment Duration</Label>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Input type="date" className="w-auto" value={employmentDurationStart} onChange={(e)=> setEmploymentDurationStart(e.target.value)} />
+                          <span className="text-gray-600">to</span>
+                          <Input type="date" className="w-auto" value={employmentDurationEnd} onChange={(e)=> setEmploymentDurationEnd(e.target.value)} />
+                        </div>
+                        {(validationErrors.employmentDurationStart || validationErrors.employmentDurationEnd) && (
+                          <span className="text-xs text-red-500">{validationErrors.employmentDurationStart || validationErrors.employmentDurationEnd}</span>
+                        )}
                       </div>
                       <div className="md:col-span-1">
                         <Label>Remarks</Label>

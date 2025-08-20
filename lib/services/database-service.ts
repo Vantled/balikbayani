@@ -428,15 +428,21 @@ export class DatabaseService {
     }
 
     if (filters.clearanceType) {
-      query += ` AND c.clearance_type = $${paramIndex}`;
-      params.push(filters.clearanceType);
-      paramIndex++;
+      const types = String(filters.clearanceType).split(',').filter(Boolean)
+      if (types.length > 0) {
+        query += ` AND c.clearance_type = ANY($${paramIndex}::text[])`;
+        params.push(types);
+        paramIndex++;
+      }
     }
 
     if (filters.sex) {
-      query += ` AND c.sex = $${paramIndex}`;
-      params.push(filters.sex);
-      paramIndex++;
+      const sexes = String(filters.sex).split(',').filter(Boolean)
+      if (sexes.length > 0) {
+        query += ` AND c.sex = ANY($${paramIndex}::text[])`;
+        params.push(sexes);
+        paramIndex++;
+      }
     }
 
     if (filters.dateFrom && filters.dateTo) {

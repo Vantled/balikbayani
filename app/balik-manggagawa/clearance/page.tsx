@@ -45,6 +45,14 @@ export default function BalikManggagawaClearancePage() {
     position: '',
     includeDeleted: false as boolean
   })
+  const [pendingFilters, setPendingFilters] = useState({
+    clearanceTypes: [] as string[],
+    sexes: [] as string[],
+    dateFrom: '',
+    dateTo: '',
+    jobsite: '',
+    position: ''
+  })
   const [showDeletedOnly, setShowDeletedOnly] = useState(false)
   const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -471,7 +479,20 @@ export default function BalikManggagawaClearancePage() {
                 variant="ghost"
                 size="icon"
                 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
-                onClick={() => setShowFilter(!showFilter)}
+                onClick={() => {
+                  const next = !showFilter
+                  setShowFilter(next)
+                  if (next) {
+                    setPendingFilters({
+                      clearanceTypes: (filters.clearanceType ? filters.clearanceType.split(',').filter(Boolean) : []),
+                      sexes: (filters.sex ? filters.sex.split(',').filter(Boolean) : []),
+                      dateFrom: filters.dateFrom,
+                      dateTo: filters.dateTo,
+                      jobsite: filters.jobsite,
+                      position: filters.position
+                    })
+                  }
+                }}
                 aria-label="Show filters"
               >
                 <Filter className="h-4 w-4" />
@@ -506,150 +527,93 @@ export default function BalikManggagawaClearancePage() {
               <div className="absolute right-0 top-12 z-40 w-[380px] bg-white border rounded-xl shadow-xl p-6 text-xs flex flex-col gap-3">
                 <div className="font-semibold mb-2">Types of Clearance:</div>
                 <div className="grid grid-cols-1 gap-1 mb-2">
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      checked={filters.clearanceType === ''}
-                      onChange={() => handleFilterChange({ ...filters, clearanceType: '' })}
-                    /> All
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="watchlisted_employer"
-                      checked={filters.clearanceType === 'watchlisted_employer'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> Watchlisted Employer
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="seafarer_position"
-                      checked={filters.clearanceType === 'seafarer_position'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> Seafarer's Position
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="non_compliant_country"
-                      checked={filters.clearanceType === 'non_compliant_country'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> Non Compliant Country
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="no_verified_contract"
-                      checked={filters.clearanceType === 'no_verified_contract'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> No Verified Contract
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="for_assessment_country"
-                      checked={filters.clearanceType === 'for_assessment_country'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> For Assessment Country
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="critical_skill"
-                      checked={filters.clearanceType === 'critical_skill'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> Critical Skill
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="clearanceType"
-                      value="watchlisted_similar_name"
-                      checked={filters.clearanceType === 'watchlisted_similar_name'}
-                      onChange={(e) => handleFilterChange({ ...filters, clearanceType: e.target.value })}
-                    /> Watchlisted Similar Name
-                  </label>
+                  {[
+                    { label: 'Watchlisted Employer', value: 'watchlisted_employer' },
+                    { label: "Seafarer's Position", value: 'seafarer_position' },
+                    { label: 'Non Compliant Country', value: 'non_compliant_country' },
+                    { label: 'No Verified Contract', value: 'no_verified_contract' },
+                    { label: 'For Assessment Country', value: 'for_assessment_country' },
+                    { label: 'Critical Skill', value: 'critical_skill' },
+                    { label: 'Watchlisted OFW', value: 'watchlisted_similar_name' },
+                  ].map((opt) => (
+                    <label key={opt.value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pendingFilters.clearanceTypes.includes(opt.value)}
+                        onChange={(e) => {
+                          setPendingFilters(prev => {
+                            const set = new Set(prev.clearanceTypes)
+                            if (e.target.checked) set.add(opt.value); else set.delete(opt.value)
+                            return { ...prev, clearanceTypes: Array.from(set) }
+                          })
+                        }}
+                      /> {opt.label}
+                    </label>
+                  ))}
                 </div>
                 <div className="font-semibold mb-1">Sex:</div>
                 <div className="flex gap-4 mb-2">
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="sex"
-                      checked={filters.sex === ''}
-                      onChange={() => handleFilterChange({ ...filters, sex: '' })}
-                    /> All
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="sex"
-                      value="female"
-                      checked={filters.sex === 'female'}
-                      onChange={(e) => handleFilterChange({ ...filters, sex: e.target.value })}
-                    /> Female
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="sex"
-                      value="male"
-                      checked={filters.sex === 'male'}
-                      onChange={(e) => handleFilterChange({ ...filters, sex: e.target.value })}
-                    /> Male
-                  </label>
+                  {[
+                    { label: 'Female', value: 'female' },
+                    { label: 'Male', value: 'male' },
+                  ].map(opt => (
+                    <label key={opt.value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={pendingFilters.sexes.includes(opt.value)}
+                        onChange={(e) => {
+                          setPendingFilters(prev => {
+                            const set = new Set(prev.sexes)
+                            if (e.target.checked) set.add(opt.value); else set.delete(opt.value)
+                            return { ...prev, sexes: Array.from(set) }
+                          })
+                        }}
+                      /> {opt.label}
+                    </label>
+                  ))}
                 </div>
                 <div className="font-semibold mb-1">Date From</div>
                 <Input 
                   type="date" 
                   className="mb-2"
-                  value={filters.dateFrom}
-                  onChange={(e) => handleFilterChange({ ...filters, dateFrom: e.target.value })}
+                  value={pendingFilters.dateFrom}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
                 />
                 <div className="font-semibold mb-1">Date To</div>
                 <Input 
                   type="date" 
                   className="mb-2"
-                  value={filters.dateTo}
-                  onChange={(e) => handleFilterChange({ ...filters, dateTo: e.target.value })}
+                  value={pendingFilters.dateTo}
+                  onChange={(e) => setPendingFilters(prev => ({ ...prev, dateTo: e.target.value }))}
                 />
                 <div className="flex justify-between gap-2 mt-2">
                   <Button 
                     variant="outline" 
                     className="w-1/2"
                     onClick={() => {
-                      const clearedFilters = {
-                        clearanceType: '',
-                        sex: '',
-                        dateFrom: '',
-                        dateTo: '',
-                        jobsite: '',
-                        position: ''
-                      }
-                      setFilters(clearedFilters)
-                      fetchClearances({
-                        page: 1,
-                        limit: 10,
-                        search,
-                        ...clearedFilters,
-                        includeDeleted: showDeletedOnly,
-                        showDeletedOnly: showDeletedOnly
-                      })
+                      setPendingFilters({ clearanceTypes: [], sexes: [], dateFrom: '', dateTo: '', jobsite: '', position: '' })
+                      const clearedFilters = { clearanceType: '', sex: '', dateFrom: '', dateTo: '', jobsite: '', position: '' }
+                      setFilters(prev => ({ ...prev, ...clearedFilters }))
+                      fetchClearances({ page: 1, limit: 10, search, ...clearedFilters, includeDeleted: showDeletedOnly, showDeletedOnly })
                     }}
                   >
                     Clear
                   </Button>
                   <Button 
                     className="w-1/2 bg-[#1976D2] text-white"
-                    onClick={() => setShowFilter(false)}
+                    onClick={() => {
+                      const applied = {
+                        clearanceType: pendingFilters.clearanceTypes.join(','),
+                        sex: pendingFilters.sexes.join(','),
+                        dateFrom: pendingFilters.dateFrom,
+                        dateTo: pendingFilters.dateTo,
+                        jobsite: pendingFilters.jobsite,
+                        position: pendingFilters.position,
+                      }
+                      setFilters(prev => ({ ...prev, ...applied }))
+                      fetchClearances({ page: 1, limit: 10, search, ...applied, includeDeleted: showDeletedOnly, showDeletedOnly })
+                      setShowFilter(false)
+                    }}
                   >
                     Apply
                   </Button>

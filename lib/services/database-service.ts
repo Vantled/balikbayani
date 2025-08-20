@@ -295,6 +295,9 @@ export class DatabaseService {
     remarks?: string | null;
     noOfMonthsYears?: string | null;
     dateOfDeparture?: string | null;
+    activeEmailAddress?: string | null;
+    activePhMobileNumber?: string | null;
+    evaluator?: string | null;
   }): Promise<BalikManggagawaClearance> {
     // Generate control number based on clearance type with monthly and yearly sequences
     const now = new Date();
@@ -366,20 +369,20 @@ export class DatabaseService {
         position, months_years, with_principal, new_principal_name, employment_duration,
         date_arrival, date_departure, place_date_employment, date_blacklisting,
         total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
-        no_of_months_years, date_of_departure
+        no_of_months_years, date_of_departure, active_email_address, active_ph_mobile_number, evaluator
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,
         $8,$9,$10,$11,$12,
         $13,$14,$15,$16,
         $17,$18,$19,$20,$21,$22,
-        $23,$24
+        $23,$24,$25,$26,$27
       ) RETURNING *`,
       [
         controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType,
         clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
         clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
         clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
-        clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null
+        clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null
       ]
     );
     return rows[0];
@@ -682,14 +685,14 @@ export class DatabaseService {
       FROM balik_manggagawa_processing p
       LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
       WHERE (p.documents_completed = false OR p.documents_completed IS NULL)
-        AND p.clearance_type IN ('for_assessment_country', 'non_compliant_country')
+        AND p.clearance_type IN ('for_assessment_country', 'non_compliant_country', 'watchlisted_similar_name')
       ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
     `, [pagination.limit, (pagination.page - 1) * pagination.limit]);
 
     const { rows: countRows } = await db.query(`
       SELECT COUNT(*) FROM balik_manggagawa_processing 
       WHERE (documents_completed = false OR documents_completed IS NULL)
-        AND clearance_type IN ('for_assessment_country', 'non_compliant_country')
+        AND clearance_type IN ('for_assessment_country', 'non_compliant_country', 'watchlisted_similar_name')
     `);
     const total = parseInt(countRows[0].count);
 

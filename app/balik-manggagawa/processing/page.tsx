@@ -196,7 +196,8 @@ export default function BalikManggagawaProcessingPage() {
 
   const checkDocumentsCompletion = async () => {
     const completedCount = Object.values(documentChecklist).filter(doc => doc.checked).length
-    const isCompleted = completedCount === 7
+    const requiredCount = selectedRecord?.clearance_type === 'watchlisted_similar_name' ? 1 : 7
+    const isCompleted = completedCount >= requiredCount
 
     if (isCompleted && selectedRecord?.id) {
       try {
@@ -389,7 +390,7 @@ export default function BalikManggagawaProcessingPage() {
                   <td className="py-3 px-4 text-center">
                     {row.clearance_type ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (row.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : row.clearance_type)}
+                        {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (row.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : (row.clearance_type === 'watchlisted_similar_name' ? 'Watchlisted OFW' : row.clearance_type))}
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>
@@ -397,7 +398,7 @@ export default function BalikManggagawaProcessingPage() {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      {row.documents_submitted || 0}/7 Submitted
+                      {row.clearance_type === 'watchlisted_similar_name' ? Math.min(1, row.documents_submitted || 0) + '/1' : (row.documents_submitted || 0) + '/7'} Submitted
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -544,7 +545,7 @@ export default function BalikManggagawaProcessingPage() {
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">
-              {selectedRecord?.clearance_type === 'for_assessment_country' ? 'For Assessment Country Details' : (selectedRecord?.clearance_type === 'non_compliant_country' ? 'Non Compliant Country Details' : 'Processing Details')}
+              {selectedRecord?.clearance_type === 'for_assessment_country' ? 'For Assessment Country Details' : (selectedRecord?.clearance_type === 'non_compliant_country' ? 'Non Compliant Country Details' : (selectedRecord?.clearance_type === 'watchlisted_similar_name' ? 'Watchlisted OFW Details' : 'Processing Details'))}
             </DialogTitle>
             <DialogClose asChild>
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
@@ -611,6 +612,41 @@ export default function BalikManggagawaProcessingPage() {
               {/* Documents Section */}
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
+                {selectedRecord?.clearance_type === 'watchlisted_similar_name' ? (
+                  <div className="space-y-3">
+                    {/* Passport / Supporting Document (single requirement) */}
+                    <div className="relative flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <Checkbox 
+                          checked={documentChecklist.validPassport.checked}
+                          onCheckedChange={(checked) => handleCheckboxChange('validPassport', checked as boolean)}
+                        />
+                        <div>
+                          <div className="font-medium">Passport / Supporting Document</div>
+                          <div className="text-sm text-gray-500">Attach either a copy of passport or any supporting document</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {documentChecklist.validPassport.file && (
+                          <div className="flex items-center space-x-1 text-green-600">
+                            <FileText className="h-4 w-4" />
+                            <span className="text-xs">{documentChecklist.validPassport.file.name}</span>
+                          </div>
+                        )}
+                      </div>
+                      <label className="absolute inset-0 cursor-pointer">
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('validPassport', file)
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-3">
                   {/* Personal Letter */}
                   <div className="relative flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
@@ -821,20 +857,25 @@ export default function BalikManggagawaProcessingPage() {
                     </label>
                   </div>
                 </div>
+                )}
 
                 {/* Progress Summary */}
                 <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Documents submitted:</span>
                     <span className="font-medium">
-                      {Object.values(documentChecklist).filter(doc => doc.checked).length} of 7
+                      {selectedRecord?.clearance_type === 'watchlisted_similar_name' 
+                        ? `${Object.values(documentChecklist).filter(doc => doc.checked).length >= 1 ? 1 : 0} of 1`
+                        : `${Object.values(documentChecklist).filter(doc => doc.checked).length} of 7`}
                     </span>
                   </div>
                   <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-green-600 h-2 rounded-full transition-all duration-300"
                       style={{ 
-                        width: `${(Object.values(documentChecklist).filter(doc => doc.checked).length / 7) * 100}%` 
+                        width: `${selectedRecord?.clearance_type === 'watchlisted_similar_name' 
+                          ? (Object.values(documentChecklist).filter(doc => doc.checked).length >= 1 ? 100 : 0)
+                          : (Object.values(documentChecklist).filter(doc => doc.checked).length / 7) * 100}%` 
                       }}
                     ></div>
                   </div>

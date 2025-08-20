@@ -12,6 +12,9 @@ ALTER TABLE balik_manggagawa_clearance
   ADD COLUMN IF NOT EXISTS total_deployed_ofws INTEGER,
   ADD COLUMN IF NOT EXISTS reason_blacklisting TEXT,
   ADD COLUMN IF NOT EXISTS years_with_principal INTEGER,
-  ADD COLUMN IF NOT EXISTS remarks TEXT;
+  ADD COLUMN IF NOT EXISTS remarks TEXT,
+  ADD COLUMN IF NOT EXISTS active_email_address TEXT,
+  ADD COLUMN IF NOT EXISTS active_ph_mobile_number TEXT,
+  ADD COLUMN IF NOT EXISTS evaluator TEXT;
 
 

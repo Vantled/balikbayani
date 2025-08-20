@@ -81,6 +81,8 @@ export default function BalikManggagawaClearancePage() {
   const [processingDate, setProcessingDate] = useState("")
   const [noOfMonthsYears, setNoOfMonthsYears] = useState("")
   const [dateOfDeparture, setDateOfDeparture] = useState("")
+  const [activeEmailAddress, setActiveEmailAddress] = useState("")
+  const [activePhMobileNumber, setActivePhMobileNumber] = useState("09")
   const [controlPreview, setControlPreview] = useState("")
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
   const [activeTab, setActiveTab] = useState("form1")
@@ -254,6 +256,8 @@ export default function BalikManggagawaClearancePage() {
     setProcessingDate("")
     setNoOfMonthsYears("")
     setDateOfDeparture("")
+    setActiveEmailAddress("")
+    setActivePhMobileNumber("09")
   }
 
   const openCreateModal = (typeValue: string) => {
@@ -330,6 +334,18 @@ export default function BalikManggagawaClearancePage() {
       require(newPrincipalName, 'newPrincipalName', 'Name of the New Principal')
       require(employmentDurationStart, 'employmentDurationStart', 'Employment Duration (From)')
       require(employmentDurationEnd, 'employmentDurationEnd', 'Employment Duration (To)')
+    } else if (t === 'watchlisted_similar_name') {
+      // Watchlisted OFW validations
+      if (!activeEmailAddress || !/^\S+@\S+\.\S+$/.test(activeEmailAddress)) {
+        errors.push('Valid Active E-Mail Address is required');
+        (fieldErrors as any).activeEmailAddress = 'Valid Active E-Mail Address is required'
+      }
+      const phoneDigits = (activePhMobileNumber || '').replace(/\D/g, '')
+      if (!/^09\d{9}$/.test(phoneDigits)) {
+        errors.push('Active PH Mobile Number must be 11 digits and start with 09');
+        (fieldErrors as any).activePhMobileNumber = 'Active PH Mobile Number must be 11 digits and start with 09'
+      }
+      require(dateDeparture, 'dateDeparture', 'Date of Departure (PH to Job Site)')
     }
     setValidationErrors(fieldErrors)
     return errors
@@ -376,6 +392,13 @@ export default function BalikManggagawaClearancePage() {
       return
     }
 
+    // Type-specific validation
+    const typeErrors = validateCreateForm()
+    if (typeErrors.length) {
+      toast({ title: 'Validation Error', description: typeErrors[0], variant: 'destructive' })
+      return
+    }
+
     // include extended fields (send only if filled; backend normalizes empties to null)
     const payload: any = {
       nameOfWorker: formName,
@@ -414,6 +437,9 @@ export default function BalikManggagawaClearancePage() {
     if (noOfMonthsYears) payload.noOfMonthsYears = noOfMonthsYears
     if (dateOfDeparture) payload.dateOfDeparture = dateOfDeparture
     if (remarks) payload.remarks = remarks
+    if (activeEmailAddress) payload.activeEmailAddress = activeEmailAddress
+    if (activePhMobileNumber) payload.activePhMobileNumber = activePhMobileNumber
+    if (currentUser?.full_name) payload.evaluator = currentUser.full_name
 
     const result = await createClearance(payload)
 
@@ -1050,6 +1076,67 @@ export default function BalikManggagawaClearancePage() {
                       </div>
                     </div>
                   </>
+                ) : selectedType === 'watchlisted_similar_name' ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <Label>Active E-Mail Address</Label>
+                        <Input type="email" className="mt-1" placeholder="ofw@example.com" value={activeEmailAddress} onChange={(e)=> setActiveEmailAddress(e.target.value)} />
+                        {validationErrors.activeEmailAddress && <span className="text-xs text-red-500">{validationErrors.activeEmailAddress}</span>}
+                      </div>
+                      <div>
+                        <Label>Active PH Mobile Number</Label>
+                        <div className="relative mt-1">
+                          <Input 
+                            className="text-transparent caret-black" 
+                            placeholder="09XXXXXXXXX" 
+                            value={activePhMobileNumber}
+                            inputMode="numeric"
+                            pattern="09[0-9]{9}"
+                            maxLength={11}
+                            onChange={(e)=> {
+                              const digits = (e.target.value || '').replace(/\D/g, '')
+                              let normalized = '09'
+                              if (digits.startsWith('09')) {
+                                normalized = '09' + digits.slice(2, 11)
+                              } else if (digits.startsWith('9')) {
+                                normalized = '09' + digits.slice(1, 10)
+                              } else if (digits.startsWith('0')) {
+                                normalized = '09' + digits.slice(1, 10)
+                              } else if (digits.length === 0) {
+                                normalized = '09'
+                              } else {
+                                normalized = '09' + digits.slice(0, 9)
+                              }
+                              setActivePhMobileNumber(normalized)
+                            }} 
+                          />
+                          <div className="pointer-events-none absolute inset-0 flex items-center px-3 text-sm font-normal">
+                            <span className="text-gray-900">{activePhMobileNumber}</span>
+                            <span className="text-gray-400">{'X'.repeat(Math.max(0, 11 - activePhMobileNumber.length))}</span>
+                          </div>
+                        </div>
+                        {validationErrors.activePhMobileNumber && <span className="text-xs text-red-500">{validationErrors.activePhMobileNumber}</span>}
+                      </div>
+                      
+                      <div>
+                        <Label>Date of Departure (PH to Job Site)</Label>
+                        <Input type="date" className="mt-1" value={dateDeparture} onChange={(e)=> setDateDeparture(e.target.value)} />
+                        {validationErrors.dateDeparture && <span className="text-xs text-red-500">{validationErrors.dateDeparture}</span>}
+                      </div>
+                      <div>
+                        <Label>Remarks</Label>
+                        <Textarea className="mt-1" placeholder="Remarks (optional)" value={remarks} onChange={(e)=> setRemarks(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                      <div />
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setActiveTab('form1')}>Back</Button>
+                        <Button onClick={handleCreate} className="bg-[#1976D2] text-white px-8" disabled={loading}>{loading ? 'Creating...' : 'Create'}</Button>
+                      </div>
+                    </div>
+                  </>
                 ) : selectedType === 'seafarer_position' ? (
                   <>
                     <div className="grid grid-cols-1 gap-4">
@@ -1131,7 +1218,7 @@ export default function BalikManggagawaClearancePage() {
       <Dialog open={viewOpen} onOpenChange={(open) => { setViewOpen(open); if (!open) setSelectedClearance(null) }}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
-            <DialogTitle className="text-lg font-bold">{selectedClearance ? `${(selectedClearance.clearance_type || '').replace(/_/g,' ').replace(/\b\w/g, (c) => c.toUpperCase())} Details` : 'Clearance Details'}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{selectedClearance ? `${((selectedClearance.clearance_type || '') === 'watchlisted_similar_name' ? 'watchlisted OFW' : (selectedClearance.clearance_type || '')).replace(/_/g,' ').replace(/\b\w/g, (c) => c.toUpperCase())} Details` : 'Clearance Details'}</DialogTitle>
             <DialogClose asChild>
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
             </DialogClose>

@@ -1,6 +1,7 @@
 // app/api/balik-manggagawa/clearance/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
+import AuthService from '@/lib/services/auth-service';
 import { ApiResponse } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -78,7 +79,11 @@ export async function POST(request: NextRequest) {
       remarks,
       // New template fields
       noOfMonthsYears,
-      dateOfDeparture
+      dateOfDeparture,
+      // Watchlisted OFW contact fields
+      activeEmailAddress,
+      activePhMobileNumber,
+      evaluator
     } = body;
 
     // Validate required fields
@@ -118,6 +123,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
+    // Resolve evaluator from current session (full name of logged-in staff)
+    let evaluatorFromSession: string | null = null;
+    try {
+      const token = request.cookies.get('bb_auth_token')?.value;
+      if (token) {
+        const user = await AuthService.validateSession(token);
+        if (user && (user as any).full_name) {
+          evaluatorFromSession = (user as any).full_name;
+        }
+      }
+    } catch {}
+
     // Create clearance record
     const normalize = (v: any) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) ? null : v;
     const clearance = await DatabaseService.createBalikManggagawaClearance({
@@ -143,11 +160,14 @@ export async function POST(request: NextRequest) {
       processingDate: normalize(processingDate),
       remarks: normalize(remarks),
       noOfMonthsYears: normalize(noOfMonthsYears),
-      dateOfDeparture: normalize(dateOfDeparture)
+      dateOfDeparture: normalize(dateOfDeparture),
+      activeEmailAddress: normalize(activeEmailAddress),
+      activePhMobileNumber: normalize(activePhMobileNumber),
+      evaluator: evaluatorFromSession || normalize(evaluator)
     });
 
-    // For "For Assessment Country" and "Non Compliant Country" types, also create a processing record
-    if (clearanceType === 'for_assessment_country' || clearanceType === 'non_compliant_country') {
+    // For types requiring processing, also create a processing record
+    if (clearanceType === 'for_assessment_country' || clearanceType === 'non_compliant_country' || clearanceType === 'watchlisted_similar_name') {
       try {
         await DatabaseService.createBalikManggagawaProcessing({
           nameOfWorker,

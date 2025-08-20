@@ -11,6 +11,7 @@
     "db:init": "tsx lib/init-db.ts",
     "db:reset": "tsx lib/init-db.ts --reset",
     "db:migrate": "tsx lib/init-db.ts --migrate",
+    "db:migrate-bm-clearance-extended": "tsx scripts/migrate-bm-clearance-extended.ts",
     "db:security-migrate": "tsx lib/migrate-security.ts",
     "db:role-migrate": "tsx lib/migrate-role-hierarchy.ts",
     "db:set-superadmin-password": "tsx lib/set-superadmin-password.ts",

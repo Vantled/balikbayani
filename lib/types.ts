@@ -119,6 +119,10 @@ export interface BalikManggagawaClearance {
   // New fields for template
   no_of_months_years?: string;
   date_of_departure?: Date;
+  // Contact info for Watchlisted OFW
+  active_email_address?: string;
+  active_ph_mobile_number?: string;
+  evaluator?: string;
   // Processing document fields (when linked from processing)
   personal_letter_file?: string;
   valid_passport_file?: string;

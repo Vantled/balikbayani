@@ -89,11 +89,13 @@ export async function POST(
         sex: clearance.sex,
         employer: clearance.employer,
         jobsite: clearance.destination, // map as jobsite-equivalent
+        job_site: clearance.destination,
         destination: clearance.destination,
         position: (clearance as any).position || '',
         salary: String(clearance.salary ?? ''),
         salary_currency: 'USD',
-        evaluator: '',
+        evaluator: (clearance as any).evaluator || '',
+        evaluator_name: (clearance as any).evaluator || '',
         created_date: createdDateStr,
         created_date_long: createdDateLong,
         date: createdDateStr,
@@ -136,6 +138,10 @@ export async function POST(
         processing_date: processing.iso,
         processing_date_long: processing.long,
         remarks: (clearance as any).remarks || '',
+        // Watchlisted OFW specific aliases
+        full_name_of_ofw: clearance.name_of_worker,
+        active_email_address: (clearance as any).active_email_address || '',
+        active_ph_mobile_number: (clearance as any).active_ph_mobile_number || '',
         clearance_type: clearance.clearance_type
       },
       cmdDelimiter: ['{{', '}}']
@@ -156,7 +162,9 @@ export async function POST(
       const lower = s.trim().toLowerCase()
       return lower ? lower.charAt(0).toUpperCase() + lower.slice(1) : ''
     }
-    const docName = sentenceCase(rawDocName)
+    let docName = sentenceCase(rawDocName)
+    // Preserve acronyms like OFW
+    docName = docName.replace(/\bOfw\b/g, 'OFW')
 
     const upload = await FileUploadService.uploadBuffer(
       Buffer.from(report),

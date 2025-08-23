@@ -73,7 +73,7 @@ export default function GovToGovPage() {
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
                 className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                placeholder="Search" 
+                placeholder="Search or key:value" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

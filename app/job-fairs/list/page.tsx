@@ -1,6 +1,8 @@
+// app/job-fairs/list/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
 import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,63 +12,202 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { useToast } from "@/hooks/use-toast"
+import { Search, Download, Plus, Filter } from "lucide-react"
+import { useJobFairs } from "@/hooks/use-job-fairs"
+import { useTableLastModified } from "@/hooks/use-table-last-modified"
+import JobFairModal from "@/components/job-fair-modal"
+import JobFairTable from "@/components/job-fair-table"
+import JobFairDetails from "@/components/job-fair-details"
+import JobFairFilterPanel from "@/components/job-fair-filter-panel"
+import { JobFair } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
-
-// Mock data
-const initialJobFairs = [
-  {
-    date: "2024-03-15",
-    venue: "SM City Batangas",
-    officeHead: "John Doe",
-    email: "john.doe@example.com",
-    contactNo: "09123456789"
-  },
-  {
-    date: "2024-03-20",
-    venue: "Robinsons Place Lipa",
-    officeHead: "Jane Smith",
-    email: "jane.smith@example.com",
-    contactNo: "09234567890"
-  }
-]
 
 export default function JobFairsListPage() {
   // Handle login success toast
   useLoginSuccessToast()
   
-  const { toast } = useToast()
-  const [jobFairs, setJobFairs] = useState(initialJobFairs)
-  const [search, setSearch] = useState("")
+  const {
+    jobFairs,
+    pagination,
+    loading,
+    error,
+    createJobFair,
+    updateJobFair,
+    deleteJobFair,
+    fetchJobFairs,
+    searchJobFairs
+  } = useJobFairs()
+
+  // Get last modified time for job_fairs table
+  const { lastModified: jobFairsLastModified, refresh: refreshLastModified } = useTableLastModified({ tableName: 'job_fairs' })
+
   const [modalOpen, setModalOpen] = useState(false)
-  const [formData, setFormData] = useState<any>({})
+  const [editingRecord, setEditingRecord] = useState<JobFair | null>(null)
+  const [viewingRecord, setViewingRecord] = useState<JobFair | null>(null)
+  const [search, setSearch] = useState("")
+  const [showFilter, setShowFilter] = useState(false)
+  const [panelQuery, setPanelQuery] = useState("")
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
+  const [userIsSuperadmin, setUserIsSuperadmin] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+
+  // Filter states
+  const [venueFilter, setVenueFilter] = useState("")
+  const [officeHeadFilter, setOfficeHeadFilter] = useState("")
+  const [dateWithin, setDateWithin] = useState("")
+  const [isRescheduledFilter, setIsRescheduledFilter] = useState("all")
+  const [yearFilter, setYearFilter] = useState("all")
+  const [monthFilter, setMonthFilter] = useState("all")
+  
+  // Applied filter states (for title generation)
+  const [appliedYearFilter, setAppliedYearFilter] = useState("all")
+  const [appliedMonthFilter, setAppliedMonthFilter] = useState("all")
+
+  // Parse search input for key:value filters and free-text terms
+  const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
+    const tokens = input.split(/[\s,]+/).filter(Boolean)
+    const filters: Record<string, string> = {}
+    const terms: string[] = []
+    for (const token of tokens) {
+      const match = token.match(/^([a-z_]+):(.*)$/i)
+      if (match && match[2] !== '') {
+        filters[match[1].toLowerCase()] = match[2].toLowerCase()
+      } else {
+        terms.push(token.toLowerCase())
+      }
+    }
+    return { filters, terms }
+  }
 
   const handleCreate = () => {
-    setFormData({})
+    setEditingRecord(null)
     setModalOpen(true)
   }
 
-  const handleModalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleEdit = (record: JobFair) => {
+    setEditingRecord(record)
+    setModalOpen(true)
   }
 
-  const handleModalSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setJobFairs([...jobFairs, formData])
-    setModalOpen(false)
-    toast({
-      title: "Job Fair created!",
-      description: "The new job fair has been scheduled successfully.",
-    })
+  const handleView = (record: JobFair) => {
+    setViewingRecord(record)
   }
 
-  const filteredJobFairs = jobFairs.filter(jobFair =>
-    Object.values(jobFair).some(value =>
-      String(value).toLowerCase().includes(search.toLowerCase())
-    )
-  )
+  const handleDelete = async (id: string) => {
+    await deleteJobFair(id)
+    // Refresh the list with current showDeletedOnly state
+    await fetchJobFairs(pagination.page, pagination.limit, showDeletedOnly)
+    // Add a small delay to ensure the database trigger has executed
+    setTimeout(() => {
+      refreshLastModified()
+    }, 500)
+  }
+
+  const handleModalSuccess = async () => {
+    await fetchJobFairs(pagination.page, pagination.limit, showDeletedOnly)
+    // Add a small delay to ensure the database trigger has executed
+    setTimeout(() => {
+      refreshLastModified()
+    }, 500)
+  }
+
+  // Resolve superadmin on client after mount to keep SSR markup stable
+  useEffect(() => {
+    let mounted = true
+    import('@/lib/auth').then(mod => {
+      const u = mod.getUser()
+      const isSuper = mod.isSuperadmin(u)
+      if (mounted) {
+        setUserIsSuperadmin(isSuper)
+        setCurrentUser(u)
+      }
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  // Handle search changes
+  useEffect(() => {
+    if (search.trim()) {
+      searchJobFairs(search, showDeletedOnly)
+    } else {
+      fetchJobFairs(1, pagination.limit, showDeletedOnly)
+    }
+  }, [search, showDeletedOnly])
+
+  const clearPanel = () => {
+    setVenueFilter("")
+    setOfficeHeadFilter("")
+    setDateWithin("")
+    setIsRescheduledFilter("all")
+    setYearFilter("all")
+    setMonthFilter("all")
+    setAppliedYearFilter("all")
+    setAppliedMonthFilter("all")
+    setPanelQuery("")
+  }
+
+  // Generate dynamic title based on applied filters
+  const generateTitle = () => {
+    const currentYear = new Date().getFullYear()
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ]
+
+    // Check if date range is applied (dateWithin contains a date range)
+    if (dateWithin && dateWithin.includes("|")) {
+      return "List of Job Fairs on CALABARZON"
+    }
+
+    if (appliedYearFilter !== "all" && appliedMonthFilter !== "all") {
+      const monthName = months[parseInt(appliedMonthFilter) - 1]
+      return `List of Job Fairs on CALABARZON for ${monthName} ${appliedYearFilter}`
+    } else if (appliedYearFilter !== "all") {
+      return `List of Job Fairs on CALABARZON for the Year ${appliedYearFilter}`
+    } else if (appliedMonthFilter !== "all") {
+      const monthName = months[parseInt(appliedMonthFilter) - 1]
+      return `List of Job Fairs on CALABARZON for ${monthName} ${currentYear}`
+    } else {
+      return `List of Job Fairs on CALABARZON for the Year ${currentYear}`
+    }
+  }
+
+  const handleExport = async (format: 'pdf' | 'excel') => {
+    try {
+      const exportFormat = format === 'excel' ? 'csv' : 'json';
+      const url = `/api/job-fairs/export?format=${exportFormat}&search=${encodeURIComponent(search)}&showDeletedOnly=${showDeletedOnly}`;
+      
+      if (format === 'excel') {
+        // Download CSV file
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'job-fairs.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      } else {
+        // Download JSON file
+        const response = await fetch(url);
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'job-fairs.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
@@ -74,17 +215,28 @@ export default function JobFairsListPage() {
       <main className="p-6 pt-24">
         <div>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-medium text-[#1976D2]">Job Fairs List</h2>
+            <h2 className="text-xl font-medium text-[#1976D2]">{generateTitle()}</h2>
             <div className="flex items-center gap-2 relative">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input 
                   className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                  placeholder="Search" 
+                  placeholder="Search or key:value" 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowFilter(!showFilter)}
+                >
+                  <Filter className="h-4 w-4" />
+                </Button>
               </div>
+              
+
+              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="bg-white border-gray-300 h-9">
@@ -93,78 +245,138 @@ export default function JobFairsListPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                  <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('excel')}>
+                    Export as Excel
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>
+              
+              <Button 
+                className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" 
+                onClick={handleCreate}
+                disabled={loading}
+              >
                 <Plus className="h-4 w-4 mr-2" />
-                Create
+                Add
+              </Button>
+
+              {/* Filter Panel */}
+              {showFilter && (
+                <JobFairFilterPanel 
+                  onClose={() => setShowFilter(false)} 
+                  onApply={(query) => {
+                    setPanelQuery(query)
+                    // Update applied filters for title generation
+                    setAppliedYearFilter(yearFilter)
+                    setAppliedMonthFilter(monthFilter)
+                    setShowFilter(false)
+                  }}
+                  venue={venueFilter}
+                  setVenue={setVenueFilter}
+                  officeHead={officeHeadFilter}
+                  setOfficeHead={setOfficeHeadFilter}
+                  dateWithin={dateWithin}
+                  setDateWithin={setDateWithin}
+                  isRescheduled={isRescheduledFilter}
+                  setIsRescheduled={setIsRescheduledFilter}
+                  yearFilter={yearFilter}
+                  setYearFilter={setYearFilter}
+                  monthFilter={monthFilter}
+                  setMonthFilter={setMonthFilter}
+                  onClear={clearPanel}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+
+
+
+          {/* Table */}
+          <JobFairTable
+            data={jobFairs}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onView={handleView}
+            loading={loading}
+            search={search}
+            filterQuery={panelQuery}
+            showDeletedOnly={showDeletedOnly}
+            setShowDeletedOnly={setShowDeletedOnly}
+            userIsSuperadmin={userIsSuperadmin}
+            currentUser={currentUser}
+          />
+
+          {/* Last Updated Timestamp */}
+          <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
+            <span>
+              Last Updated: {jobFairsLastModified ? jobFairsLastModified.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              }) : 'Loading...'}
+            </span>
+            <button 
+              onClick={() => refreshLastModified()} 
+              className="text-blue-600 hover:text-blue-800 underline text-xs"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="mt-4 flex justify-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchJobFairs(pagination.page - 1, pagination.limit)}
+                disabled={pagination.page <= 1 || loading}
+                className="bg-white"
+              >
+                Previous
+              </Button>
+              
+
+              
+              <Button
+                variant="outline"
+                onClick={() => fetchJobFairs(pagination.page + 1, pagination.limit)}
+                disabled={pagination.page >= pagination.totalPages || loading}
+                className="bg-white"
+              >
+                Next
               </Button>
             </div>
-          </div>
-          <div className="bg-white rounded-md border overflow-hidden">
-            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">
-                    <th className="py-3 px-4 font-medium text-center">Date</th>
-                    <th className="py-3 px-4 font-medium text-center">Venue</th>
-                    <th className="py-3 px-4 font-medium text-center">Office Head</th>
-                    <th className="py-3 px-4 font-medium text-center">For invitation letters (email)</th>
-                    <th className="py-3 px-4 font-medium text-center">Contact No.</th>
-                    <th className="py-3 px-4 font-medium text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredJobFairs.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 text-center">{row.date}</td>
-                      <td className="py-3 px-4 text-center">{row.venue}</td>
-                      <td className="py-3 px-4 text-center">{row.officeHead}</td>
-                      <td className="py-3 px-4 text-center">{row.email}</td>
-                      <td className="py-3 px-4 text-center">{row.contactNo}</td>
-                      <td className="py-3 px-4 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>View</DropdownMenuItem>
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
-                            <DropdownMenuItem>Delete</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       </main>
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Create Job Fair</DialogTitle>
-          <form onSubmit={handleModalSubmit} className="space-y-4 mt-2">
-            <input name="date" type="date" required className="w-full border rounded px-3 py-2" placeholder="Date" onChange={handleModalChange} />
-            <input name="venue" type="text" required className="w-full border rounded px-3 py-2" placeholder="Venue" onChange={handleModalChange} />
-            <input name="officeHead" type="text" required className="w-full border rounded px-3 py-2" placeholder="Office Head" onChange={handleModalChange} />
-            <input name="email" type="email" required className="w-full border rounded px-3 py-2" placeholder="Email" onChange={handleModalChange} />
-            <input name="contactNo" type="text" required className="w-full border rounded px-3 py-2" placeholder="Contact No." onChange={handleModalChange} />
-            <div className="flex justify-end gap-2 pt-2">
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button type="submit" className="bg-[#1976D2] text-white">Create</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+
+      {/* Create/Edit Modal */}
+                  <JobFairModal
+              open={modalOpen}
+              onClose={() => setModalOpen(false)}
+              initialData={editingRecord}
+              onSuccess={handleModalSuccess}
+            />
+            
+            {viewingRecord && (
+              <JobFairDetails
+                jobFair={viewingRecord}
+                onClose={() => setViewingRecord(null)}
+              />
+            )}
     </div>
   )
 } 

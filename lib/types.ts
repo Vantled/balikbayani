@@ -243,13 +243,32 @@ export interface ActionsTaken {
   no_of_records_retrieved: number;
 }
 
+export interface JobFairContact {
+  id: string;
+  job_fair_id: string;
+  contact_category: string;
+  contact_number: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface JobFairEmail {
+  id: string;
+  job_fair_id: string;
+  email_address: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface JobFair {
   id: string;
   date: Date;
   venue: string;
   office_head: string;
-  email_for_invitation: string;
-  contact_number: string;
+  is_rescheduled: boolean;
+  deleted_at?: Date | null;
+  emails?: JobFairEmail[];
+  contacts?: JobFairContact[];
   created_at: Date;
   updated_at: Date;
 }

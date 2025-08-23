@@ -1,3 +1,4 @@
+// app/job-fairs/monitoring/page.tsx
 "use client"
 
 import { useState } from "react"
@@ -10,60 +11,112 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { useToast } from "@/hooks/use-toast"
-
-// Mock data
-const initialMonitoringSummary = [
-  {
-    date: "2024-03-15",
-    venue: "SM City Batangas",
-    invitedAgencies: 10,
-    agenciesWithJfa: 8,
-    maleApplicants: 150,
-    femaleApplicants: 120,
-    totalApplicants: 270
-  },
-  {
-    date: "2024-03-20",
-    venue: "Robinsons Place Lipa",
-    invitedAgencies: 12,
-    agenciesWithJfa: 10,
-    maleApplicants: 180,
-    femaleApplicants: 150,
-    totalApplicants: 330
-  }
-]
+import { Search, Download, Plus } from "lucide-react"
+import { useJobFairMonitoring } from "@/hooks/use-job-fair-monitoring"
+import { useTableLastModified } from "@/hooks/use-table-last-modified"
+import JobFairMonitoringModal from "@/components/job-fair-monitoring-modal"
+import JobFairMonitoringTable from "@/components/job-fair-monitoring-table"
+import JobFairMonitoringDetails from "@/components/job-fair-monitoring-details"
+import { JobFairMonitoring } from "@/lib/types"
+import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
 export default function MonitoringSummaryPage() {
-  const { toast } = useToast()
-  const [monitoringSummary, setMonitoringSummary] = useState(initialMonitoringSummary)
+  // Handle login success toast
+  useLoginSuccessToast()
+  
+  const {
+    monitoringData,
+    pagination,
+    loading,
+    error,
+    createMonitoring,
+    updateMonitoring,
+    deleteMonitoring,
+    fetchMonitoring,
+    searchMonitoring
+  } = useJobFairMonitoring()
+
+  // Get last modified time for job_fair_monitoring table
+  const { lastModified: monitoringLastModified, refresh: refreshLastModified } = useTableLastModified({ tableName: 'job_fair_monitoring' })
+
   const [modalOpen, setModalOpen] = useState(false)
-  const [formData, setFormData] = useState<any>({})
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<JobFairMonitoring | null>(null)
+  const [selectedRecord, setSelectedRecord] = useState<JobFairMonitoring | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const handleCreate = () => {
-    setFormData({})
+    setEditingRecord(null)
     setModalOpen(true)
   }
 
-  const handleModalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleEdit = (record: JobFairMonitoring) => {
+    setEditingRecord(record)
+    setModalOpen(true)
   }
 
-  const handleModalSubmit = (e: React.FormEvent) => {
+  const handleView = (record: JobFairMonitoring) => {
+    setSelectedRecord(record)
+    setDetailsOpen(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    await deleteMonitoring(id)
+    refreshLastModified()
+  }
+
+  const handleModalSubmit = async (data: Omit<JobFairMonitoring, 'id' | 'created_at' | 'updated_at'>) => {
+    if (editingRecord) {
+      await updateMonitoring(editingRecord.id, data)
+    } else {
+      await createMonitoring(data)
+    }
+    refreshLastModified()
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    const totalApplicants =
-      Number(formData.maleApplicants || 0) + Number(formData.femaleApplicants || 0)
-    setMonitoringSummary([
-      ...monitoringSummary,
-      { ...formData, totalApplicants },
-    ])
-    setModalOpen(false)
-    toast({
-      title: "Monitoring record created!",
-      description: "The job fair monitoring data has been saved successfully.",
-    })
+    if (searchQuery.trim()) {
+      searchMonitoring(searchQuery)
+    } else {
+      fetchMonitoring(pagination.page, pagination.limit)
+    }
+  }
+
+  const handleExport = async (format: 'pdf' | 'excel') => {
+    try {
+      const exportFormat = format === 'excel' ? 'csv' : 'json';
+      const url = `/api/job-fair-monitoring/export?format=${exportFormat}&search=${encodeURIComponent(searchQuery)}`;
+      
+      if (format === 'excel') {
+        // Download CSV file
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'job-fair-monitoring.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      } else {
+        // Download JSON file
+        const response = await fetch(url);
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'job-fair-monitoring.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
   }
 
   return (
@@ -74,10 +127,26 @@ export default function MonitoringSummaryPage() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-[#1976D2]">Job Fair Monitoring Summary</h2>
             <div className="flex items-center gap-2 relative">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input className="pl-8 pr-10 h-9 w-[240px] bg-white" placeholder="Search" />
-              </div>
+              <form onSubmit={handleSearch} className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input 
+                className="pl-8 pr-10 h-9 w-[240px] bg-white" 
+                placeholder="Search or key:value" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+                </div>
+                <Button 
+                  type="submit" 
+                  variant="outline" 
+                  className="h-9 bg-white border-gray-300"
+                  disabled={loading}
+                >
+                  Search
+                </Button>
+              </form>
+              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="bg-white border-gray-300 h-9">
@@ -86,83 +155,100 @@ export default function MonitoringSummaryPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                  <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('excel')}>
+                    Export as Excel
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>
+              
+              <Button 
+                className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" 
+                onClick={handleCreate}
+                disabled={loading}
+              >
                 <Plus className="h-4 w-4 mr-2" />
-                Create
+                Add
               </Button>
             </div>
           </div>
-          <div className="bg-white rounded-md border overflow-hidden">
-            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">
-                    <th className="py-3 px-4 font-medium text-center">Date of Job Fair</th>
-                    <th className="py-3 px-4 font-medium text-center">Venue</th>
-                    <th className="py-3 px-4 font-medium text-center">No. of Invited Agencies</th>
-                    <th className="py-3 px-4 font-medium text-center">No. of Agencies with JFA</th>
-                    <th className="py-3 px-4 font-medium text-center">Male(Applicants)</th>
-                    <th className="py-3 px-4 font-medium text-center">Female(Applicants)</th>
-                    <th className="py-3 px-4 font-medium text-center">Total(Applicants)</th>
-                    <th className="py-3 px-4 font-medium text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {monitoringSummary.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 text-center">{row.date}</td>
-                      <td className="py-3 px-4 text-center">{row.venue}</td>
-                      <td className="py-3 px-4 text-center">{row.invitedAgencies}</td>
-                      <td className="py-3 px-4 text-center">{row.agenciesWithJfa}</td>
-                      <td className="py-3 px-4 text-center">{row.maleApplicants}</td>
-                      <td className="py-3 px-4 text-center">{row.femaleApplicants}</td>
-                      <td className="py-3 px-4 text-center">{row.totalApplicants}</td>
-                      <td className="py-3 px-4 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>View</DropdownMenuItem>
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
-                            <DropdownMenuItem>Delete</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-600 text-sm">{error}</p>
             </div>
+          )}
+
+
+
+          {/* Table */}
+          <JobFairMonitoringTable
+            data={monitoringData}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onView={handleView}
+            loading={loading}
+          />
+
+          {/* Last Updated Timestamp */}
+          <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
+            <span>
+              Last Updated: {monitoringLastModified ? monitoringLastModified.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              }) : 'Never'}
+            </span>
           </div>
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="mt-4 flex justify-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchMonitoring(pagination.page - 1, pagination.limit)}
+                disabled={pagination.page <= 1 || loading}
+                className="bg-white"
+              >
+                Previous
+              </Button>
+              
+
+              
+              <Button
+                variant="outline"
+                onClick={() => fetchMonitoring(pagination.page + 1, pagination.limit)}
+                disabled={pagination.page >= pagination.totalPages || loading}
+                className="bg-white"
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       </main>
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Create Monitoring Record</DialogTitle>
-          <form onSubmit={handleModalSubmit} className="space-y-4 mt-2">
-            <input name="date" type="date" required className="w-full border rounded px-3 py-2" placeholder="Date" onChange={handleModalChange} />
-            <input name="venue" type="text" required className="w-full border rounded px-3 py-2" placeholder="Venue" onChange={handleModalChange} />
-            <input name="invitedAgencies" type="number" min="0" required className="w-full border rounded px-3 py-2" placeholder="No. of Invited Agencies" onChange={handleModalChange} />
-            <input name="agenciesWithJfa" type="number" min="0" required className="w-full border rounded px-3 py-2" placeholder="No. of Agencies with JFA" onChange={handleModalChange} />
-            <input name="maleApplicants" type="number" min="0" required className="w-full border rounded px-3 py-2" placeholder="Male Applicants" onChange={handleModalChange} />
-            <input name="femaleApplicants" type="number" min="0" required className="w-full border rounded px-3 py-2" placeholder="Female Applicants" onChange={handleModalChange} />
-            <div className="flex justify-end gap-2 pt-2">
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button type="submit" className="bg-[#1976D2] text-white">Create</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+
+      {/* Create/Edit Modal */}
+      <JobFairMonitoringModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onSubmit={handleModalSubmit}
+        editingRecord={editingRecord}
+        loading={loading}
+      />
+
+      {/* Details Modal */}
+      <JobFairMonitoringDetails
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        record={selectedRecord}
+      />
     </div>
   )
 } 

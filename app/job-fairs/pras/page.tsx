@@ -13,6 +13,7 @@ import {
 import { Search, Download, Plus, MoreHorizontal } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
+import { useTableLastModified } from "@/hooks/use-table-last-modified"
 
 // Mock data
 const initialPraContacts = [
@@ -34,6 +35,10 @@ const initialPraContacts = [
 
 export default function PraContactsPage() {
   const { toast } = useToast()
+  
+  // Get last modified time for pra_contacts table
+  const { lastModified: praLastModified } = useTableLastModified({ tableName: 'pra_contacts' })
+  
   const [praContacts, setPraContacts] = useState(initialPraContacts)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
@@ -76,7 +81,7 @@ export default function PraContactsPage() {
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input 
                   className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                  placeholder="Search" 
+                  placeholder="Search or key:value" 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -95,7 +100,7 @@ export default function PraContactsPage() {
               </DropdownMenu>
               <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>
                 <Plus className="h-4 w-4 mr-2" />
-                Create
+                Add
               </Button>
             </div>
           </div>
@@ -141,6 +146,20 @@ export default function PraContactsPage() {
               </table>
             </div>
           </div>
+
+          {/* Last Updated Timestamp */}
+          <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
+            <span>
+              Last Updated: {praLastModified ? praLastModified.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              }) : 'Never'}
+            </span>
+          </div>
         </div>
       </main>
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -156,7 +175,7 @@ export default function PraContactsPage() {
               <DialogClose asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </DialogClose>
-              <Button type="submit" className="bg-[#1976D2] text-white">Create</Button>
+                              <Button type="submit" className="bg-[#1976D2] text-white">Add</Button>
             </div>
           </form>
         </DialogContent>

@@ -8,6 +8,8 @@ import {
   GovToGovApplication,
   InformationSheetRecord,
   JobFair,
+  JobFairContact,
+  JobFairEmail,
   PesoContact,
   PraContact,
   JobFairMonitoring,
@@ -906,25 +908,147 @@ export class DatabaseService {
   }
 
   // Job Fairs
-  static async createJobFair(jobFairData: Omit<JobFair, 'id' | 'created_at' | 'updated_at'>): Promise<JobFair> {
-    const { rows } = await db.query(
-      'INSERT INTO job_fairs (date, venue, office_head, email_for_invitation, contact_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [jobFairData.date, jobFairData.venue, jobFairData.office_head, jobFairData.email_for_invitation, jobFairData.contact_number]
-    );
-    return rows[0];
+  static async createJobFair(jobFairData: Omit<JobFair, 'id' | 'created_at' | 'updated_at' | 'contacts' | 'emails' | 'is_rescheduled'> & { contacts: Omit<JobFairContact, 'id' | 'job_fair_id' | 'created_at' | 'updated_at'>[], emails: Omit<JobFairEmail, 'id' | 'job_fair_id' | 'created_at' | 'updated_at'>[] }): Promise<JobFair | null> {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Insert job fair - handle case where is_rescheduled column might not exist yet
+      let jobFairRows: any;
+      try {
+        const result = await client.query(
+          'INSERT INTO job_fairs (date, venue, office_head, is_rescheduled) VALUES ($1, $2, $3, $4) RETURNING *',
+          [jobFairData.date, jobFairData.venue, jobFairData.office_head, false]
+        );
+        jobFairRows = result;
+      } catch (error: any) {
+        // If is_rescheduled column doesn't exist, try without it
+        if (error.message && error.message.includes('is_rescheduled')) {
+          const result = await client.query(
+            'INSERT INTO job_fairs (date, venue, office_head) VALUES ($1, $2, $3) RETURNING *',
+            [jobFairData.date, jobFairData.venue, jobFairData.office_head]
+          );
+          jobFairRows = result;
+        } else {
+          throw error;
+        }
+      }
+      
+      const jobFair = jobFairRows.rows[0];
+      
+      // Insert emails if provided
+      if (jobFairData.emails && jobFairData.emails.length > 0) {
+        for (const email of jobFairData.emails) {
+          await client.query(
+            'INSERT INTO job_fair_emails (job_fair_id, email_address) VALUES ($1, $2)',
+            [jobFair.id, email.email_address]
+          );
+        }
+      }
+      
+      // Insert contacts if provided
+      if (jobFairData.contacts && jobFairData.contacts.length > 0) {
+        for (const contact of jobFairData.contacts) {
+          await client.query(
+            'INSERT INTO job_fair_contacts (job_fair_id, contact_category, contact_number) VALUES ($1, $2, $3)',
+            [jobFair.id, contact.contact_category, contact.contact_number]
+          );
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      // Return job fair with contacts
+      return await this.getJobFairById(jobFair.id);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  static async getJobFairs(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFair>> {
-    const { rows } = await db.query(
-      'SELECT * FROM job_fairs ORDER BY date DESC LIMIT $1 OFFSET $2',
-      [pagination.limit, (pagination.page - 1) * pagination.limit]
-    );
+  static async getJobFairs(pagination: PaginationOptions & { search?: string; showDeletedOnly?: boolean } = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFair>> {
+    let query = 'SELECT * FROM job_fairs';
+    let countQuery = 'SELECT COUNT(*) FROM job_fairs';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM job_fairs');
+    // Handle soft delete filtering
+    let whereConditions: string[] = [];
+    
+    if (pagination.showDeletedOnly) {
+      whereConditions.push(`deleted_at IS NOT NULL`);
+    } else {
+      whereConditions.push(`deleted_at IS NULL`);
+    }
+
+    if (pagination.search && pagination.search.trim()) {
+      whereConditions.push(`(venue ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex})`);
+      params.push(`%${pagination.search.trim()}%`);
+      paramIndex++;
+    }
+
+    if (whereConditions.length > 0) {
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+      query += ` ${whereClause}`;
+      countQuery += ` ${whereClause}`;
+    }
+
+    query += ` ORDER BY date DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
+    // Get contacts and emails for all job fairs
+    const jobFairIds = rows.map(row => row.id);
+    let contacts: any[] = [];
+    let emails: any[] = [];
+    if (jobFairIds.length > 0) {
+      const placeholders = jobFairIds.map((_, index) => `$${index + 1}`).join(',');
+      const { rows: contactRows } = await db.query(
+        `SELECT * FROM job_fair_contacts WHERE job_fair_id IN (${placeholders}) ORDER BY job_fair_id, created_at ASC`,
+        jobFairIds
+      );
+      contacts = contactRows;
+      
+      const { rows: emailRows } = await db.query(
+        `SELECT * FROM job_fair_emails WHERE job_fair_id IN (${placeholders}) ORDER BY job_fair_id, created_at ASC`,
+        jobFairIds
+      );
+      emails = emailRows;
+    }
+
+    // Group contacts by job fair id
+    const contactsByJobFairId = contacts.reduce((acc, contact) => {
+      if (!acc[contact.job_fair_id]) {
+        acc[contact.job_fair_id] = [];
+      }
+      acc[contact.job_fair_id].push(contact);
+      return acc;
+    }, {});
+
+    // Group emails by job fair id
+    const emailsByJobFairId = emails.reduce((acc, email) => {
+      if (!acc[email.job_fair_id]) {
+        acc[email.job_fair_id] = [];
+      }
+      acc[email.job_fair_id].push(email);
+      return acc;
+    }, {});
+
+    // Add contacts and emails to job fairs and ensure is_rescheduled field exists
+    const jobFairsWithContacts = rows.map(jobFair => ({
+      ...jobFair,
+      is_rescheduled: jobFair.is_rescheduled || false, // Default to false if column doesn't exist
+      contacts: contactsByJobFairId[jobFair.id] || [],
+      emails: emailsByJobFairId[jobFair.id] || []
+    }));
+
     return {
-      data: rows,
+      data: jobFairsWithContacts,
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -932,6 +1056,108 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async getJobFairById(id: string): Promise<JobFair | null> {
+    const { rows } = await db.query('SELECT * FROM job_fairs WHERE id = $1', [id]);
+    if (!rows[0]) return null;
+    
+    // Get contacts for this job fair
+    const { rows: contactRows } = await db.query(
+      'SELECT * FROM job_fair_contacts WHERE job_fair_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    
+    // Get emails for this job fair
+    const { rows: emailRows } = await db.query(
+      'SELECT * FROM job_fair_emails WHERE job_fair_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    
+    return {
+      ...rows[0],
+      is_rescheduled: rows[0].is_rescheduled || false, // Default to false if column doesn't exist
+      contacts: contactRows,
+      emails: emailRows
+    };
+  }
+
+  static async updateJobFair(id: string, jobFairData: Omit<JobFair, 'id' | 'created_at' | 'updated_at' | 'contacts' | 'emails' | 'is_rescheduled'> & { contacts: Omit<JobFairContact, 'id' | 'job_fair_id' | 'created_at' | 'updated_at'>[], emails: Omit<JobFairEmail, 'id' | 'job_fair_id' | 'created_at' | 'updated_at'>[] }): Promise<JobFair | null> {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Get the original job fair to check if date changed
+      const { rows: originalJobFair } = await client.query('SELECT date FROM job_fairs WHERE id = $1', [id]);
+      
+      // Check if the date has changed (indicating rescheduling)
+      const isRescheduled = originalJobFair[0] && originalJobFair[0].date.getTime() !== new Date(jobFairData.date).getTime();
+      
+      // Update job fair - handle case where is_rescheduled column might not exist yet
+      let rows;
+      try {
+        const result = await client.query(
+          'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, is_rescheduled = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+          [jobFairData.date, jobFairData.venue, jobFairData.office_head, isRescheduled, id]
+        );
+        rows = result.rows;
+      } catch (error: any) {
+        // If is_rescheduled column doesn't exist, try without it
+        if (error.message && error.message.includes('is_rescheduled')) {
+          const result = await client.query(
+            'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
+            [jobFairData.date, jobFairData.venue, jobFairData.office_head, id]
+          );
+          rows = result.rows;
+        } else {
+          throw error;
+        }
+      }
+      
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      
+      // Delete existing emails and contacts
+      await client.query('DELETE FROM job_fair_emails WHERE job_fair_id = $1', [id]);
+      await client.query('DELETE FROM job_fair_contacts WHERE job_fair_id = $1', [id]);
+      
+      // Insert new emails if provided
+      if (jobFairData.emails && jobFairData.emails.length > 0) {
+        for (const email of jobFairData.emails) {
+          await client.query(
+            'INSERT INTO job_fair_emails (job_fair_id, email_address) VALUES ($1, $2)',
+            [id, email.email_address]
+          );
+        }
+      }
+      
+      // Insert new contacts if provided
+      if (jobFairData.contacts && jobFairData.contacts.length > 0) {
+        for (const contact of jobFairData.contacts) {
+          await client.query(
+            'INSERT INTO job_fair_contacts (job_fair_id, contact_category, contact_number) VALUES ($1, $2, $3)',
+            [id, contact.contact_category, contact.contact_number]
+          );
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      // Return updated job fair with contacts
+      return await this.getJobFairById(id);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  static async deleteJobFair(id: string): Promise<JobFair | null> {
+    const { rows } = await db.query('UPDATE job_fairs SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
   }
 
   // PESO Contacts
@@ -1001,13 +1227,25 @@ export class DatabaseService {
     return rows[0];
   }
 
-  static async getJobFairMonitoring(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFairMonitoring>> {
-    const { rows } = await db.query(
-      'SELECT * FROM job_fair_monitoring ORDER BY date_of_job_fair DESC LIMIT $1 OFFSET $2',
-      [pagination.limit, (pagination.page - 1) * pagination.limit]
-    );
+  static async getJobFairMonitoring(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFairMonitoring>> {
+    let query = 'SELECT * FROM job_fair_monitoring';
+    let countQuery = 'SELECT COUNT(*) FROM job_fair_monitoring';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM job_fair_monitoring');
+    if (pagination.search && pagination.search.trim()) {
+      const searchCondition = `WHERE venue ILIKE $${paramIndex}`;
+      query += ` ${searchCondition}`;
+      countQuery += ` ${searchCondition}`;
+      params.push(`%${pagination.search.trim()}%`);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY date_of_job_fair DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
     return {
@@ -1019,6 +1257,24 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async getJobFairMonitoringById(id: string): Promise<JobFairMonitoring | null> {
+    const { rows } = await db.query('SELECT * FROM job_fair_monitoring WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  static async updateJobFairMonitoring(id: string, monitoringData: Omit<JobFairMonitoring, 'id' | 'created_at' | 'updated_at'>): Promise<JobFairMonitoring | null> {
+    const { rows } = await db.query(
+      'UPDATE job_fair_monitoring SET date_of_job_fair = $1, venue = $2, no_of_invited_agencies = $3, no_of_agencies_with_jfa = $4, male_applicants = $5, female_applicants = $6, total_applicants = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
+      [monitoringData.date_of_job_fair, monitoringData.venue, monitoringData.no_of_invited_agencies, monitoringData.no_of_agencies_with_jfa, monitoringData.male_applicants, monitoringData.female_applicants, monitoringData.total_applicants, id]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteJobFairMonitoring(id: string): Promise<JobFairMonitoring | null> {
+    const { rows } = await db.query('DELETE FROM job_fair_monitoring WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
   }
 
   // Documents
@@ -1216,5 +1472,21 @@ export class DatabaseService {
     });
 
     return timelineData;
+  }
+
+  // Get last modified time for a table
+  static async getTableLastModified(tableName: string): Promise<Date | null> {
+    try {
+      console.log(`DatabaseService: Getting last modified for table ${tableName}`);
+      const { rows } = await db.query(
+        'SELECT last_modified_at FROM table_last_modified WHERE table_name = $1',
+        [tableName]
+      );
+      console.log(`DatabaseService: Found ${rows.length} rows for ${tableName}:`, rows[0]);
+      return rows[0]?.last_modified_at || null;
+    } catch (error) {
+      console.error(`Error getting last modified time for table ${tableName}:`, error);
+      return null;
+    }
   }
 }

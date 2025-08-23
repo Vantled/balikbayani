@@ -197,7 +197,26 @@ CREATE TABLE job_fairs (
     date DATE NOT NULL,
     venue VARCHAR(255) NOT NULL,
     office_head VARCHAR(255) NOT NULL,
-    email_for_invitation VARCHAR(255) NOT NULL,
+    is_rescheduled BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Job Fair Email Addresses (for multiple email addresses)
+CREATE TABLE job_fair_emails (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_fair_id UUID NOT NULL REFERENCES job_fairs(id) ON DELETE CASCADE,
+    email_address VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Job Fair Contact Numbers (for multiple contact numbers with categories)
+CREATE TABLE job_fair_contacts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_fair_id UUID NOT NULL REFERENCES job_fairs(id) ON DELETE CASCADE,
+    contact_category VARCHAR(50) NOT NULL, -- 'Cellphone', 'Phone', 'Fax', etc.
     contact_number VARCHAR(20) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

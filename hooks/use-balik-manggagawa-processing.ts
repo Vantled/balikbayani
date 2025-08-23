@@ -108,7 +108,7 @@ export function useBalikManggagawaProcessing() {
 		}
 	}
 
-	useEffect(() => { fetchRecords() }, [])
+	useEffect(() => { fetchRecords(1, 10) }, [])
 
 	return { records, loading, error, pagination, fetchRecords, createRecord, updateRecord, deleteRecord, getProcessingById }
 }

@@ -33,6 +33,14 @@ export async function GET(request: NextRequest) {
       show_deleted_only: showDeletedOnly
     });
 
+    console.log('Clearance API Response:', {
+      total: clearances.pagination.total,
+      totalPages: clearances.pagination.totalPages,
+      page: clearances.pagination.page,
+      limit: clearances.pagination.limit,
+      dataLength: clearances.data.length
+    });
+
     const response: ApiResponse = {
       success: true,
       data: clearances

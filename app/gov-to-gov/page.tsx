@@ -62,10 +62,10 @@ export default function GovToGovPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
+    <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
       {/* Main Content */}
-      <main className="p-6 pt-24">
+      <main className="p-6 pt-24 flex-1">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-medium text-[#1976D2]">Government to Government Monitoring Table</h2>
           <div className="flex items-center gap-2 relative">
@@ -96,8 +96,8 @@ export default function GovToGovPage() {
             </Button>
           </div>
         </div>
-        <div className="bg-white rounded-md border overflow-hidden">
-          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
+          <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">

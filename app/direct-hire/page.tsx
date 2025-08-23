@@ -42,11 +42,11 @@ export default function DirectHirePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EEF5FD]">
+    <div className="bg-[#EEF5FD] flex flex-col">
       <Header />
 
       {/* Main Content */}
-      <main className="p-6 pt-24">
+      <main className="p-6 pt-24 flex-1">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-medium text-[#1976D2]">Direct Hire Monitoring Table</h2>
 

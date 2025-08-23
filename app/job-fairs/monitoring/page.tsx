@@ -120,9 +120,9 @@ export default function MonitoringSummaryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
+    <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
-      <main className="p-6 pt-24">
+      <main className="p-6 pt-24 flex-1">
         <div>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-[#1976D2]">Job Fair Monitoring Summary</h2>
@@ -184,14 +184,124 @@ export default function MonitoringSummaryPage() {
 
 
 
+          {/* Pagination Controls */}
+          {pagination.total > 0 && (
+            <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+              <div className="flex items-center gap-4">
+                <span>
+                  Page {pagination.page} of {pagination.totalPages} ({pagination.total} total records)
+                </span>
+
+              </div>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const pages = [];
+                  const totalPages = pagination.totalPages;
+                  const currentPage = pagination.page;
+                  
+                  if (totalPages <= 7) {
+                    // If 7 or fewer pages, show all pages
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(
+                        <Button
+                          key={i}
+                          variant={i === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => fetchMonitoring(i, pagination.limit)}
+                          className="min-w-[40px] h-8"
+                        >
+                          {i}
+                        </Button>
+                      );
+                    }
+                  } else {
+                    // Dynamic pagination: show 5 pages around current page
+                    let startPage = Math.max(1, currentPage - 2);
+                    let endPage = Math.min(totalPages, startPage + 4);
+                    
+                    // Adjust if we're near the end
+                    if (endPage - startPage < 4) {
+                      startPage = Math.max(1, endPage - 4);
+                    }
+                    
+                    // Always show first page if not in range
+                    if (startPage > 1) {
+                      pages.push(
+                        <Button
+                          key={1}
+                          variant={1 === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => fetchMonitoring(1, pagination.limit)}
+                          className="min-w-[40px] h-8"
+                        >
+                          1
+                        </Button>
+                      );
+                      
+                      if (startPage > 2) {
+                        pages.push(
+                          <span key="ellipses-start" className="px-2 text-gray-500">
+                            ...
+                          </span>
+                        );
+                      }
+                    }
+                    
+                    // Show the 5 pages around current page
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <Button
+                          key={i}
+                          variant={i === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => fetchMonitoring(i, pagination.limit)}
+                          className="min-w-[40px] h-8"
+                        >
+                          {i}
+                        </Button>
+                      );
+                    }
+                    
+                    // Always show last page if not in range
+                    if (endPage < totalPages) {
+                      if (endPage < totalPages - 1) {
+                        pages.push(
+                          <span key="ellipses-end" className="px-2 text-gray-500">
+                            ...
+                          </span>
+                        );
+                      }
+                      
+                      pages.push(
+                        <Button
+                          key={totalPages}
+                          variant={totalPages === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => fetchMonitoring(totalPages, pagination.limit)}
+                          className="min-w-[40px] h-8"
+                        >
+                          {totalPages}
+                        </Button>
+                      );
+                    }
+                  }
+                  
+                  return pages;
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Table */}
-          <JobFairMonitoringTable
-            data={monitoringData}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onView={handleView}
-            loading={loading}
-          />
+          <div className="bg-white rounded-md border overflow-hidden">
+            <JobFairMonitoringTable
+              data={monitoringData}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onView={handleView}
+              loading={loading}
+            />
+          </div>
 
           {/* Last Updated Timestamp */}
           <div className="mt-4 flex justify-between items-center text-sm text-gray-500">
@@ -206,31 +316,6 @@ export default function MonitoringSummaryPage() {
               }) : 'Never'}
             </span>
           </div>
-
-          {/* Pagination Controls */}
-          {pagination.totalPages > 1 && (
-            <div className="mt-4 flex justify-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => fetchMonitoring(pagination.page - 1, pagination.limit)}
-                disabled={pagination.page <= 1 || loading}
-                className="bg-white"
-              >
-                Previous
-              </Button>
-              
-
-              
-              <Button
-                variant="outline"
-                onClick={() => fetchMonitoring(pagination.page + 1, pagination.limit)}
-                disabled={pagination.page >= pagination.totalPages || loading}
-                className="bg-white"
-              >
-                Next
-              </Button>
-            </div>
-          )}
         </div>
       </main>
 

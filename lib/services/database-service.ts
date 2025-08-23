@@ -454,11 +454,51 @@ export class DatabaseService {
     }
 
     // Only show clearances that are completed (have documents_completed = true) or don't have processing records
-    query += ` AND (p.documents_completed = true OR p.documents_completed IS NULL)`;
+    // Temporarily commented out to debug pagination
+    // query += ` AND (p.documents_completed = true OR p.documents_completed IS NULL)`;
 
-    // Get total count
-    const countQuery = query.replace(/SELECT.*FROM/, 'SELECT COUNT(*) FROM');
-    const { rows: countRows } = await db.query(countQuery, params);
+    // Get total count - use a simpler count query
+    let countQuery = `SELECT COUNT(*) FROM balik_manggagawa_clearance c WHERE 1=1`;
+    const countParams: any[] = [];
+    let countParamIndex = 1;
+
+    // Handle deleted records logic for count
+    if (filters.show_deleted_only) {
+      countQuery += ' AND c.deleted_at IS NOT NULL';
+    } else if (!filters.include_deleted) {
+      countQuery += ' AND c.deleted_at IS NULL';
+    }
+
+    if (filters.search) {
+      countQuery += ` AND (c.name_of_worker ILIKE $${countParamIndex} OR c.control_number ILIKE $${countParamIndex} OR c.employer ILIKE $${countParamIndex} OR c.destination ILIKE $${countParamIndex})`;
+      countParams.push(`%${filters.search}%`);
+      countParamIndex++;
+    }
+
+    if (filters.clearanceType) {
+      const types = String(filters.clearanceType).split(',').filter(Boolean)
+      if (types.length > 0) {
+        countQuery += ` AND c.clearance_type = ANY($${countParamIndex}::text[])`;
+        countParams.push(types);
+        countParamIndex++;
+      }
+    }
+
+    if (filters.sex) {
+      const sexes = String(filters.sex).split(',').filter(Boolean)
+      if (sexes.length > 0) {
+        countQuery += ` AND c.sex = ANY($${countParamIndex}::text[])`;
+        countParams.push(sexes);
+        countParamIndex++;
+      }
+    }
+
+    if (filters.dateFrom && filters.dateTo) {
+      countQuery += ` AND c.created_at::date BETWEEN $${countParamIndex} AND $${countParamIndex + 1}`;
+      countParams.push(filters.dateFrom, filters.dateTo);
+      countParamIndex += 2;
+    }
+    const { rows: countRows } = await db.query(countQuery, countParams);
     const total = parseInt(countRows[0].count);
 
     // Add pagination and ordering
@@ -1169,13 +1209,73 @@ export class DatabaseService {
     return rows[0];
   }
 
-  static async getPesoContacts(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<PesoContact>> {
-    const { rows } = await db.query(
-      'SELECT * FROM peso_contacts ORDER BY province ASC LIMIT $1 OFFSET $2',
-      [pagination.limit, (pagination.page - 1) * pagination.limit]
-    );
+  static async getPesoContacts(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 10 }): Promise<PaginatedResponse<PesoContact>> {
+    let query = 'SELECT * FROM peso_contacts';
+    let countQuery = 'SELECT COUNT(*) FROM peso_contacts';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM peso_contacts');
+    if (pagination.search && pagination.search.trim()) {
+      // Parse search for key:value filters
+      const searchTokens = pagination.search.split(/[\s,]+/).filter(Boolean);
+      const conditions: string[] = [];
+      
+      for (const token of searchTokens) {
+        const match = token.match(/^([a-z_]+):(.*)$/i);
+        if (match && match[2] !== '') {
+          // Key:value filter
+          const key = match[1].toLowerCase();
+          const value = match[2].toLowerCase();
+          
+          switch (key) {
+            case 'province':
+              conditions.push(`province ILIKE $${paramIndex}`);
+              params.push(`%${value}%`);
+              paramIndex++;
+              break;
+            case 'peso_office':
+              conditions.push(`peso_office ILIKE $${paramIndex}`);
+              params.push(`%${value}%`);
+              paramIndex++;
+              break;
+            case 'office_head':
+              conditions.push(`office_head ILIKE $${paramIndex}`);
+              params.push(`%${value}%`);
+              paramIndex++;
+              break;
+            case 'email':
+              conditions.push(`email ILIKE $${paramIndex}`);
+              params.push(`%${value}%`);
+              paramIndex++;
+              break;
+            case 'contact_number':
+              conditions.push(`contact_number ILIKE $${paramIndex}`);
+              params.push(`%${value}%`);
+              paramIndex++;
+              break;
+          }
+        } else {
+          // Free text search across all fields
+          conditions.push(`(province ILIKE $${paramIndex} OR peso_office ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR contact_number ILIKE $${paramIndex})`);
+          params.push(`%${token.toLowerCase()}%`);
+          paramIndex++;
+        }
+      }
+      
+      if (conditions.length > 0) {
+        const searchCondition = `WHERE ${conditions.join(' AND ')}`;
+        query += ` ${searchCondition}`;
+        countQuery += ` ${searchCondition}`;
+      }
+    }
+
+    query += ` ORDER BY province ASC, peso_office ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    const limitParam = pagination.limit;
+    const offsetParam = (pagination.page - 1) * pagination.limit;
+    params.push(limitParam, offsetParam);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
     return {
@@ -1187,6 +1287,44 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async getPesoContactById(id: string): Promise<PesoContact | null> {
+    const { rows } = await db.query('SELECT * FROM peso_contacts WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  static async updatePesoContact(id: string, contactData: Partial<PesoContact>): Promise<PesoContact | null> {
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    // Build dynamic query based on provided fields
+    if (contactData.province !== undefined) { fields.push(`province = $${paramCount++}`); values.push(contactData.province); }
+    if (contactData.peso_office !== undefined) { fields.push(`peso_office = $${paramCount++}`); values.push(contactData.peso_office); }
+    if (contactData.office_head !== undefined) { fields.push(`office_head = $${paramCount++}`); values.push(contactData.office_head); }
+    if (contactData.email !== undefined) { fields.push(`email = $${paramCount++}`); values.push(contactData.email); }
+    if (contactData.contact_number !== undefined) { fields.push(`contact_number = $${paramCount++}`); values.push(contactData.contact_number); }
+
+    if (fields.length === 0) { return null; }
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(id);
+
+    const query = `
+      UPDATE peso_contacts 
+      SET ${fields.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `;
+
+    const { rows } = await db.query(query, values);
+    return rows[0] || null;
+  }
+
+  static async deletePesoContact(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('DELETE FROM peso_contacts WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
   }
 
   // PRA Contacts
@@ -1198,13 +1336,25 @@ export class DatabaseService {
     return rows[0];
   }
 
-  static async getPraContacts(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<PraContact>> {
-    const { rows } = await db.query(
-      'SELECT * FROM pra_contacts ORDER BY name_of_pras ASC LIMIT $1 OFFSET $2',
-      [pagination.limit, (pagination.page - 1) * pagination.limit]
-    );
+  static async getPraContacts(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 10 }): Promise<PaginatedResponse<PraContact>> {
+    let query = 'SELECT * FROM pra_contacts';
+    let countQuery = 'SELECT COUNT(*) FROM pra_contacts';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM pra_contacts');
+    if (pagination.search && pagination.search.trim()) {
+      const searchCondition = `WHERE name_of_pras ILIKE $${paramIndex} OR pra_contact_person ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex} OR email ILIKE $${paramIndex}`;
+      query += ` ${searchCondition}`;
+      countQuery += ` ${searchCondition}`;
+      params.push(`%${pagination.search.trim()}%`);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY name_of_pras ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
     return {
@@ -1216,6 +1366,19 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async updatePraContact(id: string, contactData: Omit<PraContact, 'id' | 'created_at' | 'updated_at'>): Promise<PraContact | null> {
+    const { rows } = await db.query(
+      'UPDATE pra_contacts SET name_of_pras = $1, pra_contact_person = $2, office_head = $3, email = $4, contact_number = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
+      [contactData.name_of_pras, contactData.pra_contact_person, contactData.office_head, contactData.email, contactData.contact_number, id]
+    );
+    return rows[0] || null;
+  }
+
+  static async deletePraContact(id: string): Promise<PraContact | null> {
+    const { rows } = await db.query('DELETE FROM pra_contacts WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
   }
 
   // Job Fair Monitoring

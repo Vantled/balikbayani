@@ -214,7 +214,7 @@ export default function InformationSheetPage() {
   return (
     <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
       <Header />
-      <main className="px-6 pt-24">
+      <main className="px-6 pt-24 flex-1">
         <div>
           <Tabs value={tab} onValueChange={setTab} className="w-full">
             <TabsList className="w-full flex mb-6">
@@ -273,8 +273,8 @@ export default function InformationSheetPage() {
                 </div>
               </div>
               {/* Table */}
-              <div className="bg-white rounded-md border overflow-hidden">
-                <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+                              <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
+                  <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">
@@ -321,7 +321,7 @@ export default function InformationSheetPage() {
                 <label className="text-sm font-medium text-gray-700">Month:</label>
                 <input type="month" className="border rounded px-2 py-1" value={summaryMonth} onChange={e => setSummaryMonth(e.target.value)} />
               </div>
-              <div className="bg-white rounded-md border overflow-x-auto max-h-[70vh] overflow-y-auto">
+                                                           <div className="bg-white rounded-md border overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
                 <table className="w-full min-w-[900px] text-xs">
                   <thead>
                     <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">

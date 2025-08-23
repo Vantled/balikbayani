@@ -36,6 +36,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     applications, 
     loading, 
     error, 
+    pagination,
     createApplication, 
     deleteApplication,
     fetchApplications 
@@ -466,7 +467,115 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 
   return (
     <>
-      <div className="bg-white rounded-md border overflow-hidden">
+      {/* Pagination Controls */}
+      {pagination.total > 0 && (
+        <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+          <div className="flex items-center gap-4">
+            <span>
+              Page {pagination.page} of {pagination.totalPages} ({pagination.total} total applications)
+            </span>
+
+          </div>
+          <div className="flex items-center gap-1">
+            {(() => {
+              const pages = [];
+              const totalPages = pagination.totalPages;
+              const currentPage = pagination.page;
+              
+              if (totalPages <= 7) {
+                // If 7 or fewer pages, show all pages
+                for (let i = 1; i <= totalPages; i++) {
+                  pages.push(
+                    <Button
+                      key={i}
+                      variant={i === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => fetchApplications(search, i, showDeletedOnly)}
+                      className="min-w-[40px] h-8"
+                    >
+                      {i}
+                    </Button>
+                  );
+                }
+              } else {
+                // Dynamic pagination: show 5 pages around current page
+                let startPage = Math.max(1, currentPage - 2);
+                let endPage = Math.min(totalPages, startPage + 4);
+                
+                // Adjust if we're near the end
+                if (endPage - startPage < 4) {
+                  startPage = Math.max(1, endPage - 4);
+                }
+                
+                // Always show first page if not in range
+                if (startPage > 1) {
+                  pages.push(
+                    <Button
+                      key={1}
+                      variant={1 === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => fetchApplications(search, 1, showDeletedOnly)}
+                      className="min-w-[40px] h-8"
+                    >
+                      1
+                    </Button>
+                  );
+                  
+                  if (startPage > 2) {
+                    pages.push(
+                      <span key="ellipses-start" className="px-2 text-gray-500">
+                        ...
+                      </span>
+                    );
+                  }
+                }
+                
+                // Show the 5 pages around current page
+                for (let i = startPage; i <= endPage; i++) {
+                  pages.push(
+                    <Button
+                      key={i}
+                      variant={i === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => fetchApplications(search, i, showDeletedOnly)}
+                      className="min-w-[40px] h-8"
+                    >
+                      {i}
+                    </Button>
+                  );
+                }
+                
+                // Always show last page if not in range
+                if (endPage < totalPages) {
+                  if (endPage < totalPages - 1) {
+                    pages.push(
+                      <span key="ellipses-end" className="px-2 text-gray-500">
+                        ...
+                      </span>
+                    );
+                  }
+                  
+                  pages.push(
+                    <Button
+                      key={totalPages}
+                      variant={totalPages === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => fetchApplications(search, totalPages, showDeletedOnly)}
+                      className="min-w-[40px] h-8"
+                    >
+                      {totalPages}
+                    </Button>
+                  );
+                }
+              }
+              
+              return pages;
+            })()}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
         {/* Superadmin controls */}
         <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
           <label className="flex items-center gap-2 text-xs text-gray-700">
@@ -510,7 +619,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             </label>
           )}
         </div>
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+
+                  <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-[#1976D2] text-white sticky top-0 z-10 bg-[#1976D2]">
@@ -645,7 +755,6 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             </tbody>
           </table>
         </div>
-      </div>
       {/* Applicant Details Modal */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
@@ -1283,6 +1392,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </>
   )
 }

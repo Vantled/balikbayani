@@ -118,17 +118,7 @@ export default function BalikManggagawaClearancePage() {
     getClearanceById
   } = useBalikManggagawaClearance()
 
-  // Initial load
-  useEffect(() => {
-    fetchClearances({
-      page: 1,
-      limit: 10,
-      search,
-      ...filters,
-      includeDeleted: showDeletedOnly,
-      showDeletedOnly: showDeletedOnly
-    })
-  }, [])
+
 
   // Get current user
   useEffect(() => {
@@ -461,9 +451,9 @@ export default function BalikManggagawaClearancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
+    <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
-      <main className="p-6 pt-24">
+      <main className="p-6 pt-24 flex-1">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-medium text-[#1976D2]">Balik Manggagawa - Clearance</h2>
           <div className="flex items-center gap-2 relative">
@@ -622,8 +612,128 @@ export default function BalikManggagawaClearancePage() {
             )}
           </div>
         </div>
+
+        {/* Pagination Controls */}
+        <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+            <div className="flex items-center gap-4">
+              <span>
+                Page {pagination.page} of {pagination.totalPages} ({pagination.total} total clearances)
+              </span>
+
+            </div>
+            <div className="flex items-center gap-1">
+              {(() => {
+                const pages = [];
+                const totalPages = pagination.totalPages;
+                const currentPage = pagination.page;
+                
+                if (totalPages <= 7) {
+                  // If 7 or fewer pages, show all pages
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(
+                      <Button
+                        key={i}
+                        variant={i === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchClearances({ ...filters, page: i, limit: pagination.limit, includeDeleted: showDeletedOnly, showDeletedOnly })}
+                        className="min-w-[40px] h-8"
+                      >
+                        {i}
+                      </Button>
+                    );
+                  }
+                } else if (totalPages === 0) {
+                  // If no pages, show at least page 1
+                  pages.push(
+                    <Button
+                      key={1}
+                      variant="default"
+                      size="sm"
+                      className="min-w-[40px] h-8"
+                      disabled
+                    >
+                      1
+                    </Button>
+                  );
+                } else {
+                  // Dynamic pagination: show 5 pages around current page
+                  let startPage = Math.max(1, currentPage - 2);
+                  let endPage = Math.min(totalPages, startPage + 4);
+                  
+                  // Adjust if we're near the end
+                  if (endPage - startPage < 4) {
+                    startPage = Math.max(1, endPage - 4);
+                  }
+                  
+                  // Always show first page if not in range
+                  if (startPage > 1) {
+                    pages.push(
+                      <Button
+                        key={1}
+                        variant={1 === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchClearances({ ...filters, page: 1, limit: pagination.limit, includeDeleted: showDeletedOnly, showDeletedOnly })}
+                        className="min-w-[40px] h-8"
+                      >
+                        1
+                      </Button>
+                    );
+                    
+                    if (startPage > 2) {
+                      pages.push(
+                        <span key="ellipses-start" className="px-2 text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+                  }
+                  
+                  // Show the 5 pages around current page
+                  for (let i = startPage; i <= endPage; i++) {
+                    pages.push(
+                      <Button
+                        key={i}
+                        variant={i === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchClearances({ ...filters, page: i, limit: pagination.limit, includeDeleted: showDeletedOnly, showDeletedOnly })}
+                        className="min-w-[40px] h-8"
+                      >
+                        {i}
+                      </Button>
+                    );
+                  }
+                  
+                  // Always show last page if not in range
+                  if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) {
+                      pages.push(
+                        <span key="ellipses-end" className="px-2 text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+                    
+                    pages.push(
+                      <Button
+                        key={totalPages}
+                        variant={totalPages === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchClearances({ ...filters, page: totalPages, limit: pagination.limit, includeDeleted: showDeletedOnly, showDeletedOnly })}
+                        className="min-w-[40px] h-8"
+                      >
+                        {totalPages}
+                      </Button>
+                    );
+                  }
+                }
+                
+                return pages;
+              })()}
+            </div>
+          </div>
+
         {/* Table */}
-        <div className="bg-white rounded-md border overflow-hidden">
+        <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
           {/* Superadmin controls */}
           <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
             <label className="flex items-center gap-2 text-xs text-gray-700">
@@ -636,7 +746,7 @@ export default function BalikManggagawaClearancePage() {
               Show deleted only
             </label>
           </div>
-          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#1976D2] text-white">
@@ -1182,7 +1292,7 @@ export default function BalikManggagawaClearancePage() {
       <Dialog open={viewOpen} onOpenChange={(open) => { setViewOpen(open); if (!open) setSelectedClearance(null) }}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
-            <DialogTitle className="text-lg font-bold">{selectedClearance ? `${((selectedClearance.clearance_type || '') === 'watchlisted_similar_name' ? 'watchlisted OFW' : (selectedClearance.clearance_type || '')).replace(/_/g,' ').replace(/\b\w/g, (c) => c.toUpperCase())} Details` : 'Clearance Details'}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{selectedClearance ? `${((selectedClearance.clearance_type || '') === 'watchlisted_similar_name' ? 'watchlisted OFW' : (selectedClearance.clearance_type || '')).replace(/_/g,' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} Details` : 'Clearance Details'}</DialogTitle>
             <DialogClose asChild>
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
             </DialogClose>

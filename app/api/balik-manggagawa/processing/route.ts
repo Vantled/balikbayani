@@ -18,6 +18,14 @@ export async function GET(request: NextRequest) {
 
 		const result = await DatabaseService.getProcessingRecords({ page, limit }, { search, types, sexes, dateFrom, dateTo, destination, address });
 
+		console.log('Processing API Response:', {
+			total: result.pagination.total,
+			totalPages: result.pagination.totalPages,
+			page: result.pagination.page,
+			limit: result.pagination.limit,
+			dataLength: result.data.length
+		});
+
 		const response: ApiResponse = { success: true, data: result };
 		return NextResponse.json(response);
 	} catch (error) {

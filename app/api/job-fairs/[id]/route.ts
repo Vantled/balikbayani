@@ -5,10 +5,11 @@ import { AuthService } from '@/lib/services/auth-service';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const result = await DatabaseService.getJobFairById(params.id);
+    const { id } = await params;
+    const result = await DatabaseService.getJobFairById(id);
     
     if (!result) {
       return NextResponse.json(
@@ -29,7 +30,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get token from cookies
@@ -101,7 +102,8 @@ export async function PUT(
       contacts: contactsArray
     };
 
-    const result = await DatabaseService.updateJobFair(params.id, jobFairData);
+    const { id } = await params;
+    const result = await DatabaseService.updateJobFair(id, jobFairData);
     
     if (!result) {
       return NextResponse.json(
@@ -122,9 +124,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     // Get token from cookies
     const token = request.cookies.get('bb_auth_token')?.value;
     
@@ -138,7 +142,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
-    const result = await DatabaseService.deleteJobFair(params.id);
+    const result = await DatabaseService.deleteJobFair(id);
     
     if (!result) {
       return NextResponse.json(

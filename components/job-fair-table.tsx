@@ -177,7 +177,7 @@ export default function JobFairTable({
   if (loading) {
     return (
       <div className="bg-white rounded-md border overflow-hidden">
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[calc(100vh-280px)] overflow-y-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-[#1976D2] text-white sticky top-0 z-10">
@@ -261,7 +261,7 @@ export default function JobFairTable({
             </label>
           </div>
         )}
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[calc(100vh-280px)] overflow-y-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-[#1976D2] text-white sticky top-0 z-10">

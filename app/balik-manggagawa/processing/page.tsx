@@ -112,6 +112,8 @@ export default function BalikManggagawaProcessingPage() {
 
   const resetForm = () => { setFormName(""); setFormSex(""); setFormAddress(""); setFormDestination("") }
 
+
+
   const handleFileSelect = (documentType: string, file: File) => {
     setVerificationDialog({
       open: true,
@@ -310,9 +312,9 @@ export default function BalikManggagawaProcessingPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#eaf3fc] flex flex-col">
+    <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
-      <main className="p-6 pt-24">
+      <main className="p-6 pt-24 flex-1">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-medium text-[#1976D2]">Balik Manggagawa - Processing</h2>
@@ -414,74 +416,196 @@ export default function BalikManggagawaProcessingPage() {
             )}
           </div>
         </div>
-        {/* Table */}
-        <div className="overflow-x-auto rounded-xl border bg-white">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-[#1976D2] text-white">
-                <th className="py-3 px-4 font-medium">Control No.</th>
-                <th className="py-3 px-4 font-medium">Name of Worker</th>
-                <th className="py-3 px-4 font-medium">Sex</th>
-                <th className="py-3 px-4 font-medium">Destination</th>
-                <th className="py-3 px-4 font-medium">Type</th>
-                <th className="py-3 px-4 font-medium">Status</th>
-                <th className="py-3 px-4 font-medium text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr><td colSpan={7} className="py-8 text-center text-gray-500">Loading...</td></tr>
-              ) : error ? (
-                <tr><td colSpan={7} className="py-8 text-center text-red-500">{error}</td></tr>
-              ) : records.length === 0 ? (
-                <tr><td colSpan={7} className="py-8 text-center text-gray-500">No processing records found</td></tr>
-              ) : records.map((row: any, i: number) => (
-                <tr key={row.id ?? i} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 text-center">{row.clearance_control_number || row.or_number}</td>
-                  <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
-                  <td className="py-3 px-4 text-center capitalize">{row.sex}</td>
-                  <td className="py-3 px-4 text-center">{row.destination}</td>
-                  <td className="py-3 px-4 text-center">
-                    {row.clearance_type ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (row.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : (row.clearance_type === 'watchlisted_similar_name' ? 'Watchlisted OFW' : row.clearance_type))}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      {row.clearance_type === 'watchlisted_similar_name' ? Math.min(1, row.documents_submitted || 0) + '/1' : (row.documents_submitted || 0) + '/7'} Submitted
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8"
-                      onClick={async () => {
-                        const result = await getProcessingById(row.id)
-                        if (result.success) {
-                          setSelectedRecord(result.data)
-                          setViewOpen(true)
-                        } else {
-                          toast({ 
-                            title: 'Error', 
-                            description: result.error || 'Failed to fetch record details',
-                            variant: 'destructive'
-                          })
-                        }
-                      }}
+
+        {/* Pagination Controls */}
+        <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+            <div className="flex items-center gap-4">
+              <span>
+                Page {pagination.page} of {pagination.totalPages} ({pagination.total} total records)
+              </span>
+
+            </div>
+            <div className="flex items-center gap-1">
+              {(() => {
+                const pages = [];
+                const totalPages = pagination.totalPages;
+                const currentPage = pagination.page;
+                
+                if (totalPages <= 7) {
+                  // If 7 or fewer pages, show all pages
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(
+                      <Button
+                        key={i}
+                        variant={i === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchRecords(i, pagination.limit)}
+                        className="min-w-[40px] h-8"
+                      >
+                        {i}
+                      </Button>
+                    );
+                  }
+                } else if (totalPages === 0) {
+                  // If no pages, show at least page 1
+                  pages.push(
+                    <Button
+                      key={1}
+                      variant="default"
+                      size="sm"
+                      className="min-w-[40px] h-8"
+                      disabled
                     >
-                      <Eye className="h-4 w-4" />
-                      <span className="sr-only">View details</span>
+                      1
                     </Button>
-                  </td>
+                  );
+                } else {
+                  // Dynamic pagination: show 5 pages around current page
+                  let startPage = Math.max(1, currentPage - 2);
+                  let endPage = Math.min(totalPages, startPage + 4);
+                  
+                  // Adjust if we're near the end
+                  if (endPage - startPage < 4) {
+                    startPage = Math.max(1, endPage - 4);
+                  }
+                  
+                  // Always show first page if not in range
+                  if (startPage > 1) {
+                    pages.push(
+                      <Button
+                        key={1}
+                        variant={1 === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchRecords(1, pagination.limit)}
+                        className="min-w-[40px] h-8"
+                      >
+                        1
+                      </Button>
+                    );
+                    
+                    if (startPage > 2) {
+                      pages.push(
+                        <span key="ellipses-start" className="px-2 text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+                  }
+                  
+                  // Show the 5 pages around current page
+                  for (let i = startPage; i <= endPage; i++) {
+                    pages.push(
+                      <Button
+                        key={i}
+                        variant={i === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchRecords(i, pagination.limit)}
+                        className="min-w-[40px] h-8"
+                      >
+                        {i}
+                      </Button>
+                    );
+                  }
+                  
+                  // Always show last page if not in range
+                  if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) {
+                      pages.push(
+                        <span key="ellipses-end" className="px-2 text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+                    
+                    pages.push(
+                      <Button
+                        key={totalPages}
+                        variant={totalPages === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => fetchRecords(totalPages, pagination.limit)}
+                        className="min-w-[40px] h-8"
+                      >
+                        {totalPages}
+                      </Button>
+                    );
+                  }
+                }
+                
+                return pages;
+              })()}
+            </div>
+          </div>
+
+        {/* Table */}
+                  <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
+                                             <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#1976D2] text-white">
+                  <th className="py-3 px-4 font-medium">Control No.</th>
+                  <th className="py-3 px-4 font-medium">Name of Worker</th>
+                  <th className="py-3 px-4 font-medium">Sex</th>
+                  <th className="py-3 px-4 font-medium">Destination</th>
+                  <th className="py-3 px-4 font-medium">Type</th>
+                  <th className="py-3 px-4 font-medium">Status</th>
+                  <th className="py-3 px-4 font-medium text-center">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {loading ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-gray-500">Loading...</td></tr>
+                ) : error ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-red-500">{error}</td></tr>
+                ) : records.length === 0 ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-gray-500">No processing records found</td></tr>
+                ) : records.map((row: any, i: number) => (
+                  <tr key={row.id ?? i} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 text-center">{row.clearance_control_number || row.or_number}</td>
+                    <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
+                    <td className="py-3 px-4 text-center capitalize">{row.sex}</td>
+                    <td className="py-3 px-4 text-center">{row.destination}</td>
+                    <td className="py-3 px-4 text-center">
+                      {row.clearance_type ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {row.clearance_type === 'for_assessment_country' ? 'For Assessment Country' : (row.clearance_type === 'non_compliant_country' ? 'Non Compliant Country' : (row.clearance_type === 'watchlisted_similar_name' ? 'Watchlisted OFW' : row.clearance_type))}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        {row.clearance_type === 'watchlisted_similar_name' ? Math.min(1, row.documents_submitted || 0) + '/1' : (row.documents_submitted || 0) + '/7'} Submitted
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={async () => {
+                          const result = await getProcessingById(row.id)
+                          if (result.success) {
+                            setSelectedRecord(result.data)
+                            setViewOpen(true)
+                          } else {
+                            toast({ 
+                              title: 'Error', 
+                              description: result.error || 'Failed to fetch record details',
+                              variant: 'destructive'
+                            })
+                          }
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">View details</span>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
 

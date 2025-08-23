@@ -3,6 +3,8 @@ import 'dotenv/config';
 import { config } from 'dotenv';
 import { db } from './database';
 import bcrypt from 'bcryptjs';
+import { NextRequest } from 'next/server';
+import { AuthService } from './services/auth-service';
 
 // Load environment variables from .env.local
 config({ path: '.env.local' });
@@ -101,4 +103,37 @@ if (require.main === module) {
       console.error('Admin check failed:', error);
       process.exit(1);
     });
+}
+
+/**
+ * Check if the current user has admin privileges
+ * This function extracts the session token from the request and validates it
+ */
+export async function checkAdmin(request: NextRequest): Promise<{ isAdmin: boolean; user?: any }> {
+  try {
+    // Get the auth token from cookies (using the correct cookie name)
+    const authToken = request.cookies.get('bb_auth_token')?.value;
+    
+    if (!authToken) {
+      return { isAdmin: false };
+    }
+
+    // Validate the session and get user info
+    const user = await AuthService.validateSession(authToken);
+    
+    if (!user) {
+      return { isAdmin: false };
+    }
+
+    // Check if user has admin or superadmin role
+    const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+    
+    return { 
+      isAdmin, 
+      user: isAdmin ? user : undefined 
+    };
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    return { isAdmin: false };
+  }
 }

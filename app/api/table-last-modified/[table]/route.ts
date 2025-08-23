@@ -5,10 +5,11 @@ import { AuthService } from '@/lib/services/auth-service';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { table: string } }
+  { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    console.log(`API called for table: ${params.table}`);
+    const { table } = await params;
+    console.log(`API called for table: ${table}`);
     
     // Get token from cookies
     const token = request.cookies.get('bb_auth_token')?.value;
@@ -24,8 +25,6 @@ export async function GET(
       console.log('Invalid session token');
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
-
-    const { table } = params;
     
     // Validate table name to prevent SQL injection
     const allowedTables = ['job_fairs', 'job_fair_monitoring', 'peso_contacts', 'pra_contacts'];

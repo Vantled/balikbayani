@@ -12,6 +12,8 @@ interface ClearanceFilters {
   dateTo?: string;
   jobsite?: string;
   position?: string;
+  includeDeleted?: boolean;
+  showDeletedOnly?: boolean;
 }
 
 interface ClearanceData {
@@ -187,7 +189,7 @@ export function useBalikManggagawaClearance() {
 
   // Initial fetch
   useEffect(() => {
-    fetchClearances();
+    fetchClearances({ page: 1, limit: 10 });
   }, []);
 
   return {

@@ -104,6 +104,15 @@ export default function JobFairsListPage() {
     }, 500)
   }
 
+  const handleRestore = async (id: string) => {
+    // Refresh the list with current showDeletedOnly state after restore
+    await fetchJobFairs(pagination.page, pagination.limit, showDeletedOnly)
+    // Add a small delay to ensure the database trigger has executed
+    setTimeout(() => {
+      refreshLastModified()
+    }, 500)
+  }
+
   const handleModalSuccess = async () => {
     await fetchJobFairs(pagination.page, pagination.limit, showDeletedOnly)
     // Add a small delay to ensure the database trigger has executed
@@ -260,7 +269,7 @@ export default function JobFairsListPage() {
                 disabled={loading}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add
+                Add Job Fair
               </Button>
 
               {/* Filter Panel */}
@@ -416,6 +425,7 @@ export default function JobFairsListPage() {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onView={handleView}
+              onRestore={handleRestore}
               loading={loading}
               search={search}
               filterQuery={panelQuery}

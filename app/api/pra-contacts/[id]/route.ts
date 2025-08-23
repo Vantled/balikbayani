@@ -5,7 +5,7 @@ import { checkAdmin } from '@/lib/check-admin';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const isAdmin = await checkAdmin(request);
@@ -17,7 +17,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name_of_pras, pra_contact_person, office_head, email, contact_number } = body;
+    const { name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts } = body;
 
     if (!name_of_pras || !pra_contact_person || !office_head || !email || !contact_number) {
       return NextResponse.json(
@@ -26,12 +26,15 @@ export async function PUT(
       );
     }
 
-    const updatedContact = await DatabaseService.updatePraContact(params.id, {
+    const { id } = await params;
+    const updatedContact = await DatabaseService.updatePraContact(id, {
       name_of_pras,
       pra_contact_person,
       office_head,
       email,
-      contact_number
+      contact_number,
+      emails: emails || [],
+      contacts: contacts || []
     });
 
     if (!updatedContact) {
@@ -53,7 +56,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const isAdmin = await checkAdmin(request);
@@ -64,7 +67,8 @@ export async function DELETE(
       );
     }
 
-    const deletedContact = await DatabaseService.deletePraContact(params.id);
+    const { id } = await params;
+    const deletedContact = await DatabaseService.deletePraContact(id);
 
     if (!deletedContact) {
       return NextResponse.json(

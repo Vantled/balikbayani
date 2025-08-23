@@ -16,8 +16,8 @@ interface UsePraContactsReturn {
   updateContact: (id: string, data: Partial<PraContact>) => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
   refreshContacts: () => Promise<void>;
-  searchContacts: (searchTerm: string) => Promise<void>;
-  fetchContacts: (page?: number, limit?: number, searchTerm?: string) => Promise<void>;
+  searchContacts: (searchTerm: string, showDeletedOnly?: boolean) => Promise<void>;
+  fetchContacts: (page?: number, limit?: number, searchTerm?: string, showDeletedOnly?: boolean) => Promise<void>;
 }
 
 export function usePraContacts(): UsePraContactsReturn {
@@ -31,14 +31,15 @@ export function usePraContacts(): UsePraContactsReturn {
     totalPages: 0
   });
 
-  const fetchContacts = async (page: number = 1, limit: number = 10, searchTerm?: string) => {
+  const fetchContacts = async (page: number = 1, limit: number = 10, searchTerm?: string, showDeletedOnly: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
       
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: limit.toString()
+        limit: limit.toString(),
+        showDeletedOnly: showDeletedOnly.toString()
       });
       
       if (searchTerm) {
@@ -84,7 +85,7 @@ export function usePraContacts(): UsePraContactsReturn {
         throw new Error(errorData.error || 'Failed to create PRA contact');
       }
       
-      await fetchContacts(1, pagination.limit); // Refresh the list
+      await fetchContacts(1, pagination.limit, undefined, false); // Refresh the list
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
@@ -108,7 +109,7 @@ export function usePraContacts(): UsePraContactsReturn {
         throw new Error(errorData.error || 'Failed to update PRA contact');
       }
       
-      await fetchContacts(1, pagination.limit); // Refresh the list
+      await fetchContacts(1, pagination.limit, undefined, false); // Refresh the list
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
@@ -128,19 +129,19 @@ export function usePraContacts(): UsePraContactsReturn {
         throw new Error(errorData.error || 'Failed to delete PRA contact');
       }
       
-      await fetchContacts(1, pagination.limit); // Refresh the list
+      await fetchContacts(1, pagination.limit, undefined, false); // Refresh the list
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
   };
 
-  const searchContacts = async (searchTerm: string) => {
-    await fetchContacts(1, pagination.limit, searchTerm);
+  const searchContacts = async (searchTerm: string, showDeletedOnly: boolean = false) => {
+    await fetchContacts(1, pagination.limit, searchTerm, showDeletedOnly);
   };
 
   useEffect(() => {
-    fetchContacts(1, 10);
+    fetchContacts(1, 10, undefined, false);
   }, []);
 
   return {
@@ -151,7 +152,7 @@ export function usePraContacts(): UsePraContactsReturn {
     createContact,
     updateContact,
     deleteContact,
-    refreshContacts: () => fetchContacts(1, pagination.limit),
+    refreshContacts: () => fetchContacts(1, pagination.limit, undefined, false),
     searchContacts,
     fetchContacts,
   };

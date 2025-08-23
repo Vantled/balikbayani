@@ -9,11 +9,13 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
+    const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
 
     const result = await DatabaseService.getPraContacts({ 
       page, 
       limit, 
-      search 
+      search,
+      showDeletedOnly
     });
 
     return NextResponse.json(result);
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name_of_pras, pra_contact_person, office_head, email, contact_number } = body;
+    const { name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts } = body;
 
     if (!name_of_pras || !pra_contact_person || !office_head || !email || !contact_number) {
       return NextResponse.json(
@@ -51,7 +53,9 @@ export async function POST(request: NextRequest) {
       pra_contact_person,
       office_head,
       email,
-      contact_number
+      contact_number,
+      emails: emails || [],
+      contacts: contacts || []
     });
 
     return NextResponse.json(newContact, { status: 201 });

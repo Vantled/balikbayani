@@ -45,7 +45,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { province, peso_office, office_head, email, contact_number } = body;
+    const { province, peso_office, office_head, email, contact_number, emails, contacts } = body;
 
     // Validate required fields
     if (!province || !peso_office || !office_head || !email || !contact_number) {
@@ -60,7 +60,9 @@ export async function PUT(
       peso_office,
       office_head,
       email,
-      contact_number
+      contact_number,
+      emails: emails || [],
+      contacts: contacts || []
     });
 
     if (!contact) {

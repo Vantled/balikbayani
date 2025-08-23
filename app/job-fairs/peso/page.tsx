@@ -410,9 +410,25 @@ export default function PesoContactsPage() {
       email: contact.email,
       contact_number: contact.contact_number
     })
-    setEmails([contact.email])
-    setFormContacts([`Mobile No.: ${contact.contact_number}`])
-    setCustomCategories([""])
+
+    // Populate emails from the new structure or fallback to single email
+    if (contact.emails && contact.emails.length > 0) {
+      setEmails(contact.emails.map(email => email.email_address))
+    } else {
+      setEmails([contact.email])
+    }
+
+    // Populate contacts from the new structure or fallback to single contact
+    if (contact.contacts && contact.contacts.length > 0) {
+      setFormContacts(contact.contacts.map(contact => `${contact.contact_category}: ${contact.contact_number}`))
+      setCustomCategories(contact.contacts.map(contact =>
+        CONTACT_CATEGORIES.includes(contact.contact_category) ? "" : contact.contact_category
+      ))
+    } else {
+      setFormContacts([`Mobile No.: ${contact.contact_number}`])
+      setCustomCategories([""])
+    }
+
     setValidationErrors({})
     setModalOpen(true)
   }
@@ -472,8 +488,23 @@ export default function PesoContactsPage() {
     e.preventDefault()
     
     try {
-      // Use the first email and contact for now (database structure supports single values)
-      // Extract just the number part from the contact (remove category prefix)
+      // Parse emails and contacts for the new structure
+      const parsedEmails = emails.filter(email => email.trim()).map(email => ({ email_address: email.trim() }))
+      const parsedContacts = formContacts.filter(contact => contact.trim()).map(contact => {
+        const parts = contact.split(':')
+        const category = parts[0]?.trim() || ''
+        const number = parts[1]?.trim() || ''
+
+        // If category is "Others", use the custom category
+        const finalCategory = category === "Others" ? customCategories[formContacts.indexOf(contact)] : category
+
+        return {
+          contact_category: finalCategory,
+          contact_number: number
+        }
+      })
+
+      // Use the first email and contact for backward compatibility
       const firstContact = formContacts[0]?.trim() || ""
       const contactNumber = firstContact.includes(':') ? firstContact.split(':')[1]?.trim() || "" : firstContact
       const firstEmail = emails[0]?.trim() || ""
@@ -481,7 +512,9 @@ export default function PesoContactsPage() {
       const submitData = {
         ...formData,
         email: firstEmail,
-        contact_number: contactNumber
+        contact_number: contactNumber,
+        emails: parsedEmails,
+        contacts: parsedContacts
       }
 
       if (editingContact) {
@@ -720,8 +753,8 @@ export default function PesoContactsPage() {
                     <th className="py-3 px-4 font-medium text-center">Province</th>
                     <th className="py-3 px-4 font-medium text-center">PESO Office</th>
                     <th className="py-3 px-4 font-medium text-center">Office Head</th>
-                    <th className="py-3 px-4 font-medium text-center">Email</th>
-                    <th className="py-3 px-4 font-medium text-center">Contact No.</th>
+                    <th className="py-3 px-4 font-medium text-center">Email Address(es)</th>
+                    <th className="py-3 px-4 font-medium text-center">Contact Number(s)</th>
                     <th className="py-3 px-4 font-medium text-center">Actions</th>
                   </tr>
                 </thead>
@@ -744,8 +777,35 @@ export default function PesoContactsPage() {
                       <td className="py-3 px-4 text-center">{contact.province}</td>
                         <td className="py-3 px-4 text-center">{contact.peso_office}</td>
                         <td className="py-3 px-4 text-center">{contact.office_head}</td>
-                      <td className="py-3 px-4 text-center">{contact.email}</td>
-                        <td className="py-3 px-4 text-center">{contact.contact_number}</td>
+                      <td className="py-3 px-4 text-center">
+                        {contact.emails && contact.emails.length > 0 ? (
+                          <div className="space-y-1">
+                            {contact.emails.map((email, index) => (
+                              <div key={index} className="text-sm">
+                                {email.email_address}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm">{contact.email}</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {contact.contacts && contact.contacts.length > 0 ? (
+                          <div className="space-y-1">
+                            {contact.contacts.map((contactInfo, index) => (
+                              <div key={index} className="text-sm">
+                                <span className="text-gray-500 font-medium">
+                                  {contactInfo.contact_category}:
+                                </span>
+                                <span className="ml-1">{contactInfo.contact_number}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm">{contact.contact_number}</div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -758,13 +818,6 @@ export default function PesoContactsPage() {
                               <DropdownMenuItem onClick={() => handleEdit(contact)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDelete(contact.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
                               </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

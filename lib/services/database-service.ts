@@ -1200,11 +1200,24 @@ export class DatabaseService {
     return rows[0] || null;
   }
 
+  static async restoreJobFair(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('UPDATE job_fairs SET deleted_at = NULL WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
+  }
+
   // PESO Contacts
   static async createPesoContact(contactData: Omit<PesoContact, 'id' | 'created_at' | 'updated_at'>): Promise<PesoContact> {
     const { rows } = await db.query(
-      'INSERT INTO peso_contacts (province, peso_office, office_head, email, contact_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [contactData.province, contactData.peso_office, contactData.office_head, contactData.email, contactData.contact_number]
+      'INSERT INTO peso_contacts (province, peso_office, office_head, email, contact_number, emails, contacts) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [
+        contactData.province, 
+        contactData.peso_office, 
+        contactData.office_head, 
+        contactData.email, 
+        contactData.contact_number,
+        JSON.stringify(contactData.emails || []),
+        JSON.stringify(contactData.contacts || [])
+      ]
     );
     return rows[0];
   }
@@ -1278,8 +1291,15 @@ export class DatabaseService {
     const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
+    // Parse JSON fields for emails and contacts
+    const parsedRows = rows.map(row => ({
+      ...row,
+      emails: row.emails || [],
+      contacts: row.contacts || []
+    }));
+
     return {
-      data: rows,
+      data: parsedRows,
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -1305,6 +1325,8 @@ export class DatabaseService {
     if (contactData.office_head !== undefined) { fields.push(`office_head = $${paramCount++}`); values.push(contactData.office_head); }
     if (contactData.email !== undefined) { fields.push(`email = $${paramCount++}`); values.push(contactData.email); }
     if (contactData.contact_number !== undefined) { fields.push(`contact_number = $${paramCount++}`); values.push(contactData.contact_number); }
+    if (contactData.emails !== undefined) { fields.push(`emails = $${paramCount++}`); values.push(JSON.stringify(contactData.emails)); }
+    if (contactData.contacts !== undefined) { fields.push(`contacts = $${paramCount++}`); values.push(JSON.stringify(contactData.contacts)); }
 
     if (fields.length === 0) { return null; }
 
@@ -1330,20 +1352,37 @@ export class DatabaseService {
   // PRA Contacts
   static async createPraContact(contactData: Omit<PraContact, 'id' | 'created_at' | 'updated_at'>): Promise<PraContact> {
     const { rows } = await db.query(
-      'INSERT INTO pra_contacts (name_of_pras, pra_contact_person, office_head, email, contact_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [contactData.name_of_pras, contactData.pra_contact_person, contactData.office_head, contactData.email, contactData.contact_number]
+      'INSERT INTO pra_contacts (name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [
+        contactData.name_of_pras, 
+        contactData.pra_contact_person, 
+        contactData.office_head, 
+        contactData.email, 
+        contactData.contact_number,
+        JSON.stringify(contactData.emails || []),
+        JSON.stringify(contactData.contacts || [])
+      ]
     );
     return rows[0];
   }
 
-  static async getPraContacts(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 10 }): Promise<PaginatedResponse<PraContact>> {
+  static async getPraContacts(pagination: PaginationOptions & { search?: string; showDeletedOnly?: boolean } = { page: 1, limit: 10 }): Promise<PaginatedResponse<PraContact>> {
     let query = 'SELECT * FROM pra_contacts';
     let countQuery = 'SELECT COUNT(*) FROM pra_contacts';
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Handle soft delete filtering
+    if (pagination.showDeletedOnly) {
+      query += ` WHERE deleted_at IS NOT NULL`;
+      countQuery += ` WHERE deleted_at IS NOT NULL`;
+    } else {
+      query += ` WHERE deleted_at IS NULL`;
+      countQuery += ` WHERE deleted_at IS NULL`;
+    }
+
     if (pagination.search && pagination.search.trim()) {
-      const searchCondition = `WHERE name_of_pras ILIKE $${paramIndex} OR pra_contact_person ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex} OR email ILIKE $${paramIndex}`;
+      const searchCondition = `AND (name_of_pras ILIKE $${paramIndex} OR pra_contact_person ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`;
       query += ` ${searchCondition}`;
       countQuery += ` ${searchCondition}`;
       params.push(`%${pagination.search.trim()}%`);
@@ -1357,8 +1396,15 @@ export class DatabaseService {
     const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
+    // Parse JSON fields for emails and contacts
+    const parsedRows = rows.map(row => ({
+      ...row,
+      emails: row.emails || [],
+      contacts: row.contacts || []
+    }));
+
     return {
-      data: rows,
+      data: parsedRows,
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -1370,15 +1416,29 @@ export class DatabaseService {
 
   static async updatePraContact(id: string, contactData: Omit<PraContact, 'id' | 'created_at' | 'updated_at'>): Promise<PraContact | null> {
     const { rows } = await db.query(
-      'UPDATE pra_contacts SET name_of_pras = $1, pra_contact_person = $2, office_head = $3, email = $4, contact_number = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
-      [contactData.name_of_pras, contactData.pra_contact_person, contactData.office_head, contactData.email, contactData.contact_number, id]
+      'UPDATE pra_contacts SET name_of_pras = $1, pra_contact_person = $2, office_head = $3, email = $4, contact_number = $5, emails = $6, contacts = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
+      [
+        contactData.name_of_pras, 
+        contactData.pra_contact_person, 
+        contactData.office_head, 
+        contactData.email, 
+        contactData.contact_number,
+        JSON.stringify(contactData.emails || []),
+        JSON.stringify(contactData.contacts || []),
+        id
+      ]
     );
     return rows[0] || null;
   }
 
   static async deletePraContact(id: string): Promise<PraContact | null> {
-    const { rows } = await db.query('DELETE FROM pra_contacts WHERE id = $1 RETURNING *', [id]);
+    const { rows } = await db.query('UPDATE pra_contacts SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *', [id]);
     return rows[0] || null;
+  }
+
+  static async restorePraContact(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('UPDATE pra_contacts SET deleted_at = NULL WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
   }
 
   // Job Fair Monitoring

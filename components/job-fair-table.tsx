@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Eye, Loader2, RefreshCcw } from 'lucide-react';
 import { JobFair } from '@/lib/types';
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ interface JobFairTableProps {
   onEdit: (record: JobFair) => void;
   onDelete: (id: string) => void;
   onView: (record: JobFair) => void;
+  onRestore?: (id: string) => void;
   loading?: boolean;
   search?: string;
   filterQuery?: string;
@@ -41,6 +42,7 @@ export default function JobFairTable({
   onEdit,
   onDelete,
   onView,
+  onRestore,
   loading = false,
   search = "",
   filterQuery = "",
@@ -54,6 +56,10 @@ export default function JobFairTable({
   const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmingPassword, setConfirmingPassword] = useState(false);
+  const [restorePasswordOpen, setRestorePasswordOpen] = useState(false);
+  const [restorePassword, setRestorePassword] = useState("");
+  const [confirmingRestorePassword, setConfirmingRestorePassword] = useState(false);
+  const [jobFairToRestore, setJobFairToRestore] = useState<JobFair | null>(null);
   const { toast } = useToast();
 
   const handleDeleteClick = (record: JobFair) => {
@@ -66,6 +72,54 @@ export default function JobFairTable({
       onDelete(recordToDelete.id);
       setDeleteDialogOpen(false);
       setRecordToDelete(null);
+    }
+  };
+
+  const handleRestore = (jobFair: JobFair) => {
+    setJobFairToRestore(jobFair);
+    setRestorePasswordOpen(true);
+  };
+
+  const confirmRestore = async () => {
+    if (!jobFairToRestore || !restorePassword) return;
+    
+    try {
+      setConfirmingRestorePassword(true);
+      
+      // First verify password
+      const username = currentUser?.username || '';
+      const authRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: restorePassword })
+      });
+      const authData = await authRes.json();
+      
+      if (!authData.success) {
+        toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' });
+        return;
+      }
+
+      // Then restore the job fair
+      const res = await fetch(`/api/job-fairs/${jobFairToRestore.id}/restore`, { method: 'POST' });
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({ title: 'Job fair restored', description: `${jobFairToRestore.venue} has been restored` });
+        setRestorePasswordOpen(false);
+        setRestorePassword("");
+        setJobFairToRestore(null);
+        // Refresh the list by calling the parent's onRestore callback
+        if (onRestore) {
+          onRestore(jobFairToRestore.id);
+        }
+      } else {
+        throw new Error(result.error || 'Restore failed');
+      }
+    } catch (err) {
+      toast({ title: 'Restore error', description: 'Failed to restore job fair', variant: 'destructive' });
+    } finally {
+      setConfirmingRestorePassword(false);
     }
   };
 
@@ -337,17 +391,30 @@ export default function JobFairTable({
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEdit(record)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit / Reschedule
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteClick(record)}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
+                        {showDeletedOnly ? (
+                          // Show restore button for deleted records
+                          userIsSuperadmin && record.deleted_at && (
+                            <DropdownMenuItem onClick={() => handleRestore(record)}>
+                              <RefreshCcw className="h-4 w-4 mr-2" />
+                              Restore
+                            </DropdownMenuItem>
+                          )
+                        ) : (
+                          // Show edit and delete buttons for active records
+                          <>
+                            <DropdownMenuItem onClick={() => onEdit(record)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit / Reschedule
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteClick(record)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -453,6 +520,61 @@ export default function JobFairTable({
                   </>
                 ) : (
                   'Confirm'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Password Modal for Restore */}
+      <Dialog open={restorePasswordOpen} onOpenChange={(open) => {
+        setRestorePasswordOpen(open);
+        if (!open) {
+          setRestorePassword("");
+          setJobFairToRestore(null);
+        }
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Confirm Restore</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Enter your password to restore {jobFairToRestore?.venue}.
+            </p>
+            <input
+              type="password"
+              className="w-full border rounded px-3 py-2"
+              placeholder="Password"
+              value={restorePassword}
+              onChange={(e) => setRestorePassword(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  await confirmRestore();
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { 
+                setRestorePasswordOpen(false); 
+                setRestorePassword(""); 
+                setJobFairToRestore(null) 
+              }}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#1976D2] text-white"
+                onClick={confirmRestore}
+                disabled={confirmingRestorePassword || !restorePassword}
+              >
+                {confirmingRestorePassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Restoring...
+                  </>
+                ) : (
+                  'Restore'
                 )}
               </Button>
             </div>

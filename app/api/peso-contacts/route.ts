@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20'); // Default to 20 contacts per page
+    const limit = parseInt(searchParams.get('limit') || '10'); // Default to 10 contacts per page
     const search = searchParams.get('search') || undefined;
 
     const pagination = { page, limit, search };
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { province, peso_office, office_head, email, contact_number } = body;
+    const { province, peso_office, office_head, email, contact_number, emails, contacts } = body;
 
     // Validate required fields
     if (!province || !peso_office || !office_head || !email || !contact_number) {
@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
       peso_office,
       office_head,
       email,
-      contact_number
+      contact_number,
+      emails: emails || [],
+      contacts: contacts || []
     });
 
     return NextResponse.json(contact, { status: 201 });

@@ -64,7 +64,15 @@ Object.entries(pesoOfficesData).forEach(([province, offices]) => {
       peso_office: office,
       office_head: officeHead,
       email: `${emailPrefix}.peso@${province.toLowerCase()}.gov.ph`,
-      contact_number: `0${baseNumber}`.substring(0, 11)
+      contact_number: `0${baseNumber}`.substring(0, 11),
+      emails: [
+        { email_address: `${emailPrefix}.peso@${province.toLowerCase()}.gov.ph` },
+        { email_address: `info.${emailPrefix}@${province.toLowerCase()}.gov.ph` }
+      ],
+      contacts: [
+        { contact_category: "Mobile No.", contact_number: `0${baseNumber}`.substring(0, 11) },
+        { contact_category: "Landline", contact_number: `(02) ${8000 + contactIndex}-${1000 + contactIndex}` }
+      ]
     });
     
     contactIndex++;

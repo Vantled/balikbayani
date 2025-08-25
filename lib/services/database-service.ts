@@ -86,6 +86,11 @@ export class DatabaseService {
     return rows[0] || null;
   }
 
+  static async getUserByEmail(email: string): Promise<User | null> {
+    const { rows } = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    return rows[0] || null;
+  }
+
   static async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
     const fields = Object.keys(updates).map((key, index) => `${key} = $${index + 2}`).join(', ');
     const values = Object.values(updates);

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui
 import { useToast } from "@/hooks/use-toast"
 import { useTableLastModified } from "@/hooks/use-table-last-modified"
 import { usePesoContacts } from "@/hooks/use-peso-contacts"
-import { PesoContact } from "@/lib/types"
+import { PesoContact, User } from "@/lib/types"
 import PesoContactsFilterPanel from "@/components/peso-contacts-filter-panel"
 
 const CONTACT_CATEGORIES = [
@@ -224,6 +224,10 @@ export default function PesoContactsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 10 // Fixed at 10 contacts per page
 
+  // User authentication state
+  const [userIsSuperadmin, setUserIsSuperadmin] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+
   // Parse search input for key:value filters and free-text terms
   const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
     const tokens = input.split(/[\s,]+/).filter(Boolean)
@@ -285,6 +289,20 @@ export default function PesoContactsPage() {
     setContactNumberFilter("")
     setPanelQuery("")
   }
+
+  // Resolve superadmin on client after mount to keep SSR markup stable
+  useEffect(() => {
+    let mounted = true
+    import('@/lib/auth').then(mod => {
+      const u = mod.getUser()
+      const isSuper = mod.isSuperadmin(u)
+      if (mounted) {
+        setUserIsSuperadmin(isSuper)
+        setCurrentUser(u)
+      }
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
   // Helper functions for multiple emails and contacts
   const addEmail = () => {
@@ -600,10 +618,12 @@ export default function PesoContactsPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Contact
-              </Button>
+              {userIsSuperadmin && (
+                <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Contact
+                </Button>
+              )}
 
                             {/* Filter Panel */}
               {showFilter && (

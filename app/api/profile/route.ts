@@ -7,7 +7,68 @@ interface ApiResponse {
   success: boolean;
   message?: string;
   error?: string;
-  user?: any;
+  data?: {
+    user?: any;
+  };
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {
+  try {
+    // Get session token from cookies
+    const token = request.cookies.get('bb_auth_token')?.value;
+    
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Validate session and get user
+    const session = await AuthService.validateSession(token);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid or expired session' },
+        { status: 401 }
+      );
+    }
+
+    // Get complete user data from database
+    const user = await AuthService.getUserById(session.id);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Return user data (without password hash)
+    const userData = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      is_approved: user.is_approved,
+      is_active: user.is_active,
+      last_login: user.last_login,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      is_first_login: user.is_first_login
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: { user: userData }
+    });
+
+  } catch (error) {
+    console.error('Profile retrieval error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse<ApiResponse>> {
@@ -176,7 +237,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     return NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
-      user: updatedUser
+      data: { user: updatedUser }
     });
 
   } catch (error) {

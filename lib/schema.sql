@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('superadmin', 'admin', 'staff')),
@@ -18,6 +18,7 @@ CREATE TABLE users (
     failed_login_attempts INTEGER DEFAULT 0,
     account_locked_until TIMESTAMP WITH TIME ZONE,
     password_changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_first_login BOOLEAN DEFAULT false,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -30,6 +31,8 @@ CREATE TABLE direct_hire_applications (
     name VARCHAR(255) NOT NULL,
     sex VARCHAR(10) NOT NULL CHECK (sex IN ('male', 'female')),
     salary DECIMAL(12,2) NOT NULL,
+    salary_currency VARCHAR(3) DEFAULT 'USD',
+    raw_salary DECIMAL(12,2),
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('draft', 'pending', 'evaluated', 'for_confirmation', 'for_interview', 'approved', 'rejected')),
     jobsite VARCHAR(255) NOT NULL,
     position VARCHAR(255) NOT NULL,
@@ -242,6 +245,7 @@ CREATE TABLE pra_contacts (
     office_head VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     contact_number VARCHAR(20) NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -298,6 +302,9 @@ CREATE TABLE audit_logs (
     user_agent TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create unique index for email (excluding NULL values)
+CREATE UNIQUE INDEX users_email_unique_idx ON users (email) WHERE email IS NOT NULL;
 
 -- Indexes for better performance
 CREATE INDEX idx_direct_hire_control_number ON direct_hire_applications(control_number);

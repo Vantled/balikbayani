@@ -61,6 +61,9 @@ async function initializeDatabase() {
 
     // Step 2: Execute all migrations in order
     const migrations = [
+      { file: 'migrations/add_is_first_login_to_users.sql', desc: 'Adding is_first_login field to users' },
+      { file: 'migrations/allow_null_email_for_users.sql', desc: 'Allowing NULL email for temporary users' },
+      { file: 'migrations/add_salary_currency_to_direct_hire.sql', desc: 'Adding salary currency and raw salary to direct hire' },
       { file: 'migrations/add_table_last_modified_tracking.sql', desc: 'Adding table last modified tracking' },
       { file: 'migrations/add_deleted_at_to_job_fairs.sql', desc: 'Adding soft delete to job fairs' },
       { file: 'migrations/add_deleted_at_to_pra_contacts.sql', desc: 'Adding soft delete to PRA contacts' },
@@ -105,23 +108,32 @@ async function initializeDatabase() {
     );
 
     if (existingAdmin.length === 0) {
+      // Create admin user if it doesn't exist
+      await db.query(
+        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, is_first_login) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        ['admin', 'admin@balikbayani.gov.ph', passwordHash, 'Administrator', 'admin', true, false]
+      );
+      console.log('✅ Default admin user created');
+    } else {
+      // Update existing admin user
       await db.query(
         `UPDATE users SET 
           password_hash = $1,
           email = $2,
           full_name = $3,
           role = $4,
-          is_approved = $5
+          is_approved = $5,
+          is_first_login = $6
         WHERE username = 'admin'`,
-        [passwordHash, 'admin@balikbayani.gov.ph', 'Administrator', 'admin', true]
+        [passwordHash, 'admin@balikbayani.gov.ph', 'Administrator', 'admin', true, false]
       );
-      console.log('✅ Default admin user created/updated');
-      console.log('📋 Login credentials:');
-      console.log('   Username: admin');
-      console.log(`   Password: ${adminPassword}`);
-    } else {
-      console.log('✅ Admin user already exists');
+      console.log('✅ Default admin user updated');
     }
+    
+    console.log('📋 Login credentials:');
+    console.log('   Username: admin');
+    console.log(`   Password: ${adminPassword}`);
 
     // Step 5: Verify database setup
     console.log('\n🔍 Verifying database setup...');

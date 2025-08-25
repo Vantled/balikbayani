@@ -11,6 +11,7 @@ export type User = {
   last_login?: string
   created_at: string
   updated_at: string
+  is_first_login?: boolean
 }
 
 const AUTH_COOKIE = 'bb_auth_token'

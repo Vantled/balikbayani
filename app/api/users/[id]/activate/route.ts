@@ -35,6 +35,26 @@ export async function PUT(
       }, { status: 403 });
     }
 
+    // Get password from request body
+    const body = await request.json();
+    const { password } = body;
+
+    if (!password) {
+      return NextResponse.json({
+        success: false,
+        error: 'Password confirmation is required'
+      }, { status: 400 });
+    }
+
+    // Verify the current user's password
+    const passwordValid = await AuthService.verifyPassword(password, user.password_hash);
+    if (!passwordValid) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid password'
+      }, { status: 400 });
+    }
+
     // Activate user
     const result = await AuthService.activateUser(params.id, user.id);
 

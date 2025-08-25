@@ -75,4 +75,37 @@
   }
 }
 
+/* First-time login modal blur effect */
+.first-time-login-overlay {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  z-index: 9999 !important;
+}
+
+.first-time-login-portal {
+  z-index: 10000 !important;
+}
+
+.first-time-login-content {
+  z-index: 10001 !important;
+}
+
+/* Force blur and positioning for first-time login modal */
+[data-radix-dialog-overlay] {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+[data-radix-dialog-content] {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
 

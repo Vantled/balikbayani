@@ -16,6 +16,7 @@ export interface User {
   role: 'superadmin' | 'admin' | 'staff';
   is_approved: boolean;
   is_active: boolean;
+  is_first_login?: boolean;
   last_login?: string;
   failed_login_attempts?: number;
   account_locked_until?: string;

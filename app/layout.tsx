@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { ConditionalFooter } from "@/components/conditional-footer"
 import { NavigationToastHandler } from "@/components/navigation-toast-handler"
+import FirstTimeLoginHandler from "@/components/first-time-login-handler"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -40,6 +41,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <Toaster />
           <NavigationToastHandler />
+          <FirstTimeLoginHandler />
           <div className="flex flex-col bg-[#EEF5FD]">
             <main className="flex-1">
               {children}

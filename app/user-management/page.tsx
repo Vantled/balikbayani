@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit, Archive, Eye, UserX } from 'lucide-react';
+import { Plus, Edit, Archive, Eye, UserX, Copy, Check } from 'lucide-react';
 import Header from '@/components/shared/header';
 
 interface User {
@@ -36,14 +36,57 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [revealedFields, setRevealedFields] = useState<{[key: string]: boolean}>({});
   const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
     full_name: '',
-    role: 'staff' as 'superadmin' | 'admin' | 'staff'
+    confirm_full_name: '',
+    role: 'staff' as 'admin' | 'staff'
   });
+  const [activatePassword, setActivatePassword] = useState('');
+  const [activatePasswordDialogOpen, setActivatePasswordDialogOpen] = useState(false);
+  const [userToActivate, setUserToActivate] = useState<string | null>(null);
+  const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
+  const [tempCredentials, setTempCredentials] = useState({ username: '', password: '' });
   const { toast } = useToast();
   const router = useRouter();
+
+  // Copy to clipboard functionality
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast({
+        title: 'Copied!',
+        description: `${field} copied to clipboard`,
+      });
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy to clipboard',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const copyAllCredentials = async () => {
+    try {
+      const credentialsText = `Username: ${tempCredentials.username}\nPassword: ${tempCredentials.password}`;
+      await navigator.clipboard.writeText(credentialsText);
+      setCopiedField('All');
+      toast({
+        title: 'Copied!',
+        description: 'All credentials copied to clipboard',
+      });
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy credentials to clipboard',
+        variant: 'destructive'
+      });
+    }
+  };
 
   useEffect(() => {
     const user = getUser();
@@ -81,29 +124,49 @@ export default function UserManagementPage() {
   };
 
   const handleCreateUser = async () => {
+    // Validate full name confirmation
+    if (formData.full_name !== formData.confirm_full_name) {
+      toast({
+        title: 'Error',
+        description: 'Full name and confirm full name do not match',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
+      // Generate shorter temporary username and password
+      const tempUsername = `temp${Math.random().toString(36).substring(2, 8)}`;
+      const tempPassword = Math.random().toString(36).substring(2, 10);
+      
+             const userData = {
+         full_name: formData.full_name,
+         role: formData.role,
+         username: tempUsername,
+         password: tempPassword,
+         email: null, // NULL email for temporary user
+         is_first_login: true // Flag to indicate this is a temporary user
+       };
+
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Include cookies in the request
-        body: JSON.stringify(formData)
+        credentials: 'include',
+        body: JSON.stringify(userData)
       });
 
       const data = await response.json();
 
       if (data.success) {
-        toast({
-          title: 'Success',
-          description: 'User created successfully'
-        });
+        // Set credentials for modal
+        setTempCredentials({ username: tempUsername, password: tempPassword });
+        setCredentialsModalOpen(true);
         setCreateDialogOpen(false);
         setFormData({
-          username: '',
-          email: '',
-          password: '',
           full_name: '',
+          confirm_full_name: '',
           role: 'staff'
         });
         fetchUsers();
@@ -199,10 +262,28 @@ export default function UserManagementPage() {
   };
 
   const handleActivateUser = async (userId: string) => {
+    setUserToActivate(userId);
+    setActivatePasswordDialogOpen(true);
+  };
+
+  const confirmActivateUser = async () => {
+    if (!userToActivate || !activatePassword.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter your password to confirm',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
-      const response = await fetch(`/api/users/${userId}/activate`, {
+      const response = await fetch(`/api/users/${userToActivate}/activate`, {
         method: 'PUT',
-        credentials: 'include' // Include cookies in the request
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ password: activatePassword })
       });
 
       const data = await response.json();
@@ -212,6 +293,9 @@ export default function UserManagementPage() {
           title: 'Success',
           description: 'User activated successfully'
         });
+        setActivatePasswordDialogOpen(false);
+        setActivatePassword('');
+        setUserToActivate(null);
         fetchUsers();
       } else {
         toast({
@@ -345,60 +429,43 @@ export default function UserManagementPage() {
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New User</DialogTitle>
-                  <DialogDescription>
-                    Create a new user account with appropriate role and permissions.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="full_name">Full Name</Label>
-                    <Input
-                      id="full_name"
-                      value={formData.full_name}
-                      onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="role">Role</Label>
-                    <Select value={formData.role} onValueChange={(value: 'superadmin' | 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="staff">Staff</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="superadmin">Superadmin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                                 <DialogHeader>
+                   <DialogTitle>Create New User</DialogTitle>
+                   <DialogDescription>
+                     Create a new user account with temporary credentials. The staff member will configure their own username, email, and password on first login.
+                   </DialogDescription>
+                 </DialogHeader>
+                                 <div className="space-y-4">
+                   <div>
+                     <Label htmlFor="full_name">Full Name</Label>
+                     <Input
+                       id="full_name"
+                       value={formData.full_name}
+                       onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                       placeholder="Enter Full Name"
+                     />
+                   </div>
+                                       <div>
+                      <Label htmlFor="confirm_full_name">Confirm Full Name</Label>
+                      <Input
+                        id="confirm_full_name"
+                        value={formData.confirm_full_name}
+                        onChange={(e) => setFormData({ ...formData, confirm_full_name: e.target.value })}
+                        placeholder="Confirm Full Name"
+                      />
+                    </div>
+                   <div>
+                     <Label htmlFor="role">Role</Label>
+                     <Select value={formData.role} onValueChange={(value: 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
+                       <SelectTrigger>
+                         <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value="staff">Staff</SelectItem>
+                         <SelectItem value="admin">Admin</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
                   <div className="flex justify-end space-x-2">
                     <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
                       Cancel
@@ -519,16 +586,15 @@ export default function UserManagementPage() {
                               <div className="space-y-4">
                                 <div>
                                   <Label htmlFor="edit-role">Role</Label>
-                                  <Select value={formData.role} onValueChange={(value: 'superadmin' | 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
-                                    <SelectTrigger>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="staff">Staff</SelectItem>
-                                      <SelectItem value="admin">Admin</SelectItem>
-                                      <SelectItem value="superadmin">Superadmin</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                                                     <Select value={formData.role} onValueChange={(value: 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
+                                     <SelectTrigger>
+                                       <SelectValue />
+                                     </SelectTrigger>
+                                     <SelectContent>
+                                       <SelectItem value="staff">Staff</SelectItem>
+                                       <SelectItem value="admin">Admin</SelectItem>
+                                     </SelectContent>
+                                   </Select>
                                 </div>
                                 <div className="flex justify-end space-x-2">
                                   <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
@@ -572,6 +638,132 @@ export default function UserManagementPage() {
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
+
+             {/* Password Confirmation Dialog for Activating Users */}
+       <Dialog open={activatePasswordDialogOpen} onOpenChange={setActivatePasswordDialogOpen}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>Confirm Password</DialogTitle>
+             <DialogDescription>
+               Please enter your password to confirm user activation.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4">
+             <div>
+               <Label htmlFor="activate-password">Your Password</Label>
+               <Input
+                 id="activate-password"
+                 type="password"
+                 value={activatePassword}
+                 onChange={(e) => setActivatePassword(e.target.value)}
+                 placeholder="Enter your password"
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter') {
+                     confirmActivateUser();
+                   }
+                 }}
+               />
+             </div>
+             <div className="flex justify-end space-x-2">
+               <Button 
+                 variant="outline" 
+                 onClick={() => {
+                   setActivatePasswordDialogOpen(false);
+                   setActivatePassword('');
+                   setUserToActivate(null);
+                 }}
+               >
+                 Cancel
+               </Button>
+               <Button onClick={confirmActivateUser}>
+                 Confirm Activation
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+
+       {/* Temporary Credentials Modal */}
+       <Dialog open={credentialsModalOpen} onOpenChange={setCredentialsModalOpen}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>User Created Successfully!</DialogTitle>
+             <DialogDescription>
+               Temporary credentials have been generated. Please copy and share these credentials with the new user.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4">
+             <div className="bg-gray-50 p-4 rounded-lg">
+               <div className="space-y-3">
+                 <div className="flex items-center justify-between">
+                   <Label className="text-sm font-medium">Username:</Label>
+                   <div className="flex items-center space-x-2">
+                     <code className="bg-white px-2 py-1 rounded text-sm font-mono">
+                       {tempCredentials.username}
+                     </code>
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={() => copyToClipboard(tempCredentials.username, 'Username')}
+                       className="h-8 w-8 p-0"
+                     >
+                       {copiedField === 'Username' ? (
+                         <Check className="h-4 w-4 text-green-600" />
+                       ) : (
+                         <Copy className="h-4 w-4" />
+                       )}
+                     </Button>
+                   </div>
+                 </div>
+                 <div className="flex items-center justify-between">
+                   <Label className="text-sm font-medium">Password:</Label>
+                   <div className="flex items-center space-x-2">
+                     <code className="bg-white px-2 py-1 rounded text-sm font-mono">
+                       {tempCredentials.password}
+                     </code>
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={() => copyToClipboard(tempCredentials.password, 'Password')}
+                       className="h-8 w-8 p-0"
+                     >
+                       {copiedField === 'Password' ? (
+                         <Check className="h-4 w-4 text-green-600" />
+                       ) : (
+                         <Copy className="h-4 w-4" />
+                       )}
+                     </Button>
+                   </div>
+                 </div>
+               </div>
+             </div>
+             <div className="flex justify-center">
+               <Button
+                 variant="outline"
+                 onClick={copyAllCredentials}
+                 className="flex items-center space-x-2"
+               >
+                 {copiedField === 'All' ? (
+                   <Check className="h-4 w-4 text-green-600" />
+                 ) : (
+                   <Copy className="h-4 w-4" />
+                 )}
+                 <span>{copiedField === 'All' ? 'Copied!' : 'Copy All Credentials'}</span>
+               </Button>
+             </div>
+             <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+               <p className="text-sm text-blue-800">
+                 <strong>Important:</strong> These are temporary credentials. The staff member will be prompted to set up their own username, email, and password on first login.
+               </p>
+             </div>
+             <div className="flex justify-end">
+               <Button onClick={() => setCredentialsModalOpen(false)}>
+                 Close
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+     </div>
+   );
+ }

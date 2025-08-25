@@ -89,18 +89,31 @@ export class AuthService {
     email: string;
     password: string;
     full_name: string;
-    role: 'superadmin' | 'admin' | 'staff';
+    role: 'admin' | 'staff';
     createdBy: string;
+    is_first_login?: boolean;
   }): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       // Check if user already exists
       const existingUser = await db.query(
-        'SELECT id FROM users WHERE username = $1 OR email = $2',
-        [userData.username, userData.email]
+        'SELECT id FROM users WHERE username = $1',
+        [userData.username]
       );
 
       if (existingUser.rows.length > 0) {
-        return { success: false, error: 'Username or email already exists' };
+        return { success: false, error: 'Username already exists' };
+      }
+
+      // Check if email is provided and not empty, then check for duplicates
+      if (userData.email && userData.email.trim()) {
+        const existingEmail = await db.query(
+          'SELECT id FROM users WHERE email = $1',
+          [userData.email]
+        );
+
+        if (existingEmail.rows.length > 0) {
+          return { success: false, error: 'Email already exists' };
+        }
       }
 
       // Hash password
@@ -108,10 +121,10 @@ export class AuthService {
 
       // Create user
       const result = await db.query(
-        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, created_by, is_first_login)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [userData.username, userData.email, passwordHash, userData.full_name, userData.role, true, userData.createdBy]
+        [userData.username, userData.email, passwordHash, userData.full_name, userData.role, true, userData.createdBy, userData.is_first_login || false]
       );
 
       const user = result.rows[0];
@@ -151,7 +164,7 @@ export class AuthService {
    */
   static async updateUserRole(
     userId: string, 
-    newRole: 'superadmin' | 'admin' | 'staff', 
+    newRole: 'admin' | 'staff', 
     updatedBy: string
   ): Promise<{ success: boolean; error?: string }> {
     try {

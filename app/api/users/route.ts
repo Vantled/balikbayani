@@ -88,17 +88,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const body = await request.json();
-    const { username, email, password, full_name, role } = body;
+    const { username, email, password, full_name, role, is_first_login } = body;
 
     // Validation
-    if (!username || !email || !password || !full_name || !role) {
+    if (!username || !password || !full_name || !role) {
       return NextResponse.json({
         success: false,
-        error: 'All fields are required'
+        error: 'Username, password, full name, and role are required'
       }, { status: 400 });
     }
 
-    if (!['superadmin', 'admin', 'staff'].includes(role)) {
+    // Email is optional for temporary users (will be set during first-time setup)
+    if (email && email !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Please enter a valid email address'
+      }, { status: 400 });
+    }
+
+    if (!['admin', 'staff'].includes(role)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid role'
@@ -112,7 +120,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       password,
       full_name,
       role,
-      createdBy: user.id
+      createdBy: user.id,
+      is_first_login: is_first_login || false
     });
 
     if (!result.success) {

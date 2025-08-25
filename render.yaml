@@ -1,0 +1,66 @@
+# render.yaml
+# Render Blueprint: provisions a Next.js web service with Postgres and a persistent disk for uploads.
+# After pushing this file, use Render's Blueprint deploy to create the stack.
+
+services:
+  - type: web
+    name: balikbayani
+    env: node
+    plan: starter
+    buildCommand: npm ci --legacy-peer-deps && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /opt/uploads
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXTAUTH_URL
+        # Set this in the Render Dashboard to your public URL (e.g., https://your-domain.com)
+        sync: false
+      - key: NEXTAUTH_SECRET
+        # Set a strong secret in the Render Dashboard
+        sync: false
+      - key: JWT_SECRET
+        # Set a strong secret in the Render Dashboard
+        sync: false
+      - key: BCRYPT_ROUNDS
+        value: "12"
+      - key: UPLOAD_DIR
+        value: /opt/uploads
+      - key: MAX_FILE_SIZE
+        value: "10485760"
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_FILE
+        value: ./logs/app.log
+      # Database environment variables pulled from the managed Postgres instance below
+      - key: DB_HOST
+        fromDatabase:
+          name: bb-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: bb-postgres
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: bb-postgres
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: bb-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: bb-postgres
+          property: password
+
+# Managed Postgres database
+# In production, ssl is enabled by your app code when NODE_ENV=production
+# (see lib/database.ts ssl config)
+databases:
+  - name: bb-postgres
+    plan: starter

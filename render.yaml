@@ -7,8 +7,8 @@ services:
     name: balikbayani
     env: node
     plan: free
-    buildCommand: npm ci --legacy-peer-deps && npm run build
-    startCommand: npm run start
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm ci --legacy-peer-deps && npm run build
+    startCommand: npm run render:start
     autoDeploy: true
     envVars:
       - key: NODE_ENV

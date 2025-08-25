@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "render:migrate": "npm run db:migrate && npm run db:security-migrate && npm run db:role-migrate && npm run db:set-superadmin-password",
+    "render:start": "npm run render:migrate && npm run start",
     "lint": "next lint",
     "install-deps": "npm install --legacy-peer-deps",
     "db:init": "tsx lib/init-db.ts",

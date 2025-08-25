@@ -276,7 +276,7 @@ export default function JobFairsListPage() {
               {showFilter && (
                 <JobFairFilterPanel 
                   onClose={() => setShowFilter(false)} 
-                  onApply={(query) => {
+                  onApply={(query: string) => {
                     setPanelQuery(query)
                     // Update applied filters for title generation
                     setAppliedYearFilter(yearFilter)

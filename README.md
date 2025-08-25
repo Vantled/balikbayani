@@ -136,6 +136,11 @@ npm run db:init-complete
 ```
 This script creates all tables, applies all migrations, and sets up the default admin user.
 
+**If you encounter module import errors, try the alternative script:**
+```bash
+npm run db:init-complete-alt
+```
+
 ### Individual Database Commands
 ```bash
 npm run db:init          # Basic schema only
@@ -174,6 +179,11 @@ balikbayani/
 3. **Permission Errors (macOS/Linux):**
    - Use `sudo` for PostgreSQL commands
    - Check file permissions: `chmod +x scripts/*.js`
+
+4. **Module Import Errors:**
+   - Try the alternative initialization script: `npm run db:init-complete-alt`
+   - Ensure all dependencies are installed: `npm install`
+   - Check Node.js version (requires 18+): `node --version`
 
 ### Reset Database
 ```bash

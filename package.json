@@ -12,6 +12,7 @@
     "install-deps": "npm install --legacy-peer-deps",
     "db:init": "tsx lib/init-db.ts",
     "db:init-complete": "node scripts/init-database.js",
+    "db:init-complete-alt": "node scripts/init-database-alt.js",
     "db:reset": "tsx lib/init-db.ts --reset",
     "db:migrate": "tsx lib/init-db.ts --migrate",
     "db:migrate-bm-clearance-extended": "tsx scripts/migrate-bm-clearance-extended.ts",

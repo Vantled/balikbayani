@@ -1,27 +1,55 @@
-// scripts/init-database.js
-import 'dotenv/config';
-import { config } from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import bcrypt from 'bcryptjs';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+// scripts/init-database-alt.js
+// Alternative database initialization script using CommonJS for better compatibility
 
-// Get current file directory for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+require('dotenv').config({ path: '.env.local' });
 
-// Load environment variables from .env.local
-config({ path: '.env.local' });
-
-// Import database connection dynamically
+// Database connection setup
 let db;
-try {
-  const databaseModule = await import('../lib/database.js');
-  db = databaseModule.db;
-} catch (error) {
-  console.error('Failed to import database module:', error.message);
-  process.exit(1);
+
+async function setupDatabase() {
+  try {
+    // Try to import the database module
+    const databaseModule = require('../lib/database.ts');
+    db = databaseModule.db || databaseModule.default;
+    
+    if (!db) {
+      throw new Error('Database connection not found');
+    }
+    
+    console.log('✅ Database connection established');
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to setup database connection:', error.message);
+    console.log('💡 Trying alternative database setup...');
+    
+    // Fallback: Create a simple database connection
+    try {
+      const { Pool } = require('pg');
+      
+      const pool = new Pool({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: process.env.DB_NAME || 'balikbayani',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      });
+      
+      db = {
+        query: (text, params) => pool.query(text, params),
+        end: () => pool.end()
+      };
+      
+      console.log('✅ Database connection established (fallback)');
+      return true;
+    } catch (fallbackError) {
+      console.error('❌ Fallback database setup failed:', fallbackError.message);
+      return false;
+    }
+  }
 }
 
 async function readSqlFile(filePath) {
@@ -29,9 +57,15 @@ async function readSqlFile(filePath) {
     // Resolve path relative to project root
     const projectRoot = path.resolve(__dirname, '..');
     const fullPath = path.resolve(projectRoot, filePath);
+    
+    if (!fs.existsSync(fullPath)) {
+      console.error(`❌ File not found: ${fullPath}`);
+      return null;
+    }
+    
     return fs.readFileSync(fullPath, 'utf8');
   } catch (error) {
-    console.error(`Error reading file ${filePath}:`, error.message);
+    console.error(`❌ Error reading file ${filePath}:`, error.message);
     return null;
   }
 }
@@ -39,6 +73,7 @@ async function readSqlFile(filePath) {
 async function executeSqlFile(filePath, description) {
   console.log(`\n📄 ${description}...`);
   const sql = await readSqlFile(filePath);
+  
   if (sql) {
     try {
       await db.query(sql);
@@ -55,6 +90,12 @@ async function executeSqlFile(filePath, description) {
 async function initializeDatabase() {
   try {
     console.log('🚀 Starting comprehensive database initialization...\n');
+
+    // Setup database connection
+    const dbSetup = await setupDatabase();
+    if (!dbSetup) {
+      throw new Error('Database setup failed');
+    }
 
     // Step 1: Execute main schema
     await executeSqlFile('lib/schema.sql', 'Creating main database schema');
@@ -149,13 +190,14 @@ async function initializeDatabase() {
     console.error('\n❌ Database initialization failed:', error);
     throw error;
   } finally {
-    await db.end();
+    if (db && db.end) {
+      await db.end();
+    }
   }
 }
 
 // Run initialization if this file is executed directly
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-if (isMainModule) {
+if (require.main === module) {
   initializeDatabase()
     .then(() => {
       console.log('\n✅ Database setup completed');
@@ -167,4 +209,4 @@ if (isMainModule) {
     });
 }
 
-export { initializeDatabase };
+module.exports = { initializeDatabase };

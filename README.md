@@ -55,6 +55,8 @@ Edit `.env.local` with your database credentials and other settings.
 4. **Initialize database:**
 ```bash
 npm run db:init-complete
+# or
+npm run db:init-complete-alt
 ```
 
 5. **Start development server:**

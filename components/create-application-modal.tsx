@@ -14,7 +14,7 @@ import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { getUser } from "@/lib/auth"
 import React from "react"
-import PDFViewerModal from "@/components/pdf-viewer-modal"
+import DocumentViewerModal from "@/components/pdf-viewer-modal"
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -1033,9 +1033,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* PDF Viewer Modal */}
+      {/* Document Viewer Modal */}
       {selectedDocument && (
-        <PDFViewerModal
+        <DocumentViewerModal
           isOpen={pdfViewerOpen}
           onClose={() => {
             setPdfViewerOpen(false)

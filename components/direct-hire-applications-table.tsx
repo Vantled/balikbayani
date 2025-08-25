@@ -15,7 +15,7 @@ import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } f
 import { Document } from "@/lib/types"
 import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
-import PDFViewerModal from "@/components/pdf-viewer-modal"
+import DocumentViewerModal from "@/components/pdf-viewer-modal"
 // Defer auth role check to client to avoid hydration mismatch
 
 interface DirectHireApplicationsTableProps {
@@ -28,6 +28,8 @@ interface ApplicantDocumentsTabProps {
   refreshTrigger?: number
   onRefresh?: () => void
   onViewPDF?: (documentId: string, documentName: string) => void
+  setSelectedDocument: (document: {id: string, name: string, fileBlob?: Blob} | null) => void
+  setPdfViewerOpen: (open: boolean) => void
 }
 
 export default function DirectHireApplicationsTable({ search, filterQuery = "" }: DirectHireApplicationsTableProps) {
@@ -87,7 +89,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   
   // PDF Viewer Modal state
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
-  const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string} | null>(null)
+  const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string, fileBlob?: Blob} | null>(null)
   
   // Delete confirmation state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -1085,6 +1087,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     setSelectedDocument({ id: documentId, name: documentName })
                     setPdfViewerOpen(true)
                   }}
+                  setSelectedDocument={setSelectedDocument}
+                  setPdfViewerOpen={setPdfViewerOpen}
                 />
               </div>
             </div>
@@ -1584,9 +1588,9 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
         />
       )}
       
-      {/* PDF Viewer Modal */}
+      {/* Document Viewer Modal */}
       {selectedDocument && (
-        <PDFViewerModal
+        <DocumentViewerModal
           isOpen={pdfViewerOpen}
           onClose={() => {
             setPdfViewerOpen(false)
@@ -1594,6 +1598,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           }}
           documentId={selectedDocument.id}
           documentName={selectedDocument.name}
+          fileBlob={selectedDocument.fileBlob}
         />
       )}
 
@@ -1774,7 +1779,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 }
 
 // Applicant Documents List Component
-function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onViewPDF }: ApplicantDocumentsTabProps) {
+function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onViewPDF, setSelectedDocument, setPdfViewerOpen }: ApplicantDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [editingDocument, setEditingDocument] = useState<string | null>(null)
@@ -1847,32 +1852,28 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
 
   // Handle document view/download
   const handleView = async (document: Document) => {
-    // Check if this is a Clearance document and if it's actually a PDF
-    const isClearance = document.document_type.toLowerCase().includes('clearance')
-    const isPDF = document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')
-    
-    if (isClearance && isPDF && onViewPDF) {
-      // Use PDF viewer for Clearance documents that are actually PDFs
-      onViewPDF(document.id, document.document_type)
-    } else {
-      // Download other documents as before
-      try {
-        const response = await fetch(`/api/documents/${document.id}/download`)
-        if (response.ok) {
-          const blob = await response.blob()
-          const url = window.URL.createObjectURL(blob)
-          window.open(url, '_blank')
-          window.URL.revokeObjectURL(url)
-        } else {
-          throw new Error('View failed')
-        }
-      } catch (error) {
-        toast({
-          title: 'View Error',
-          description: 'Failed to view document',
-          variant: 'destructive'
-        })
-      }
+    try {
+      console.log('Attempting to view document:', {
+        id: document.id,
+        fileName: document.file_name,
+        documentType: document.document_type,
+        mimeType: document.mime_type,
+        filePath: document.file_path
+      })
+      
+      // Use document ID approach instead of fetching blob
+      setSelectedDocument({
+        id: document.id,
+        name: document.file_name
+      })
+      setPdfViewerOpen(true)
+    } catch (error) {
+      console.error('View error:', error)
+      toast({
+        title: 'View Error',
+        description: `Failed to view document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: 'destructive'
+      })
     }
   }
 
@@ -2096,12 +2097,10 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {!(document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx')) && (
-                  <DropdownMenuItem onClick={() => handleView(document)}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    View
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem onClick={() => handleView(document)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View
+                </DropdownMenuItem>
                 {(() => {
                   const fileExtension = document.file_name.split('.').pop()?.toLowerCase() || ''
                   let downloadText = 'Download'

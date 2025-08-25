@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useBalikManggagawaProcessing } from "@/hooks/use-balik-manggagawa-processing"
 import { toast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import DocumentViewerModal from "@/components/pdf-viewer-modal"
 
 const processingRows = [
   {
@@ -110,11 +111,37 @@ export default function BalikManggagawaProcessingPage() {
     file: null as File | null
   })
 
+  // PDF Viewer Modal state
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{id?: string, name: string, fileBlob?: File | null} | null>(null)
+
   const resetForm = () => { setFormName(""); setFormSex(""); setFormAddress(""); setFormDestination("") }
 
 
 
   const handleFileSelect = (documentType: string, file: File) => {
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      toast({ 
+        title: 'Invalid file format', 
+        description: 'Please upload only JPEG, PNG, or PDF files.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // Validate file size (5MB = 5 * 1024 * 1024 bytes)
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast({ 
+        title: 'File too large', 
+        description: 'Please upload files smaller than 5MB.',
+        variant: 'destructive'
+      })
+      return
+    }
+
     setVerificationDialog({
       open: true,
       documentType,
@@ -206,6 +233,18 @@ export default function BalikManggagawaProcessingPage() {
 
   const cancelVerification = () => {
     setVerificationDialog({ open: false, documentType: '', file: null })
+  }
+
+  // Handle opening PDF viewer
+  const handleViewDocument = (documentType: string) => {
+    const document = documentChecklist[documentType as keyof typeof documentChecklist];
+    if (document && document.file) {
+      setSelectedDocument({
+        name: document.file.name,
+        fileBlob: document.file
+      });
+      setPdfViewerOpen(true);
+    }
   }
 
   const checkDocumentsCompletion = async () => {
@@ -574,9 +613,21 @@ export default function BalikManggagawaProcessingPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        {row.clearance_type === 'watchlisted_similar_name' ? Math.min(1, row.documents_submitted || 0) + '/1' : (row.documents_submitted || 0) + '/7'} Submitted
-                      </span>
+                      <div className="flex flex-col items-center space-y-1">
+                        <span className="text-xs font-medium text-gray-700">
+                          {row.clearance_type === 'watchlisted_similar_name' ? Math.min(1, row.documents_submitted || 0) + '/1' : (row.documents_submitted || 0) + '/7'} Submitted
+                        </span>
+                        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${row.clearance_type === 'watchlisted_similar_name' 
+                                ? (Math.min(1, row.documents_submitted || 0) / 1) * 100
+                                : ((row.documents_submitted || 0) / 7) * 100}%` 
+                            }}
+                          ></div>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <Button 
@@ -790,6 +841,9 @@ export default function BalikManggagawaProcessingPage() {
               {/* Documents Section */}
               <div>
                 <div className="font-semibold text-gray-700 mb-2">Documents</div>
+                <div className="text-sm text-gray-600 mb-4">
+                  Please upload the required documents. Supported formats: JPEG, PNG, PDF (Max 5MB each)
+                </div>
                 {selectedRecord?.clearance_type === 'watchlisted_similar_name' ? (
                   <div className="space-y-3">
                     {/* Passport / Supporting Document (single requirement) */}
@@ -804,17 +858,18 @@ export default function BalikManggagawaProcessingPage() {
                           <div className="text-sm text-gray-500">Attach either a copy of passport or any supporting document</div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 pr-8">
                         {documentChecklist.validPassport.file && (
                           <div className="flex items-center space-x-1 text-green-600">
                             <FileText className="h-4 w-4" />
-                            <span className="text-xs">{documentChecklist.validPassport.file.name}</span>
+                            <span className="text-xs truncate max-w-[200px]">{documentChecklist.validPassport.file.name}</span>
                           </div>
                         )}
                       </div>
                       <label className="absolute inset-0 cursor-pointer">
                         <input
                           type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
@@ -822,6 +877,19 @@ export default function BalikManggagawaProcessingPage() {
                           }}
                         />
                       </label>
+                      {documentChecklist.validPassport.file && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDocument('validPassport');
+                          }}
+                          className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                        >
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -834,28 +902,41 @@ export default function BalikManggagawaProcessingPage() {
                         onCheckedChange={(checked) => handleCheckboxChange('personalLetter', checked as boolean)}
                       />
                       <div>
-                        <div className="font-medium">Personal Letter requesting for clearance</div>
-                        <div className="text-sm text-gray-500">Addressed to Secretary of Department of Migrant Workers</div>
+                        <div className="font-medium">Personal Letter for DMW Secretary</div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.personalLetter.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.personalLetter.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.personalLetter.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('personalLetter', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('personalLetter', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.personalLetter.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('personalLetter');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Valid Passport */}
@@ -867,24 +948,38 @@ export default function BalikManggagawaProcessingPage() {
                       />
                       <div className="font-medium">Valid passport</div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.validPassport.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.validPassport.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.validPassport.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('validPassport', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('validPassport', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.validPassport.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('validPassport');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Work Visa */}
@@ -896,24 +991,38 @@ export default function BalikManggagawaProcessingPage() {
                       />
                       <div className="font-medium">Work visa</div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.workVisa.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.workVisa.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.workVisa.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('workVisa', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('workVisa', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.workVisa.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('workVisa');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Employment Contract */}
@@ -925,24 +1034,38 @@ export default function BalikManggagawaProcessingPage() {
                       />
                       <div className="font-medium">Employment Contract</div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.employmentContract.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.employmentContract.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.employmentContract.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('employmentContract', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('employmentContract', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.employmentContract.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('employmentContract');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Employment Certificate */}
@@ -954,24 +1077,38 @@ export default function BalikManggagawaProcessingPage() {
                       />
                       <div className="font-medium">Employment Certificate</div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.employmentCertificate.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.employmentCertificate.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.employmentCertificate.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('employmentCertificate', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('employmentCertificate', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.employmentCertificate.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('employmentCertificate');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Last Arrival Email */}
@@ -986,24 +1123,38 @@ export default function BalikManggagawaProcessingPage() {
                         <div className="text-sm text-gray-500">Email from Bureau of Immigration</div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.lastArrivalEmail.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.lastArrivalEmail.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.lastArrivalEmail.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('lastArrivalEmail', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('lastArrivalEmail', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.lastArrivalEmail.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('lastArrivalEmail');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
 
                   {/* Flight Ticket */}
@@ -1015,24 +1166,38 @@ export default function BalikManggagawaProcessingPage() {
                       />
                       <div className="font-medium">Flight Ticket</div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pr-8">
                       {documentChecklist.flightTicket.file && (
                         <div className="flex items-center space-x-1 text-green-600">
                           <FileText className="h-4 w-4" />
-                          <span className="text-xs">{documentChecklist.flightTicket.file.name}</span>
+                          <span className="text-xs truncate max-w-[200px]">{documentChecklist.flightTicket.file.name}</span>
                         </div>
                       )}
                     </div>
                     <label className="absolute inset-0 cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileSelect('flightTicket', file)
-                        }}
-                      />
+                                              <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileSelect('flightTicket', file)
+                          }}
+                        />
                     </label>
+                    {documentChecklist.flightTicket.file && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDocument('flightTicket');
+                        }}
+                        className="h-6 w-6 p-0 absolute right-2 top-1/2 transform -translate-y-1/2 z-10"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 )}
@@ -1086,6 +1251,20 @@ export default function BalikManggagawaProcessingPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Document Viewer Modal */}
+      {selectedDocument && (
+        <DocumentViewerModal
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false)
+            setSelectedDocument(null)
+          }}
+          documentId={selectedDocument.id}
+          documentName={selectedDocument.name}
+          fileBlob={selectedDocument.fileBlob}
+        />
+      )}
     </div>
   )
 } 

@@ -70,6 +70,10 @@ export async function POST(request: NextRequest) {
       const employer = formData.get('employer') as string | null;
       const salaryCurrency = formData.get('salaryCurrency') as string | null;
       
+      console.log('API received data:', {
+        name, sex, salary, status, jobsite, position, job_type, evaluator, employer, salaryCurrency
+      });
+      
       // Validate required fields based on status
       if (status === 'draft') {
         // For drafts, only name is required
@@ -109,6 +113,8 @@ export async function POST(request: NextRequest) {
         job_type: (job_type as 'household' | 'professional') || 'professional',
         evaluator: (evaluator || '').toUpperCase(),
         employer: (employer || '').toUpperCase(),
+        salary_currency: salaryCurrency || 'USD',
+        raw_salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
         status_checklist: status === 'draft' ? {
           evaluated: { checked: false, timestamp: undefined },
           for_confirmation: { checked: false, timestamp: undefined },
@@ -124,7 +130,9 @@ export async function POST(request: NextRequest) {
         }
       };
 
+      console.log('Saving application data:', applicationData);
       const application = await DatabaseService.createDirectHireApplication(applicationData);
+      console.log('Saved application:', application);
 
       // Handle file uploads
       const uploadedDocuments = [];

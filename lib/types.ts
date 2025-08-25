@@ -63,6 +63,8 @@ export interface DirectHireApplication {
   job_type: 'household' | 'professional';
   evaluator: string;
   employer: string;
+  salary_currency?: string;
+  raw_salary?: number;
   status_checklist: {
     evaluated: { checked: boolean; timestamp?: string };
     for_confirmation: { checked: boolean; timestamp?: string };

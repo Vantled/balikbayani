@@ -11,10 +11,10 @@ interface FilterPanelProps {
 	onClose: () => void
 	onApply: (query: string) => void
 	// Controlled values
-	typeHousehold: boolean
-	setTypeHousehold: (value: boolean) => void
-	typeProfessional: boolean
-	setTypeProfessional: (value: boolean) => void
+	typeHousehold?: boolean
+	setTypeHousehold?: (value: boolean) => void
+	typeProfessional?: boolean
+	setTypeProfessional?: (value: boolean) => void
 	sex: string
 	setSex: (value: string) => void
 	status: string
@@ -25,17 +25,40 @@ interface FilterPanelProps {
 	setJobsite: (value: string) => void
 	position: string
 	setPosition: (value: string) => void
-	evaluator: string
-	setEvaluator: (value: string) => void
+	evaluator?: string
+	setEvaluator?: (value: string) => void
+	category?: string
+	setCategory?: (value: string) => void
 	onClear: () => void
 }
 
 export default function FilterPanel(props: FilterPanelProps) {
-	const { onClose, onApply, typeHousehold, setTypeHousehold, typeProfessional, setTypeProfessional, sex, setSex, status, setStatus, dateWithin, setDateWithin, jobsite, setJobsite, position, setPosition, evaluator, setEvaluator, onClear } = props
+	const {
+		onClose,
+		onApply,
+		typeHousehold,
+		setTypeHousehold,
+		typeProfessional,
+		setTypeProfessional,
+		sex,
+		setSex,
+		status,
+		setStatus,
+		dateWithin,
+		setDateWithin,
+		jobsite,
+		setJobsite,
+		position,
+		setPosition,
+		evaluator,
+		setEvaluator,
+		category,
+		setCategory,
+		onClear
+	} = props
 
-	// Local state for native date inputs
-	const [startDate, setStartDate] = useState<string>("")
-	const [endDate, setEndDate] = useState<string>("")
+	const [startDate, setStartDate] = useState("")
+	const [endDate, setEndDate] = useState("")
 	const todayStr = new Date().toISOString().slice(0,10)
 
 	// Sync from applied value (e.g., when reopening panel)
@@ -70,6 +93,7 @@ export default function FilterPanel(props: FilterPanelProps) {
 		if (typeHousehold && !typeProfessional) parts.push("job_type:household")
 		if (typeProfessional && !typeHousehold) parts.push("job_type:professional")
 		if (status) parts.push(`status:${status}`)
+		if (category) parts.push(`category:${category}`)
 		if (jobsite) parts.push(`jobsite:${jobsite}`)
 		if (position) parts.push(`position:${position}`)
 		if (evaluator) parts.push(`evaluator:${evaluator}`)
@@ -87,27 +111,33 @@ export default function FilterPanel(props: FilterPanelProps) {
 		: (dateWithin ? dateWithin.replace('|', ' - ').replaceAll('-', '/') : 'Select date range')
 
 	return (
-		<div className="absolute top-12 left-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg p-4 w-[360px]">
+		<div className="bg-white border border-gray-200 rounded-md shadow-lg p-4 w-[360px] max-h-[80vh] overflow-y-auto">
 			<div className="space-y-4">
 				{/* Type */}
+				{typeof setTypeHousehold === 'function' && typeof setTypeProfessional === 'function' && (
 				<div>
 					<Label className="text-sm font-medium mb-2 block">Type</Label>
-					<div className="space-y-2">
+					<div className="flex items-center space-x-6">
 						<div className="flex items-center space-x-2">
-							<Checkbox id="household" checked={typeHousehold} onCheckedChange={(v) => setTypeHousehold(Boolean(v))} />
+							<Checkbox id="household" checked={Boolean(typeHousehold)} onCheckedChange={(v) => setTypeHousehold && setTypeHousehold(Boolean(v))} />
 							<Label htmlFor="household" className="text-sm">Household</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<Checkbox id="professional" checked={typeProfessional} onCheckedChange={(v) => setTypeProfessional(Boolean(v))} />
+							<Checkbox id="professional" checked={Boolean(typeProfessional)} onCheckedChange={(v) => setTypeProfessional && setTypeProfessional(Boolean(v))} />
 							<Label htmlFor="professional" className="text-sm">Professional</Label>
 						</div>
 					</div>
 				</div>
+				)}
 
 				{/* Sex */}
 				<div>
 					<Label className="text-sm font-medium mb-2 block">Sex</Label>
 					<RadioGroup value={sex} onValueChange={setSex} className="flex space-x-4">
+						<div className="flex items-center space-x-2">
+							<RadioGroupItem value="" id="none" />
+							<Label htmlFor="none" className="text-sm">None</Label>
+						</div>
 						<div className="flex items-center space-x-2">
 							<RadioGroupItem value="female" id="female" />
 							<Label htmlFor="female" className="text-sm">Female</Label>
@@ -138,6 +168,24 @@ export default function FilterPanel(props: FilterPanelProps) {
 						</SelectContent>
 					</Select>
 				</div>
+
+				{/* Category */}
+				{typeof setCategory === 'function' && (
+					<div>
+						<Label className="text-sm font-medium mb-2 block">Category</Label>
+						<Select onValueChange={setCategory} value={category || ""}>
+							<SelectTrigger className="w-full h-8">
+								<SelectValue placeholder="Select category" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="Direct Hire">Direct Hire</SelectItem>
+								<SelectItem value="Balik Manggagawa">Balik Manggagawa</SelectItem>
+								<SelectItem value="Gov to Gov">Gov to Gov</SelectItem>
+								<SelectItem value="Information Sheet">Information Sheet</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
+				)}
 
 				{/* Date Range (Native inputs) */}
 				<div>
@@ -174,16 +222,18 @@ export default function FilterPanel(props: FilterPanelProps) {
 				</div>
 
 				{/* Evaluator */}
+				{typeof setEvaluator === 'function' && (
 				<div>
 					<Label className="text-sm font-medium mb-2 block">Evaluator</Label>
 					<input 
 						type="text" 
 						className="w-full border rounded px-3 py-2 text-sm" 
 						placeholder="Type evaluator"
-						value={evaluator}
-						onChange={(e) => setEvaluator(e.target.value)}
+						value={evaluator || ""}
+						onChange={(e) => setEvaluator && setEvaluator(e.target.value)}
 					/>
 				</div>
+				)}
 
 				{/* Action Buttons */}
 				<div className="flex space-x-2 pt-2">

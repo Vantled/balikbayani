@@ -6,8 +6,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ProcessingPathsChart from "./processing-paths-chart"
 import ApplicationsTable from "./applications-table"
 import { useEffect, useState } from "react"
-import { Search } from "lucide-react"
+import { Search, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import FilterPanel from "./filter-panel"
 
 type Application = {
   id: number
@@ -74,6 +75,8 @@ type DashboardStats = {
   directHireMale: number
   directHireFemale: number
   clearance: number
+  clearanceMale: number
+  clearanceFemale: number
   govToGov: number
   infoSheet: number
   pendingUsers: number
@@ -128,19 +131,80 @@ export default function DirectHireTable() {
   const [search, setSearch] = useState("")
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
-  const [dateFrom, setDateFrom] = useState<string>("")
-  const [dateTo, setDateTo] = useState<string>("")
-  const todayStr = new Date().toISOString().slice(0,10)
 
-  const fetchStats = async (from?: string, to?: string) => {
+  // Add state for search and filter functionality
+  const [showFilter, setShowFilter] = useState(false)
+  const [panelQuery, setPanelQuery] = useState("")
+
+  // Filter panel state
+  const [typeHousehold, setTypeHousehold] = useState(false)
+  const [typeProfessional, setTypeProfessional] = useState(false)
+  const [sexFilter, setSexFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [dateWithin, setDateWithin] = useState("")
+  const [jobsiteFilter, setJobsiteFilter] = useState("")
+  const [positionFilter, setPositionFilter] = useState("")
+  const [evaluatorFilter, setEvaluatorFilter] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("")
+
+  const clearPanel = () => {
+    setTypeHousehold(false)
+    setTypeProfessional(false)
+    setSexFilter("")
+    setStatusFilter("")
+    setDateWithin("")
+    setJobsiteFilter("")
+    setPositionFilter("")
+    setEvaluatorFilter("")
+    setCategoryFilter("")
+    setPanelQuery("")
+  }
+
+  // Add state for gender filters for each card
+  const [directHireFilter, setDirectHireFilter] = useState<"all" | "male" | "female">("all")
+  const [balikManggagawaFilter, setBalikManggagawaFilter] = useState<"all" | "male" | "female">("all")
+  const [govToGovFilter, setGovToGovFilter] = useState<"all" | "male" | "female">("all")
+  const [infoSheetFilter, setInfoSheetFilter] = useState<"all" | "male" | "female">("all")
+
+  // Helper functions to get the display value for each card
+  const getDirectHireDisplayValue = () => {
+    if (loadingStats) return '—'
+    switch (directHireFilter) {
+      case "male": return stats?.directHireMale ?? 0
+      case "female": return stats?.directHireFemale ?? 0
+      default: return stats?.directHire ?? 0
+    }
+  }
+
+  const getBalikManggagawaDisplayValue = () => {
+    if (loadingStats) return '—'
+    switch (balikManggagawaFilter) {
+      case "male": return stats?.clearanceMale ?? 0
+      case "female": return stats?.clearanceFemale ?? 0
+      default: return stats?.clearance ?? 0
+    }
+  }
+
+  const getGovToGovDisplayValue = () => {
+    switch (govToGovFilter) {
+      case "male": return govToGovMaleCount
+      case "female": return govToGovFemaleCount
+      default: return govToGovCount
+    }
+  }
+
+  const getInfoSheetDisplayValue = () => {
+    switch (infoSheetFilter) {
+      case "male": return infoSheetMaleCount
+      case "female": return infoSheetFemaleCount
+      default: return infoSheetCount
+    }
+  }
+
+  const fetchStats = async () => {
     setLoadingStats(true)
     try {
-      const params = new URLSearchParams()
-      if (from && to) {
-        params.set('date_from', from)
-        params.set('date_to', to)
-      }
-      const res = await fetch(`/api/dashboard/stats?${params.toString()}`)
+      const res = await fetch('/api/dashboard/stats')
       const data = await res.json()
       if (data.success) setStats(data.data)
     } finally {
@@ -153,22 +217,45 @@ export default function DirectHireTable() {
   }, [])
 
   const [recentApps, setRecentApps] = useState<any[]>([])
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  })
+
+  const loadRecent = async (page = 1, limit = 10) => {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      })
+      
+      if (search) params.append('search', search)
+      if (panelQuery) params.append('filterQuery', panelQuery)
+      
+      const res = await fetch(`/api/dashboard/recent?${params.toString()}`)
+      const data = await res.json()
+      if (data.success) {
+        setRecentApps(data.data)
+        setPagination({
+          page: data.pagination?.page || 1,
+          limit: data.pagination?.limit || 20,
+          total: data.pagination?.total || 0,
+          totalPages: data.pagination?.totalPages || 0
+        })
+      }
+    } catch {}
+  }
+
   useEffect(() => {
-    const loadRecent = async () => {
-      try {
-        const res = await fetch('/api/dashboard/recent?limit=50')
-        const data = await res.json()
-        if (data.success) setRecentApps(data.data)
-      } catch {}
-    }
-    loadRecent()
+    loadRecent(1, 10)
   }, [])
 
-  const filteredApplications = recentApps.filter((application: any) =>
-    Object.values(application).some((value: any) =>
-      String(value ?? '').toLowerCase().includes(search.toLowerCase())
-    )
-  )
+  // Reset to page 1 when search or filter changes
+  useEffect(() => {
+    loadRecent(1, pagination.limit)
+  }, [search, panelQuery])
 
   return (
     <>
@@ -198,51 +285,45 @@ export default function DirectHireTable() {
             <div className="relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                className="pl-8 h-9 w-[240px] bg-white" 
+                className="pl-8 pr-10 h-9 w-[240px] bg-white" 
                 placeholder="Search or key:value" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
+                onClick={() => setShowFilter(!showFilter)}
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+              
+              {/* Filter Panel */}
+              {showFilter && (
+                <div className="absolute right-0 top-12 z-50">
+                  <FilterPanel 
+                    onClose={() => setShowFilter(false)} 
+                    onApply={(query) => {
+                      setPanelQuery(query)
+                      setShowFilter(false)
+                    }}
+                    sex={sexFilter}
+                    setSex={setSexFilter}
+                    status={statusFilter}
+                    setStatus={setStatusFilter}
+                    dateWithin={dateWithin}
+                    setDateWithin={setDateWithin}
+                    jobsite={jobsiteFilter}
+                    setJobsite={setJobsiteFilter}
+                    position={positionFilter}
+                    setPosition={setPositionFilter}
+                    onClear={clearPanel}
+                  />
+                </div>
+              )}
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              className="border border-gray-300 rounded-md bg-white h-9 px-2 text-sm"
-              value={dateFrom}
-              max={todayStr}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-            <span className="text-sm text-gray-600">to</span>
-            <input
-              type="date"
-              className="border border-gray-300 rounded-md bg-white h-9 px-2 text-sm"
-              value={dateTo}
-              max={todayStr}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-            <Button
-              className="bg-[#1976D2] hover:bg-[#1565C0] text-white h-9"
-              onClick={() => fetchStats(dateFrom || undefined, (dateTo && dateTo > todayStr) ? todayStr : (dateTo || undefined))}
-              disabled={(() => {
-                if (loadingStats) return true
-                if (!dateFrom || !dateTo) return true
-                if (dateFrom > dateTo) return true
-                if (dateTo > todayStr) return true
-                return false
-              })()}
-            >
-              Apply
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9"
-              onClick={() => { setDateFrom(""); setDateTo(""); fetchStats() }}
-              disabled={loadingStats}
-            >
-              Clear
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -272,14 +353,28 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{loadingStats ? '—' : (stats?.directHire ?? 0)}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getDirectHireDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
-                <Button variant="outline" className="text-xs h-8 rounded">
-                  Male ({loadingStats ? '—' : (stats?.directHireMale ?? 0)})
+                <Button 
+                  className={`text-xs h-8 rounded ${directHireFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={directHireFilter === "all" ? "default" : "outline"}
+                  onClick={() => setDirectHireFilter("all")}
+                >
+                  All
                 </Button>
-                <Button variant="outline" className="text-xs h-8 rounded">
-                  Female ({loadingStats ? '—' : (stats?.directHireFemale ?? 0)})
+                <Button 
+                  className={`text-xs h-8 rounded ${directHireFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={directHireFilter === "male" ? "default" : "outline"}
+                  onClick={() => setDirectHireFilter("male")}
+                >
+                  Male
+                </Button>
+                <Button 
+                  className={`text-xs h-8 rounded ${directHireFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={directHireFilter === "female" ? "default" : "outline"}
+                  onClick={() => setDirectHireFilter("female")}
+                >
+                  Female
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-2">{loadingStats ? '—' : (stats?.directHire ?? 0)} total</p>
@@ -307,14 +402,28 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{loadingStats ? '—' : (stats?.clearance ?? 0)}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getBalikManggagawaDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Male ({loadingStats ? '—' : (stats?.clearanceMale ?? 0)})
+                <Button 
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={balikManggagawaFilter === "all" ? "default" : "outline"}
+                  onClick={() => setBalikManggagawaFilter("all")}
+                >
+                  All
                 </Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Female ({loadingStats ? '—' : (stats?.clearanceFemale ?? 0)})
+                <Button 
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={balikManggagawaFilter === "male" ? "default" : "outline"}
+                  onClick={() => setBalikManggagawaFilter("male")}
+                >
+                  Male
+                </Button>
+                <Button 
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={balikManggagawaFilter === "female" ? "default" : "outline"}
+                  onClick={() => setBalikManggagawaFilter("female")}
+                >
+                  Female
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-2">{loadingStats ? '—' : (stats?.clearance ?? 0)} total</p>
@@ -342,14 +451,28 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{govToGovCount}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getGovToGovDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Male ({govToGovMaleCount})
+                <Button 
+                  className={`text-xs h-8 rounded ${govToGovFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={govToGovFilter === "all" ? "default" : "outline"}
+                  onClick={() => setGovToGovFilter("all")}
+                >
+                  All
                 </Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Female ({govToGovFemaleCount})
+                <Button 
+                  className={`text-xs h-8 rounded ${govToGovFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={govToGovFilter === "male" ? "default" : "outline"}
+                  onClick={() => setGovToGovFilter("male")}
+                >
+                  Male
+                </Button>
+                <Button 
+                  className={`text-xs h-8 rounded ${govToGovFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={govToGovFilter === "female" ? "default" : "outline"}
+                  onClick={() => setGovToGovFilter("female")}
+                >
+                  Female
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-2">{govToGovCount} total</p>
@@ -377,14 +500,28 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{infoSheetCount}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getInfoSheetDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
-                <Button className="bg-[#1976D2] hover:bg-[#1565C0] text-white text-xs h-8 rounded">All</Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Male ({infoSheetMaleCount})
+                <Button 
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={infoSheetFilter === "all" ? "default" : "outline"}
+                  onClick={() => setInfoSheetFilter("all")}
+                >
+                  All
                 </Button>
-                <Button variant="outline" className="bg-white text-xs h-8 rounded">
-                  Female ({infoSheetFemaleCount})
+                <Button 
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={infoSheetFilter === "male" ? "default" : "outline"}
+                  onClick={() => setInfoSheetFilter("male")}
+                >
+                  Male
+                </Button>
+                <Button 
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  variant={infoSheetFilter === "female" ? "default" : "outline"}
+                  onClick={() => setInfoSheetFilter("female")}
+                >
+                  Female
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-2">{infoSheetCount} total</p>
@@ -398,9 +535,15 @@ export default function DirectHireTable() {
             <ProcessingPathsChart />
           </Card>
         </>
-      ) : (
-        <ApplicationsTable applications={filteredApplications} />
-      )}
+             ) : (
+         <ApplicationsTable 
+           applications={recentApps} 
+           search={search} 
+           filterQuery={panelQuery}
+           pagination={pagination}
+           onPageChange={(page) => loadRecent(page, pagination.limit)}
+         />
+       )}
     </>
   )
 }

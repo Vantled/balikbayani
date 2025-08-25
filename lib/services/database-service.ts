@@ -114,11 +114,14 @@ export class DatabaseService {
     evaluator: string;
     employer: string;
     status_checklist: any;
+    salary_currency?: string;
+    raw_salary?: number;
   }): Promise<DirectHireApplication> {
+    console.log('Database service creating application with data:', data);
     const query = `
       INSERT INTO direct_hire_applications 
-      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
     
@@ -133,15 +136,21 @@ export class DatabaseService {
       data.job_type,
       data.evaluator,
       data.employer,
-      JSON.stringify(data.status_checklist)
+      JSON.stringify(data.status_checklist),
+      data.salary_currency || 'USD',
+      data.raw_salary || data.salary
     ];
     
+    console.log('Database query values:', values);
+    
     const { rows } = await db.query(query, values);
+    console.log('Database query result:', rows);
     const result = rows[0];
     
     // Parse status_checklist JSONB field
     result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
     
+    console.log('Database service returning result:', result);
     return result;
   }
 
@@ -264,6 +273,15 @@ export class DatabaseService {
 
   static async deleteDirectHireApplication(id: string): Promise<boolean> {
     const { rowCount } = await db.query('UPDATE direct_hire_applications SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
+    return (rowCount || 0) > 0;
+  }
+
+  static async permanentlyDeleteDirectHireApplication(id: string): Promise<boolean> {
+    // First delete related documents
+    await db.query('DELETE FROM documents WHERE application_id = $1 AND application_type = $2', [id, 'direct_hire']);
+    
+    // Then permanently delete the application
+    const { rowCount } = await db.query('DELETE FROM direct_hire_applications WHERE id = $1', [id]);
     return (rowCount || 0) > 0;
   }
 

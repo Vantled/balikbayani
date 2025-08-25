@@ -3,23 +3,24 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Download, X, Loader2 } from "lucide-react"
+import { X, Loader2 } from "lucide-react"
 import { useState, useEffect } from "react"
 
 interface PDFViewerModalProps {
   isOpen: boolean
   onClose: () => void
-  documentId: string
+  documentId?: string
   documentName: string
+  fileBlob?: Blob
 }
 
-export default function PDFViewerModal({ isOpen, onClose, documentId, documentName }: PDFViewerModalProps) {
+export default function PDFViewerModal({ isOpen, onClose, documentId, documentName, fileBlob }: PDFViewerModalProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isOpen && documentId) {
+    if (isOpen && (documentId || fileBlob)) {
       loadPDF()
     } else {
       // Clean up when modal closes
@@ -29,19 +30,28 @@ export default function PDFViewerModal({ isOpen, onClose, documentId, documentNa
       }
       setError(null)
     }
-  }, [isOpen, documentId])
+  }, [isOpen, documentId, fileBlob])
 
   const loadPDF = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`/api/documents/${documentId}/download`)
-      if (!response.ok) {
-        throw new Error('Failed to load PDF')
-      }
+      let blob: Blob
       
-      const blob = await response.blob()
+      if (fileBlob) {
+        // Use the provided file blob (for new uploads)
+        blob = fileBlob
+      } else if (documentId) {
+        // Fetch from database (for existing documents)
+        const response = await fetch(`/api/documents/${documentId}/download`)
+        if (!response.ok) {
+          throw new Error('Failed to load PDF')
+        }
+        blob = await response.blob()
+      } else {
+        throw new Error('No document source provided')
+      }
       
       // Check if the file is actually a PDF
       if (!blob.type.includes('pdf')) {
@@ -59,54 +69,24 @@ export default function PDFViewerModal({ isOpen, onClose, documentId, documentNa
     }
   }
 
-  const handleDownload = async () => {
-    if (!pdfUrl) return
-    
-    try {
-      const response = await fetch(`/api/documents/${documentId}/download`)
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = documentName || 'document.pdf'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
-    } catch (err) {
-      console.error('Error downloading PDF:', err)
-    }
-  }
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-full h-[90vh] p-0 rounded-2xl overflow-hidden">
-        <DialogHeader className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
+      <DialogContent className="max-w-6xl w-full h-[90vh] p-0 rounded-2xl overflow-hidden z-[70]">
+        <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
             <span>📄</span>
             {documentName}
           </DialogTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleDownload}
-              className="text-white hover:bg-blue-600"
-              title="Download PDF"
-            >
-              <Download className="h-5 w-5" />
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-blue-600">
+              <X className="h-5 w-5" />
             </Button>
-            <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-blue-600">
-                <X className="h-5 w-5" />
-              </Button>
-            </DialogClose>
-          </div>
-        </DialogHeader>
+          </DialogClose>
+        </div>
         
-        <div className="flex-1 relative">
+        <div className="h-[calc(90vh-80px)] relative">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
               <div className="flex items-center gap-2">

@@ -8,11 +8,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { X, FileText, Loader2, Calculator, Upload, Eye, Trash2, File } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { getUser } from "@/lib/auth"
 import React from "react"
+import PDFViewerModal from "@/components/pdf-viewer-modal"
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -34,7 +36,7 @@ interface UploadedFile {
   name: string
   type: string
   size: number
-  file: File
+  file: File | null
   preview?: string
 }
 
@@ -69,6 +71,13 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     visa: null,
     tesda: null
   })
+
+  // Confirmation dialog states
+  const [draftConfirmOpen, setDraftConfirmOpen] = useState(false)
+  
+  // PDF Viewer Modal state
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{id?: string, name: string, fileBlob?: File | null} | null>(null)
 
   // Generate control number preview
   const generateControlNumberPreview = async () => {
@@ -141,6 +150,95 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     }
     
     return errors;
+  };
+
+  // Save draft function
+  const handleSaveDraft = async () => {
+    // Validate form first
+    const validationErrors = validateDraftForm();
+    const fieldErrors = getFieldErrors(true);
+    
+    if (validationErrors.length > 0) {
+      // Set field-specific errors for visual indicators
+      setValidationErrors(fieldErrors);
+      
+      // Show first error message
+      toast({
+        title: 'Validation Error',
+        description: validationErrors[0],
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // For drafts, save the raw salary and currency
+      const rawSalary = formData.salary || '0';
+      const salaryCurrency = formData.salaryCurrency || 'USD';
+
+      if (applicationId) {
+        // Save changes but keep as draft
+        const updated = await updateApplication(applicationId, {
+          name: formData.name.toUpperCase(),
+          sex: formData.sex,
+          jobsite: formData.jobsite.toUpperCase(),
+          position: formData.position.toUpperCase(),
+          job_type: formData.job_type,
+          salary: parseFloat(rawSalary),
+          raw_salary: parseFloat(rawSalary),
+          salary_currency: salaryCurrency,
+          employer: (formData.employer || '').toUpperCase(),
+          evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
+          status: 'draft'
+        })
+
+        if (!updated) throw new Error('Failed to update draft')
+
+        // Refresh list before showing toast
+        await onSuccess?.()
+        onClose();
+        toast({
+          title: 'Draft saved',
+          description: `${formData.name} has been saved as a draft.`,
+        });
+        return;
+      }
+
+      // Create FormData for new draft (with files)
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name.toUpperCase());
+      formDataToSend.append('sex', formData.sex);
+      formDataToSend.append('salary', rawSalary);
+      formDataToSend.append('salaryCurrency', salaryCurrency);
+      formDataToSend.append('jobsite', formData.jobsite.toUpperCase());
+      formDataToSend.append('position', formData.position.toUpperCase());
+      formDataToSend.append('evaluator', (currentUser?.full_name || 'Unknown').toUpperCase());
+      formDataToSend.append('status', 'draft');
+      formDataToSend.append('employer', (formData.employer || '').toUpperCase());
+
+      if (uploadedFiles.passport && uploadedFiles.passport.file) formDataToSend.append('passport', uploadedFiles.passport.file);
+      if (uploadedFiles.visa && uploadedFiles.visa.file) formDataToSend.append('visa', uploadedFiles.visa.file);
+      if (uploadedFiles.tesda && uploadedFiles.tesda.file) formDataToSend.append('tesda', uploadedFiles.tesda.file);
+
+      const response = await fetch('/api/direct-hire', { method: 'POST', body: formDataToSend });
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh list before showing toast
+        await onSuccess?.()
+        onClose();
+        toast({ title: 'Draft saved successfully!', description: `${formData.name} has been saved as a draft` });
+      } else {
+        throw new Error(result.error || 'Failed to save draft');
+      }
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast({ title: 'Error saving draft', description: 'Failed to save the draft. Please try again.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+      setDraftConfirmOpen(false);
+    }
   };
 
   // Get field-specific validation errors
@@ -266,6 +364,19 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     return <File className="h-8 w-8 text-gray-500" />;
   };
 
+  // Handle opening PDF viewer
+  const handleViewDocument = (fileType: 'passport' | 'visa' | 'tesda') => {
+    const file = uploadedFiles[fileType];
+    if (file) {
+      setSelectedDocument({
+        id: file.id,
+        name: file.name,
+        fileBlob: file.file
+      });
+      setPdfViewerOpen(true);
+    }
+  };
+
   useEffect(() => {
     const fetchPreview = async () => {
       const preview = await generateControlNumberPreview();
@@ -286,11 +397,68 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
         position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
-        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''
+        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : '',
+        salaryCurrency: (initialData as any).salaryCurrency ?? 'USD',
+        employer: (initialData as any).employer ?? '',
+        raw_salary: (initialData as any).raw_salary ?? initialData.salary
       }))
       prefilledRef.current = prefillKey
     }
   }, [initialData, prefillKey])
+
+  // Load existing documents when editing a draft
+  useEffect(() => {
+    const loadExistingDocuments = async () => {
+      if (applicationId) {
+        try {
+          const response = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=direct_hire`);
+          const result = await response.json();
+          
+          if (result.success && result.data) {
+            // Set the existing documents in the uploadedFiles state
+            const existingFiles = { ...uploadedFiles };
+            
+            result.data.forEach((doc: any) => {
+              if (doc.document_type === 'passport') {
+                existingFiles.passport = {
+                  id: doc.id,
+                  name: doc.file_name,
+                  type: doc.mime_type,
+                  size: doc.file_size,
+                  file: null as any, // We'll handle this differently
+                  preview: `/api/documents/${doc.id}/download`
+                };
+              } else if (doc.document_type === 'visa') {
+                existingFiles.visa = {
+                  id: doc.id,
+                  name: doc.file_name,
+                  type: doc.mime_type,
+                  size: doc.file_size,
+                  file: null as any, // We'll handle this differently
+                  preview: `/api/documents/${doc.id}/download`
+                };
+              } else if (doc.document_type === 'tesda') {
+                existingFiles.tesda = {
+                  id: doc.id,
+                  name: doc.file_name,
+                  type: doc.mime_type,
+                  size: doc.file_size,
+                  file: null as any, // We'll handle this differently
+                  preview: `/api/documents/${doc.id}/download`
+                };
+              }
+            });
+            
+            setUploadedFiles(existingFiles);
+          }
+        } catch (error) {
+          console.error('Error loading existing documents:', error);
+        }
+      }
+    };
+    
+    loadExistingDocuments();
+  }, [applicationId]);
 
   // Cleanup file previews on unmount
   useEffect(() => {
@@ -554,11 +722,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </div>
                         </div>
                         <div className="flex space-x-2">
-                          {uploadedFiles.passport.preview && (
+                          {uploadedFiles.passport && (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(uploadedFiles.passport!.preview, '_blank')}
+                              onClick={() => handleViewDocument('passport')}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -572,15 +740,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </Button>
                         </div>
                       </div>
-                      {uploadedFiles.passport.preview && (
-                        <div className="mt-3">
-                          <img 
-                            src={uploadedFiles.passport.preview} 
-                            alt="Passport preview" 
-                            className="max-w-full h-32 object-contain rounded border"
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -617,11 +776,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </div>
                         </div>
                         <div className="flex space-x-2">
-                          {uploadedFiles.visa.preview && (
+                          {uploadedFiles.visa && (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(uploadedFiles.visa!.preview, '_blank')}
+                              onClick={() => handleViewDocument('visa')}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -635,15 +794,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </Button>
                         </div>
                       </div>
-                      {uploadedFiles.visa.preview && (
-                        <div className="mt-3">
-                          <img 
-                            src={uploadedFiles.visa.preview} 
-                            alt="Visa preview" 
-                            className="max-w-full h-32 object-contain rounded border"
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -680,11 +830,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </div>
                         </div>
                         <div className="flex space-x-2">
-                          {uploadedFiles.tesda.preview && (
+                          {uploadedFiles.tesda && (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(uploadedFiles.tesda!.preview, '_blank')}
+                              onClick={() => handleViewDocument('tesda')}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -698,15 +848,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                           </Button>
                         </div>
                       </div>
-                      {uploadedFiles.tesda.preview && (
-                        <div className="mt-3">
-                          <img 
-                            src={uploadedFiles.tesda.preview} 
-                            alt="TESDA license preview" 
-                            className="max-w-full h-32 object-contain rounded border"
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -715,93 +856,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               <div className="flex justify-between pt-4">
                 <Button 
                   variant="outline" 
-                  onClick={async () => {
-                    // Validate form first
-                    const validationErrors = validateDraftForm();
-                    const fieldErrors = getFieldErrors(true);
-                    
-                    if (validationErrors.length > 0) {
-                      // Set field-specific errors for visual indicators
-                      setValidationErrors(fieldErrors);
-                      
-                      // Show first error message
-                      toast({
-                        title: 'Validation Error',
-                        description: validationErrors[0],
-                        variant: 'destructive'
-                      });
-                      return;
-                    }
-
-                    setLoading(true);
-                    try {
-                      // Convert salary to USD for storage
-                      const salaryInUSD = formData.salaryCurrency && formData.salary ? (
-                        formData.salaryCurrency === "USD" 
-                          ? parseFloat(formData.salary)
-                          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
-                      ) : 0;
-
-                      if (applicationId) {
-                        // Save changes but keep as draft
-                        const updated = await updateApplication(applicationId, {
-                          name: formData.name.toUpperCase(),
-                          sex: formData.sex,
-                          jobsite: formData.jobsite.toUpperCase(),
-                          position: formData.position.toUpperCase(),
-                          job_type: formData.job_type,
-                          salary: salaryInUSD,
-                          employer: (formData.employer || '').toUpperCase(),
-                          evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
-                          status: 'draft'
-                        })
-
-                        if (!updated) throw new Error('Failed to update draft')
-
-                        // Refresh list before showing toast
-                        await onSuccess?.()
-                        onClose();
-                        toast({
-                          title: 'Draft saved',
-                          description: `${formData.name} has been saved as a draft.`,
-                        });
-                        return;
-                      }
-
-                      // Create FormData for new draft (with files)
-                      const formDataToSend = new FormData();
-                      formDataToSend.append('name', formData.name.toUpperCase());
-                      formDataToSend.append('sex', formData.sex);
-                      formDataToSend.append('salary', salaryInUSD.toString());
-                      formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
-                      formDataToSend.append('jobsite', formData.jobsite.toUpperCase());
-                      formDataToSend.append('position', formData.position.toUpperCase());
-                      formDataToSend.append('evaluator', (currentUser?.full_name || 'Unknown').toUpperCase());
-                      formDataToSend.append('status', 'draft');
-                      formDataToSend.append('employer', (formData.employer || '').toUpperCase());
-
-                      if (uploadedFiles.passport) formDataToSend.append('passport', uploadedFiles.passport.file);
-                      if (uploadedFiles.visa) formDataToSend.append('visa', uploadedFiles.visa.file);
-                      if (uploadedFiles.tesda) formDataToSend.append('tesda', uploadedFiles.tesda.file);
-
-                      const response = await fetch('/api/direct-hire', { method: 'POST', body: formDataToSend });
-                      const result = await response.json();
-
-                      if (result.success) {
-                        // Refresh list before showing toast
-                        await onSuccess?.()
-                        onClose();
-                        toast({ title: 'Draft saved successfully!', description: `${formData.name} has been saved as a draft` });
-                      } else {
-                        throw new Error(result.error || 'Failed to save draft');
-                      }
-                    } catch (error) {
-                      console.error('Error saving draft:', error);
-                      toast({ title: 'Error saving draft', description: 'Failed to save the draft. Please try again.', variant: 'destructive' });
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
+                  onClick={() => setDraftConfirmOpen(true)}
                   disabled={loading}
                 >
                   {loading ? (
@@ -895,13 +950,13 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       formDataToSend.append('employer', formData.employer);
 
                       // Add files if they exist
-                      if (uploadedFiles.passport) {
+                      if (uploadedFiles.passport && uploadedFiles.passport.file) {
                         formDataToSend.append('passport', uploadedFiles.passport.file);
                       }
-                      if (uploadedFiles.visa) {
+                      if (uploadedFiles.visa && uploadedFiles.visa.file) {
                         formDataToSend.append('visa', uploadedFiles.visa.file);
                       }
-                      if (uploadedFiles.tesda) {
+                      if (uploadedFiles.tesda && uploadedFiles.tesda.file) {
                         formDataToSend.append('tesda', uploadedFiles.tesda.file);
                       }
 
@@ -950,6 +1005,47 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
           </Tabs>
         </div>
       </div>
+
+      {/* Draft Confirmation Dialog */}
+      <AlertDialog open={draftConfirmOpen} onOpenChange={setDraftConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {applicationId ? 'Save Draft Changes' : 'Save as Draft'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {applicationId ? 'save changes to' : 'save'} the draft for <strong>{formData.name}</strong>?
+              <br /><br />
+              This will {applicationId ? 'update the existing draft' : 'create a new draft'} that you can continue editing later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDraftConfirmOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleSaveDraft}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {applicationId ? 'Save Changes' : 'Save Draft'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* PDF Viewer Modal */}
+      {selectedDocument && (
+        <PDFViewerModal
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false)
+            setSelectedDocument(null)
+          }}
+          documentId={selectedDocument.id}
+          documentName={selectedDocument.name}
+          fileBlob={selectedDocument.fileBlob}
+        />
+      )}
     </div>
   )
 }

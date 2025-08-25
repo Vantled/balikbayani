@@ -31,6 +31,7 @@ interface ApplicantDocumentsTabProps {
 }
 
 export default function DirectHireApplicationsTable({ search, filterQuery = "" }: DirectHireApplicationsTableProps) {
+  console.log('DirectHireApplicationsTable component rendered');
   const { toast } = useToast()
   const { 
     applications, 
@@ -59,6 +60,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     salary: "",
     salaryCurrency: "USD" as Currency,
     evaluator: "",
+    employer: "",
   })
   const [showEditDraftModal, setShowEditDraftModal] = useState<{open: boolean, app: DirectHireApplication | null}>({ open: false, app: null })
 
@@ -70,6 +72,18 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   const [confirmPassword, setConfirmPassword] = useState("")
   const [confirmingPassword, setConfirmingPassword] = useState(false)
   const [confirmPurpose, setConfirmPurpose] = useState<'deleted' | 'finished' | null>(null)
+  
+  // Confirmation states for restore and permanent delete
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
+  const [restoreConfirmText, setRestoreConfirmText] = useState("")
+  const [applicationToRestore, setApplicationToRestore] = useState<DirectHireApplication | null>(null)
+  const [permanentDeleteConfirmOpen, setPermanentDeleteConfirmOpen] = useState(false)
+  const [permanentDeleteConfirmText, setPermanentDeleteConfirmText] = useState("")
+  const [applicationToPermanentDelete, setApplicationToPermanentDelete] = useState<DirectHireApplication | null>(null)
+  
+  // Confirmation state for cancel draft
+  const [cancelDraftConfirmOpen, setCancelDraftConfirmOpen] = useState(false)
+  const [applicationToCancelDraft, setApplicationToCancelDraft] = useState<DirectHireApplication | null>(null)
   
   // PDF Viewer Modal state
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
@@ -195,19 +209,119 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   const handleDeleteConfirm = async () => {
     if (!applicationToDelete) return
     
-    const success = await deleteApplication(applicationToDelete.id)
-    if (success) {
-      if (showDeletedOnly) {
-        await fetchApplications(search, 1, true)
+    try {
+      // Check if this is a deleted application (permanent deletion)
+      const isDeleted = Boolean((applicationToDelete as any).deleted_at)
+      
+      if (isDeleted) {
+        // For deleted items, open permanent delete confirmation directly
+        setApplicationToPermanentDelete(applicationToDelete)
+        setPermanentDeleteConfirmOpen(true)
+        setDeleteConfirmOpen(false)
+        setApplicationToDelete(null)
+      } else {
+        // Soft deletion for active items
+        const success = await deleteApplication(applicationToDelete.id)
+        if (success) {
+          await fetchApplications(search, 1, showDeletedOnly)
+          toast({ 
+            title: "Application deleted successfully", 
+            description: `${applicationToDelete.name}'s application has been moved to deleted items` 
+          })
+        } else {
+          throw new Error('Soft deletion failed')
+        }
+        setDeleteConfirmOpen(false)
+        setApplicationToDelete(null)
       }
-      toast({ 
-        title: "Application deleted successfully", 
-        description: `${applicationToDelete.name}'s application has been removed` 
+    } catch (error) {
+      toast({
+        title: 'Delete Error',
+        description: error instanceof Error ? error.message : 'Failed to delete application',
+        variant: 'destructive'
+      })
+      setDeleteConfirmOpen(false)
+      setApplicationToDelete(null)
+    }
+  }
+
+  const handleRestoreConfirm = async () => {
+    if (!applicationToRestore || restoreConfirmText !== "RESTORE") return
+    
+    try {
+      const res = await fetch(`/api/direct-hire/${applicationToRestore.id}/restore`, { method: 'POST' })
+      const result = await res.json()
+      if (result.success) {
+        if (showDeletedOnly) {
+          await fetchApplications(search, 1, true)
+        } else {
+          await fetchApplications(search, 1, false)
+        }
+        toast({ title: 'Application restored', description: `${applicationToRestore.name} has been restored` })
+      } else {
+        throw new Error(result.error || 'Restore failed')
+      }
+    } catch (err) {
+      toast({ title: 'Restore error', description: 'Failed to restore application', variant: 'destructive' })
+    }
+    
+    setRestoreConfirmOpen(false)
+    setRestoreConfirmText("")
+    setApplicationToRestore(null)
+  }
+
+  const handlePermanentDeleteConfirm = async () => {
+    if (!applicationToPermanentDelete || permanentDeleteConfirmText !== "DELETE") return
+    
+    try {
+      const response = await fetch(`/api/direct-hire/${applicationToPermanentDelete.id}/permanent-delete`, {
+        method: 'DELETE'
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchApplications(search, 1, showDeletedOnly)
+        toast({ 
+          title: "Application permanently deleted", 
+          description: `${applicationToPermanentDelete.name}'s application has been permanently removed` 
+        })
+      } else {
+        throw new Error(result.error || 'Permanent deletion failed')
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete Error',
+        description: error instanceof Error ? error.message : 'Failed to permanently delete application',
+        variant: 'destructive'
       })
     }
     
-    setDeleteConfirmOpen(false)
-    setApplicationToDelete(null)
+    setPermanentDeleteConfirmOpen(false)
+    setPermanentDeleteConfirmText("")
+    setApplicationToPermanentDelete(null)
+  }
+
+  const handleCancelDraftConfirm = async () => {
+    if (!applicationToCancelDraft) return
+    
+    try {
+      const success = await deleteApplication(applicationToCancelDraft.id)
+      if (success) {
+        await fetchApplications(search, 1, showDeletedOnly)
+        toast({ title: 'Draft cancelled', description: `${applicationToCancelDraft.name}'s draft has been cancelled.` })
+      } else {
+        throw new Error('Failed to cancel draft')
+      }
+    } catch (error) {
+      toast({
+        title: 'Cancel Error',
+        description: error instanceof Error ? error.message : 'Failed to cancel draft',
+        variant: 'destructive'
+      })
+    }
+    
+    setCancelDraftConfirmOpen(false)
+    setApplicationToCancelDraft(null)
   }
 
   const matchesFilter = (application: DirectHireApplication, key: string, value: string): boolean => {
@@ -338,12 +452,13 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     const { status, status_checklist } = application
     // Soft-deleted marker overrides all
     if ((application as any).deleted_at) {
+      const isDraft = status === 'draft'
       return (
         <div
           className={"bg-red-100 text-red-700 text-sm px-3 py-1.5 rounded-full w-fit font-medium"}
-          title="This application has been deleted"
+          title={`This ${isDraft ? 'draft' : 'application'} has been deleted`}
         >
-          Deleted
+          {isDraft ? 'Deleted Draft' : 'Deleted'}
         </div>
       )
     }
@@ -670,79 +785,112 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           <DropdownMenuContent align="end">
                             {application.status === 'draft' ? (
                               <>
-                            <DropdownMenuItem
-                                  onClick={async () => {
-                                    const confirmCancel = window.confirm(`Cancel this draft for ${application.name}?`)
-                                    if (!confirmCancel) return
-                                    const success = await deleteApplication(application.id)
-                                    if (success) {
-                                      await fetchApplications(search, 1, showDeletedOnly)
-                                      toast({ title: 'Draft cancelled', description: `${application.name}'s draft has been cancelled.` })
-                                    }
-                                  }}
-                                  className="text-red-600 focus:text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Cancel Draft
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                    setShowEditDraftModal({ open: true, app: application })
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Continue Draft
-                                </DropdownMenuItem>
+                                {/* For deleted drafts, only show Restore and Delete */}
+                                {(application as any).deleted_at ? (
+                                  <>
+                                    {userIsSuperadmin && (
+                                      <DropdownMenuItem onClick={() => {
+                                        setApplicationToRestore(application)
+                                        setRestoreConfirmOpen(true)
+                                      }}>
+                                        <RefreshCcw className="h-4 w-4 mr-2" />
+                                        Restore
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem 
+                                      className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
+                                      onClick={() => {
+                                        setApplicationToPermanentDelete(application)
+                                        setPermanentDeleteConfirmOpen(true)
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Permanently Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    {/* For active drafts, show Cancel Draft and Continue Draft */}
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setApplicationToCancelDraft(application)
+                                        setCancelDraftConfirmOpen(true)
+                                      }}
+                                      className="text-red-600 focus:text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Cancel Draft
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setShowEditDraftModal({ open: true, app: application })
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Continue Draft
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </>
                             ) : (
                               <>
-                                <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View
-                            </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => {
-                                  toast({ title: "Edit functionality coming soon", description: "This feature will be available in the next update" })
-                                }}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
-                                  onClick={() => {
-                                    setApplicationToDelete(application)
-                                    setDeleteConfirmOpen(true)
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                                {userIsSuperadmin && (application as any).deleted_at && (
-                                  <DropdownMenuItem onClick={async () => {
-                                    try {
-                                      const res = await fetch(`/api/direct-hire/${application.id}/restore`, { method: 'POST' })
-                                      const result = await res.json()
-                                      if (result.success) {
-                                        if (showDeletedOnly) {
-                                          await fetchApplications(search, 1, true)
-                                        } else {
-                                          await fetchApplications(search, 1, false)
-                                        }
-                                        toast({ title: 'Application restored', description: `${application.name} has been restored` })
-                                      } else {
-                                        throw new Error(result.error || 'Restore failed')
-                                      }
-                                    } catch (err) {
-                                      toast({ title: 'Restore error', description: 'Failed to restore application', variant: 'destructive' })
-                                    }
-                                  }}>
-                                    <RefreshCcw className="h-4 w-4 mr-2" />
-                                    Restore
-                                  </DropdownMenuItem>
+                                {/* For non-draft applications */}
+                                {(application as any).deleted_at ? (
+                                  <>
+                                    {/* For deleted non-draft applications, show View, Restore, and Delete */}
+                                    <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View
+                                    </DropdownMenuItem>
+                                    {userIsSuperadmin && (
+                                      <DropdownMenuItem onClick={() => {
+                                        setApplicationToRestore(application)
+                                        setRestoreConfirmOpen(true)
+                                      }}>
+                                        <RefreshCcw className="h-4 w-4 mr-2" />
+                                        Restore
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem 
+                                      className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
+                                      onClick={() => {
+                                        setApplicationToPermanentDelete(application)
+                                        setPermanentDeleteConfirmOpen(true)
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Permanently Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    {/* For active non-draft applications, show all normal actions */}
+                                    <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      toast({ title: "Edit functionality coming soon", description: "This feature will be available in the next update" })
+                                    }}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50"
+                                      onClick={() => {
+                                        setApplicationToDelete(application)
+                                        setDeleteConfirmOpen(true)
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
+                                      <FileText className="h-4 w-4 mr-2" />
+                                      Compliance Form
+                                    </DropdownMenuItem>
+                                  </>
                                 )}
-                                <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
-                              <FileText className="h-4 w-4 mr-2" />
-                              Compliance Form
-                            </DropdownMenuItem>
                               </>
                             )}
                           </DropdownMenuContent>
@@ -1197,11 +1345,22 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                       onChange={e => setFormData({ ...formData, evaluator: e.target.value.toUpperCase() })} 
                     />
                   </div>
+                  <div>
+                    <label className="text-xs font-medium">Employer:</label>
+                    <input 
+                      className="w-full border rounded px-3 py-2 mt-1" 
+                      value={formData.employer} 
+                      onChange={e => setFormData({ ...formData, employer: e.target.value.toUpperCase() })} 
+                    />
+                  </div>
                   <div className="flex justify-end mt-6">
                     <Button 
                       className="bg-[#1976D2] text-white px-8" 
                       type="button" 
-                      onClick={() => setFormStep(2)}
+                      onClick={() => {
+                        console.log('NEXT BUTTON CLICKED');
+                        setFormStep(2);
+                      }}
                       disabled={!formData.name || !formData.jobsite || !formData.position || !formData.salary}
                     >
                       Next
@@ -1243,18 +1402,87 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
                   </div>
                   <div className="flex justify-between mt-6 gap-2">
-                    <Button variant="outline" className="flex-1" type="button" onClick={() => { 
-                      setCreateOpen(false); 
-                      toast({
-                        title: 'Draft saved successfully',
-                        description: 'You can continue editing this application later',
-                      }) 
+                    <Button variant="outline" className="flex-1" type="button" onClick={async (e) => {
+                      e.preventDefault();
+                      alert('SAVE AS DRAFT BUTTON CLICKED!');
+                      console.log('SAVE AS DRAFT BUTTON CLICKED!');
+                      console.log('Current form data state:', formData); 
+                      try {
+                        console.log('Saving draft with form data:', formData);
+                        
+                        // For drafts, save the raw salary and currency
+                        const formDataToSend = new FormData();
+                        formDataToSend.append('name', formData.name);
+                        formDataToSend.append('sex', formData.sex);
+                        formDataToSend.append('salary', formData.salary || '0');
+                        formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
+                        formDataToSend.append('jobsite', formData.jobsite || '');
+                        formDataToSend.append('position', formData.position || '');
+                        formDataToSend.append('evaluator', formData.evaluator || '');
+                        formDataToSend.append('employer', formData.employer || '');
+                        formDataToSend.append('status', 'draft');
+
+                        // Add files if they exist
+                        if (formData.passport) {
+                          formDataToSend.append('passport', formData.passport);
+                        }
+                        if (formData.visa) {
+                          formDataToSend.append('visa', formData.visa);
+                        }
+                        if (formData.tesda) {
+                          formDataToSend.append('tesda', formData.tesda);
+                        }
+
+                        console.log('FormData entries:');
+                        for (let [key, value] of formDataToSend.entries()) {
+                          console.log(`${key}:`, value);
+                        }
+
+                        const response = await fetch('/api/direct-hire', {
+                          method: 'POST',
+                          body: formDataToSend,
+                        });
+
+                        const result = await response.json();
+                        console.log('API response:', result);
+                        
+                        if (result.success) {
+                          setCreateOpen(false);
+                          await fetchApplications(search, 1, showDeletedOnly);
+                          // Reset form
+                          setFormData({
+                            name: "",
+                            sex: "male",
+                            jobsite: "",
+                            position: "",
+                            salary: "",
+                            salaryCurrency: "USD" as Currency,
+                            evaluator: "",
+                            employer: "",
+                          });
+                          setControlNumberPreview(generateControlNumberPreview());
+                          setFormStep(1);
+                          toast({
+                            title: 'Draft saved successfully',
+                            description: 'You can continue editing this application later',
+                          });
+                        } else {
+                          throw new Error(result.error || 'Failed to save draft');
+                        }
+                      } catch (error) {
+                        console.error('Error saving draft:', error);
+                        toast({
+                          title: 'Error saving draft',
+                          description: 'Failed to save the draft. Please try again.',
+                          variant: 'destructive'
+                        });
+                      }
                     }}>Save as Draft</Button>
                     <Button 
                       className="bg-[#1976D2] text-white flex-1" 
                       type="button" 
-                                          onClick={async () => {
-                      try {
+                      onClick={async () => {
+                        try {
                         // Convert salary to USD for storage
                         const salaryInUSD = formData.salaryCurrency === "USD" 
                           ? parseFloat(formData.salary)
@@ -1287,7 +1515,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                         });
 
                         const result = await response.json();
-                                                  if (result.success) {
+                        if (result.success) {
                           const createdName = formData.name
                           // Close modal first so the list is visible
                           setCreateOpen(false);
@@ -1346,7 +1574,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             job_type: showEditDraftModal.app.job_type,
             jobsite: showEditDraftModal.app.jobsite,
             position: showEditDraftModal.app.position,
-            salary: Number(showEditDraftModal.app.salary)
+            salary: Number(showEditDraftModal.app.salary),
+            salaryCurrency: (showEditDraftModal.app as any).salary_currency || 'USD',
+            employer: (showEditDraftModal.app as any).employer || '',
+            raw_salary: (showEditDraftModal.app as any).raw_salary || Number(showEditDraftModal.app.salary)
           }}
           applicationId={showEditDraftModal.app.id}
           onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
@@ -1370,10 +1601,21 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Application</AlertDialogTitle>
+            <AlertDialogTitle>
+              {applicationToDelete && (applicationToDelete as any).deleted_at ? 'Permanently Delete Application' : 'Delete Application'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the application for <strong>{applicationToDelete?.name}</strong>? 
-              This action cannot be undone.
+              {applicationToDelete && (applicationToDelete as any).deleted_at ? (
+                <>
+                  Are you sure you want to <strong>permanently delete</strong> the application for <strong>{applicationToDelete.name}</strong>? 
+                  This action will permanently remove all data and cannot be undone.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to delete the application for <strong>{applicationToDelete?.name}</strong>? 
+                  This will move the application to deleted items where it can be restored later.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1387,7 +1629,141 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
               onClick={handleDeleteConfirm}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              Delete
+              {applicationToDelete && (applicationToDelete as any).deleted_at ? 'Permanently Delete' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Restore Confirmation Dialog */}
+      <AlertDialog open={restoreConfirmOpen} onOpenChange={(open) => {
+        setRestoreConfirmOpen(open)
+        if (!open) {
+          setRestoreConfirmText("")
+          setApplicationToRestore(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to restore the application for <strong>{applicationToRestore?.name}</strong>?
+              <br /><br />
+              To confirm, please type <strong>RESTORE</strong> in the field below:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <input
+              type="text"
+              value={restoreConfirmText}
+              onChange={(e) => setRestoreConfirmText(e.target.value)}
+              placeholder="Type RESTORE to confirm"
+              className="w-full border rounded px-3 py-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && restoreConfirmText === "RESTORE") {
+                  handleRestoreConfirm()
+                }
+              }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setRestoreConfirmOpen(false)
+              setRestoreConfirmText("")
+              setApplicationToRestore(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRestoreConfirm}
+              disabled={restoreConfirmText !== "RESTORE"}
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <AlertDialog open={permanentDeleteConfirmOpen} onOpenChange={(open) => {
+        setPermanentDeleteConfirmOpen(open)
+        if (!open) {
+          setPermanentDeleteConfirmText("")
+          setApplicationToPermanentDelete(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Delete Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to <strong>permanently delete</strong> the application for <strong>{applicationToPermanentDelete?.name}</strong>?
+              This action will permanently remove all data and cannot be undone.
+              <br /><br />
+              To confirm, please type <strong>DELETE</strong> in the field below:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <input
+              type="text"
+              value={permanentDeleteConfirmText}
+              onChange={(e) => setPermanentDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              className="w-full border rounded px-3 py-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && permanentDeleteConfirmText === "DELETE") {
+                  handlePermanentDeleteConfirm()
+                }
+              }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setPermanentDeleteConfirmOpen(false)
+              setPermanentDeleteConfirmText("")
+              setApplicationToPermanentDelete(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePermanentDeleteConfirm}
+              disabled={permanentDeleteConfirmText !== "DELETE"}
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Permanently Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Draft Confirmation Dialog */}
+      <AlertDialog open={cancelDraftConfirmOpen} onOpenChange={(open) => {
+        setCancelDraftConfirmOpen(open)
+        if (!open) {
+          setApplicationToCancelDraft(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Draft</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel the draft for <strong>{applicationToCancelDraft?.name}</strong>?
+              <br /><br />
+              This will move the draft to deleted items where it can be restored later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setCancelDraftConfirmOpen(false)
+              setApplicationToCancelDraft(null)
+            }}>
+              Keep Draft
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleCancelDraftConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Cancel Draft
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

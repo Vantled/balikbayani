@@ -89,30 +89,32 @@ export default function DirectHirePage() {
 
             {/* Filter Panel */}
             {showFilter && (
-              <FilterPanel 
-                onClose={() => setShowFilter(false)} 
-                onApply={(query) => {
-                  setPanelQuery(query)
-                  setShowFilter(false)
-                }}
-                typeHousehold={typeHousehold}
-                setTypeHousehold={setTypeHousehold}
-                typeProfessional={typeProfessional}
-                setTypeProfessional={setTypeProfessional}
-                sex={sexFilter}
-                setSex={setSexFilter}
-                status={statusFilter}
-                setStatus={setStatusFilter}
-                dateWithin={dateWithin}
-                setDateWithin={setDateWithin}
-                jobsite={jobsiteFilter}
-                setJobsite={setJobsiteFilter}
-                position={positionFilter}
-                setPosition={setPositionFilter}
-                evaluator={evaluatorFilter}
-                setEvaluator={setEvaluatorFilter}
-                onClear={clearPanel}
-              />
+              <div className="absolute right-0 top-12 z-50">
+                <FilterPanel 
+                  onClose={() => setShowFilter(false)} 
+                  onApply={(query) => {
+                    setPanelQuery(query)
+                    setShowFilter(false)
+                  }}
+                  typeHousehold={typeHousehold}
+                  setTypeHousehold={setTypeHousehold}
+                  typeProfessional={typeProfessional}
+                  setTypeProfessional={setTypeProfessional}
+                  sex={sexFilter}
+                  setSex={setSexFilter}
+                  status={statusFilter}
+                  setStatus={setStatusFilter}
+                  dateWithin={dateWithin}
+                  setDateWithin={setDateWithin}
+                  jobsite={jobsiteFilter}
+                  setJobsite={setJobsiteFilter}
+                  position={positionFilter}
+                  setPosition={setPositionFilter}
+                  evaluator={evaluatorFilter}
+                  setEvaluator={setEvaluatorFilter}
+                  onClear={clearPanel}
+                />
+              </div>
             )}
           </div>
         </div>

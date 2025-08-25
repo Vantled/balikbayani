@@ -6,14 +6,10 @@ services:
   - type: web
     name: balikbayani
     env: node
-    plan: starter
+    plan: free
     buildCommand: npm ci --legacy-peer-deps && npm run build
     startCommand: npm run start
     autoDeploy: true
-    disk:
-      name: uploads
-      mountPath: /opt/uploads
-      sizeGB: 5
     envVars:
       - key: NODE_ENV
         value: production
@@ -29,7 +25,7 @@ services:
       - key: BCRYPT_ROUNDS
         value: "12"
       - key: UPLOAD_DIR
-        value: /opt/uploads
+        value: /opt/uploads # Free plan has no persistent disk; uploads reset on redeploy
       - key: MAX_FILE_SIZE
         value: "10485760"
       - key: LOG_LEVEL
@@ -63,4 +59,4 @@ services:
 # (see lib/database.ts ssl config)
 databases:
   - name: bb-postgres
-    plan: starter
+    plan: free

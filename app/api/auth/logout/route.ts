@@ -15,16 +15,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       });
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       message: 'Logout successful'
     });
+    // Clear cookies
+    res.cookies.set('bb_auth_token', '', { httpOnly: true, path: '/', maxAge: 0 });
+    res.cookies.set('bb_user', '', { httpOnly: false, path: '/', maxAge: 0 });
+    return res;
 
   } catch (error) {
     console.error('Logout error:', error);
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true, // Always return success for logout
       message: 'Logout successful'
     });
+    res.cookies.set('bb_auth_token', '', { httpOnly: true, path: '/', maxAge: 0 });
+    res.cookies.set('bb_user', '', { httpOnly: false, path: '/', maxAge: 0 });
+    return res;
   }
 }

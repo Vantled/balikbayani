@@ -5,8 +5,10 @@ import { ApiResponse } from '@/lib/types';
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
-    const body = await request.json();
-    const { token } = body;
+    const body = await request.json().catch(() => ({} as any));
+    const tokenFromBody = (body as any).token;
+    const tokenFromCookie = request.cookies.get('bb_auth_token')?.value;
+    const token = tokenFromBody || tokenFromCookie;
 
     if (!token) {
       return NextResponse.json({

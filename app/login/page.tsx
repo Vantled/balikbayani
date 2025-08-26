@@ -26,12 +26,22 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Handle logout success toast
+  // Handle logout success and session expired toasts
   React.useEffect(() => {
     if (searchParams?.get("logoutSuccess") === "true") {
       toast({
         title: "Logged out successfully!",
         description: "Thank you for using BalikBayani Portal. Have a great day!",
+      })
+      // Clean up URL parameter
+      router.replace('/login')
+    }
+    
+    if (searchParams?.get("sessionExpired") === "true") {
+      toast({
+        title: "Session Expired",
+        description: "You were logged out because you logged in on another device. Please sign in again.",
+        variant: "destructive",
       })
       // Clean up URL parameter
       router.replace('/login')

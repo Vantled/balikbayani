@@ -30,8 +30,7 @@ export const login = async (username: string, password: string): Promise<{ succe
     const data = await response.json();
 
     if (data.success) {
-      // Store token and user data
-      Cookies.set(AUTH_COOKIE, data.data.token, { expires: 1 });
+      // Server sets HttpOnly token cookie; store user for UI only
       Cookies.set(USER_COOKIE, JSON.stringify(data.data.user), { expires: 1 });
       return { success: true };
     } else {
@@ -46,8 +45,7 @@ export const login = async (username: string, password: string): Promise<{ succe
 export const logout = async (): Promise<void> => {
   const token = Cookies.get(AUTH_COOKIE);
   
-  // Remove cookies immediately for fast logout
-  Cookies.remove(AUTH_COOKIE);
+  // Remove readable user cookie immediately; server clears HttpOnly token
   Cookies.remove(USER_COOKIE);
   
   // Call logout API in the background (don't wait for it)
@@ -67,6 +65,7 @@ export const logout = async (): Promise<void> => {
 export const isAuthenticated = (): boolean => {
   const token = Cookies.get(AUTH_COOKIE);
   const user = Cookies.get(USER_COOKIE);
+  // Both cookies must exist for authentication to be valid
   return Boolean(token && user);
 }
 
@@ -130,7 +129,7 @@ export const canAccessAdminFeatures = (user: User | null): boolean => hasRole(us
 
 export const validateSession = async (): Promise<boolean> => {
   const token = Cookies.get(AUTH_COOKIE);
-  if (!token) return false;
+  // If token not readable (HttpOnly), allow server to validate from cookie
 
   try {
     const response = await fetch('/api/auth/validate', {
@@ -138,7 +137,7 @@ export const validateSession = async (): Promise<boolean> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(token ? { token } : {}),
     });
 
     const data = await response.json();

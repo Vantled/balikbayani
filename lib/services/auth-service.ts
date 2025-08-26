@@ -23,7 +23,8 @@ export interface SessionInfo {
 
 export class AuthService {
   private static readonly SALT_ROUNDS = 12;
-  private static readonly SESSION_DURATION_HOURS = 24;
+  // Sliding idle timeout: user is logged out if idle for this many minutes.
+  private static readonly SESSION_IDLE_MINUTES = 30;
   private static readonly MAX_LOGIN_ATTEMPTS = 5;
   private static readonly LOCKOUT_DURATION_MINUTES = 30;
 
@@ -369,7 +370,13 @@ export class AuthService {
   ): Promise<SessionInfo> {
     const token = uuidv4();
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + this.SESSION_DURATION_HOURS);
+    expiresAt.setMinutes(expiresAt.getMinutes() + this.SESSION_IDLE_MINUTES);
+
+    // Enforce single active session per user: invalidate any existing active sessions
+    await db.query(
+      'DELETE FROM user_sessions WHERE user_id = $1',
+      [userId]
+    );
 
     const result = await db.query(
       `INSERT INTO user_sessions (user_id, session_token, ip_address, user_agent, expires_at)
@@ -415,6 +422,25 @@ export class AuthService {
         return null;
       }
 
+      // Enforce single active session: if this is not the most recent session, invalidate it
+      const latestSessionResult = await db.query(
+        `SELECT session_token FROM user_sessions 
+         WHERE user_id = $1 AND expires_at > CURRENT_TIMESTAMP 
+         ORDER BY created_at DESC LIMIT 1`,
+        [session.user_id]
+      );
+
+      if (latestSessionResult.rows.length > 0 && latestSessionResult.rows[0].session_token !== token) {
+        // This is not the most recent session, invalidate it
+        await this.invalidateSession(token);
+        return null;
+      }
+
+      // Refresh idle timeout only for the most recent session
+      const newExpires = new Date();
+      newExpires.setMinutes(newExpires.getMinutes() + this.SESSION_IDLE_MINUTES);
+      await db.query('UPDATE user_sessions SET expires_at = $1 WHERE session_token = $2', [newExpires, token]);
+
       return session;
 
     } catch (error) {
@@ -436,10 +462,11 @@ export class AuthService {
   /**
    * Clean up expired sessions
    */
-  static async cleanupExpiredSessions(): Promise<void> {
-    await db.query(
-      'DELETE FROM user_sessions WHERE expires_at < CURRENT_TIMESTAMP'
+  static async cleanupExpiredSessions(): Promise<number> {
+    const result = await db.query(
+      'DELETE FROM user_sessions WHERE expires_at < CURRENT_TIMESTAMP RETURNING 1'
     );
+    return result.rowCount || 0;
   }
 
   /**

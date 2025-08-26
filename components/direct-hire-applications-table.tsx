@@ -812,7 +812,15 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                                   </>
                                 ) : (
                                   <>
-                                    {/* For active drafts, show Cancel Draft and Continue Draft */}
+                                    {/* For active drafts, show Continue Draft first, then Cancel Draft */}
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setShowEditDraftModal({ open: true, app: application })
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Continue Draft
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => {
                                         setApplicationToCancelDraft(application)
@@ -822,14 +830,6 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                                     >
                                       <Trash2 className="h-4 w-4 mr-2" />
                                       Cancel Draft
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setShowEditDraftModal({ open: true, app: application })
-                                      }}
-                                    >
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Continue Draft
                                     </DropdownMenuItem>
                                   </>
                                 )}

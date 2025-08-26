@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
   const isPublicPath = publicPaths.some(path => pathname === path)
 
   // Check if user is authenticated (both token and user data must exist)
-  const isAuthenticated = authToken && userCookie
+  const isAuthenticated = Boolean(authToken?.value && userCookie?.value)
 
   // If path is protected and user is not authenticated, redirect to login
   if (isProtectedPath && !isAuthenticated) {

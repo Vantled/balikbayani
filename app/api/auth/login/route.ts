@@ -35,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     // Remove sensitive data from response
     const { password_hash, ...userWithoutPassword } = loginResult.user!;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         user: userWithoutPassword,
@@ -43,6 +43,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       message: 'Login successful'
     });
+
+    // Set HttpOnly session cookie for token
+    const ONE_DAY = 60 * 60 * 24;
+    response.cookies.set('bb_auth_token', loginResult.token!, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ONE_DAY,
+    });
+    // Set readable user cookie for UI (non-HttpOnly)
+    response.cookies.set('bb_user', JSON.stringify(userWithoutPassword), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ONE_DAY,
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Login error:', error);

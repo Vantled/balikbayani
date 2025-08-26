@@ -53,7 +53,8 @@ export async function PUT(
       no_of_agencies_with_jfa,
       male_applicants,
       female_applicants,
-      total_applicants
+      total_applicants,
+      dmw_staff_assigned
     } = body;
 
     // Validate required fields
@@ -73,7 +74,8 @@ export async function PUT(
       no_of_agencies_with_jfa: parseInt(no_of_agencies_with_jfa),
       male_applicants: parseInt(male_applicants),
       female_applicants: parseInt(female_applicants),
-      total_applicants: parseInt(total_applicants)
+      total_applicants: parseInt(total_applicants),
+      dmw_staff_assigned: dmw_staff_assigned || null
     };
 
     const result = await DatabaseService.updateJobFairMonitoring(params.id, monitoringData);

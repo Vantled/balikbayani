@@ -413,6 +413,192 @@ async function seedBalikManggagawaData() {
   return { clearanceCreated, processingCreated };
 }
 
+async function seedJobFairMonitoringData() {
+  console.log('\n🌱 Seeding Job Fair Monitoring sample data...');
+  
+  const monitoringData = [
+    {
+      date_of_job_fair: '2024-08-15',
+      venue: 'SMX Convention Center, Pasay City',
+      no_of_invited_agencies: 25,
+      no_of_agencies_with_jfa: 18,
+      male_applicants: 45,
+      female_applicants: 32,
+      dmw_staff_assigned: 'Maria Santos, Juan Dela Cruz, Ana Reyes'
+    },
+    {
+      date_of_job_fair: '2024-09-20',
+      venue: 'World Trade Center, Metro Manila',
+      no_of_invited_agencies: 30,
+      no_of_agencies_with_jfa: 22,
+      male_applicants: 52,
+      female_applicants: 38,
+      dmw_staff_assigned: 'Pedro Martinez, Carmen Garcia, Roberto Santos'
+    },
+    {
+      date_of_job_fair: '2024-10-10',
+      venue: 'PICC, Roxas Boulevard, Manila',
+      no_of_invited_agencies: 20,
+      no_of_agencies_with_jfa: 15,
+      male_applicants: 28,
+      female_applicants: 25,
+      dmw_staff_assigned: 'Luzviminda Cruz, Antonio Reyes, Isabela Garcia'
+    },
+    {
+      date_of_job_fair: '2024-11-05',
+      venue: 'Megatrade Hall, SM Megamall, Mandaluyong',
+      no_of_invited_agencies: 35,
+      no_of_agencies_with_jfa: 28,
+      male_applicants: 65,
+      female_applicants: 48,
+      dmw_staff_assigned: 'Fernando Lopez, Ricardo Mendoza, Elena Villanueva'
+    },
+    {
+      date_of_job_fair: '2024-12-15',
+      venue: 'Function Room A, DMW Main Office, Mandaluyong',
+      no_of_invited_agencies: 15,
+      no_of_agencies_with_jfa: 12,
+      male_applicants: 22,
+      female_applicants: 18,
+      dmw_staff_assigned: 'Miguel Torres, Rosa Fernandez, Jose Morales'
+    }
+  ];
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const data of monitoringData) {
+    try {
+      // Check if monitoring record already exists
+      const { rows: existing } = await db.query(
+        'SELECT id FROM job_fair_monitoring WHERE date_of_job_fair = $1 AND venue = $2',
+        [data.date_of_job_fair, data.venue]
+      );
+
+      if (existing.length === 0) {
+        // Calculate total applicants
+        const total_applicants = data.male_applicants + data.female_applicants;
+        
+        // Insert monitoring record
+        await db.query(
+          `INSERT INTO job_fair_monitoring (
+            date_of_job_fair, venue, no_of_invited_agencies, no_of_agencies_with_jfa,
+            male_applicants, female_applicants, total_applicants, dmw_staff_assigned
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            data.date_of_job_fair, data.venue, data.no_of_invited_agencies,
+            data.no_of_agencies_with_jfa, data.male_applicants, data.female_applicants,
+            total_applicants, data.dmw_staff_assigned
+          ]
+        );
+        created++;
+      } else {
+        skipped++;
+      }
+    } catch (error) {
+      console.error(`❌ Error creating job fair monitoring record for ${data.venue} on ${data.date_of_job_fair}:`, error.message);
+      skipped++;
+    }
+  }
+
+  console.log(`✅ Job Fair Monitoring data seeding completed: ${created} records created, ${skipped} skipped`);
+  return { created, skipped };
+}
+
+async function seedJobFairsData() {
+  console.log('\n🌱 Seeding Job Fairs sample data...');
+  
+  const jobFairsData = [
+    {
+      date: '2024-08-15',
+      venue: 'SMX Convention Center, Pasay City',
+      title: 'August 2024 Job Fair - Pasay',
+      description: 'Comprehensive job fair featuring various employment opportunities',
+      is_rescheduled: false
+    },
+    {
+      date: '2024-09-20',
+      venue: 'World Trade Center, Metro Manila',
+      title: 'September 2024 Job Fair - Metro Manila',
+      description: 'Large-scale job fair with multiple employers',
+      is_rescheduled: false
+    },
+    {
+      date: '2024-10-10',
+      venue: 'PICC, Roxas Boulevard, Manila',
+      title: 'October 2024 Job Fair - Manila',
+      description: 'Specialized job fair for professional positions',
+      is_rescheduled: false
+    },
+    {
+      date: '2024-11-05',
+      venue: 'Megatrade Hall, SM Megamall, Mandaluyong',
+      title: 'November 2024 Job Fair - Mandaluyong',
+      description: 'Comprehensive job fair with various opportunities',
+      is_rescheduled: false
+    },
+    {
+      date: '2024-12-15',
+      venue: 'Function Room A, DMW Main Office, Mandaluyong',
+      title: 'December 2024 Job Fair - DMW Office',
+      description: 'Small-scale job fair at DMW main office',
+      is_rescheduled: false
+    },
+    {
+      date: '2025-01-20',
+      venue: 'SMX Convention Center, Pasay City',
+      title: 'January 2025 Job Fair - Pasay',
+      description: 'New Year job fair with fresh opportunities',
+      is_rescheduled: false
+    },
+    {
+      date: '2025-02-15',
+      venue: 'World Trade Center, Metro Manila',
+      title: 'February 2025 Job Fair - Metro Manila',
+      description: 'Valentine month job fair',
+      is_rescheduled: false
+    },
+    {
+      date: '2025-03-10',
+      venue: 'PICC, Roxas Boulevard, Manila',
+      title: 'March 2025 Job Fair - Manila',
+      description: 'Spring job fair with various opportunities',
+      is_rescheduled: false
+    }
+  ];
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const data of jobFairsData) {
+    try {
+      // Check if job fair already exists
+      const { rows: existing } = await db.query(
+        'SELECT id FROM job_fairs WHERE date = $1 AND venue = $2',
+        [data.date, data.venue]
+      );
+
+      if (existing.length === 0) {
+        // Insert job fair
+        await db.query(
+          `INSERT INTO job_fairs (date, venue, title, description, is_rescheduled) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [data.date, data.venue, data.title, data.description, data.is_rescheduled]
+        );
+        created++;
+      } else {
+        skipped++;
+      }
+    } catch (error) {
+      console.error(`❌ Error creating job fair for ${data.venue} on ${data.date}:`, error.message);
+      skipped++;
+    }
+  }
+
+  console.log(`✅ Job Fairs data seeding completed: ${created} records created, ${skipped} skipped`);
+  return { created, skipped };
+}
+
 async function initializeDatabase() {
   try {
     console.log('🚀 Starting comprehensive database initialization...\n');
@@ -438,7 +624,8 @@ async function initializeDatabase() {
       { file: 'migrations/update_job_fairs_contacts.sql', desc: 'Updating job fairs contacts structure' },
       { file: 'migrations/update_peso_contacts_multiple_fields.sql', desc: 'Updating PESO contacts for multiple fields' },
       { file: 'migrations/update_pra_contacts_multiple_fields.sql', desc: 'Updating PRA contacts for multiple fields' },
-      { file: 'migrations/remove_contact_number_from_job_fairs.sql', desc: 'Removing contact number from job fairs' }
+      { file: 'migrations/remove_contact_number_from_job_fairs.sql', desc: 'Removing contact number from job fairs' },
+      { file: 'migrations/add_dmw_staff_to_job_fair_monitoring.sql', desc: 'Adding DMW staff assigned field to job fair monitoring' }
     ];
 
     for (const migration of migrations) {
@@ -550,8 +737,14 @@ async function initializeDatabase() {
       // Seed PRA contacts
       await seedPraContacts();
       
+      // Seed Job Fairs data
+      await seedJobFairsData();
+      
       // Seed Balik Manggagawa data
       await seedBalikManggagawaData();
+      
+      // Seed Job Fair Monitoring data
+      await seedJobFairMonitoringData();
       
       console.log('✅ Sample data seeding completed');
     } else {

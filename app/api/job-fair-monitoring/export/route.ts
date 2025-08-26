@@ -21,12 +21,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'excel';
     const search = searchParams.get('search') || '';
+    const filter = searchParams.get('filter') || '';
+    const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
 
     // Get all data for export (no pagination)
     const result = await DatabaseService.getJobFairMonitoring({ 
       page: 1, 
       limit: 1000, // Large limit to get all data
-      search 
+      search,
+      filter,
+      showDeletedOnly
     });
 
     if (format === 'csv') {

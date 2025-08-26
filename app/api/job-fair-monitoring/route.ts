@@ -9,8 +9,10 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
+    const filter = searchParams.get('filter') || '';
+    const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
 
-    const result = await DatabaseService.getJobFairMonitoring({ page, limit, search });
+    const result = await DatabaseService.getJobFairMonitoring({ page, limit, search, filter, showDeletedOnly });
     
     return NextResponse.json(result);
   } catch (error) {
@@ -45,7 +47,8 @@ export async function POST(request: NextRequest) {
       no_of_agencies_with_jfa,
       male_applicants,
       female_applicants,
-      total_applicants
+      total_applicants,
+      dmw_staff_assigned
     } = body;
 
     // Validate required fields
@@ -65,7 +68,8 @@ export async function POST(request: NextRequest) {
       no_of_agencies_with_jfa: parseInt(no_of_agencies_with_jfa),
       male_applicants: parseInt(male_applicants),
       female_applicants: parseInt(female_applicants),
-      total_applicants: parseInt(total_applicants)
+      total_applicants: parseInt(total_applicants),
+      dmw_staff_assigned: dmw_staff_assigned || null
     };
 
     const result = await DatabaseService.createJobFairMonitoring(monitoringData);
@@ -75,6 +79,63 @@ export async function POST(request: NextRequest) {
     console.error('Error creating job fair monitoring:', error);
     return NextResponse.json(
       { error: 'Failed to create job fair monitoring record' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    // Get token from cookies
+    const token = request.cookies.get('bb_auth_token')?.value;
+    
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await AuthService.validateSession(token);
+
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { action, id } = body;
+
+    if (!action || !id) {
+      return NextResponse.json(
+        { error: 'Action and ID are required' },
+        { status: 400 }
+      );
+    }
+
+    let result;
+    switch (action) {
+      case 'restore':
+        result = await DatabaseService.restoreJobFairMonitoring(id);
+        break;
+      case 'permanent-delete':
+        result = await DatabaseService.permanentDeleteJobFairMonitoring(id);
+        break;
+      default:
+        return NextResponse.json(
+          { error: 'Invalid action' },
+          { status: 400 }
+        );
+    }
+
+    if (!result) {
+      return NextResponse.json(
+        { error: 'Record not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error('Error performing action on job fair monitoring:', error);
+    return NextResponse.json(
+      { error: 'Failed to perform action on job fair monitoring record' },
       { status: 500 }
     );
   }

@@ -1,7 +1,7 @@
 // app/job-fairs/monitoring/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,12 +11,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Search, Download, Plus } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Download, Plus, Filter, Loader2 } from "lucide-react"
 import { useJobFairMonitoring } from "@/hooks/use-job-fair-monitoring"
 import { useTableLastModified } from "@/hooks/use-table-last-modified"
 import JobFairMonitoringModal from "@/components/job-fair-monitoring-modal"
 import JobFairMonitoringTable from "@/components/job-fair-monitoring-table"
 import JobFairMonitoringDetails from "@/components/job-fair-monitoring-details"
+import JobFairMonitoringFilterPanel from "@/components/job-fair-monitoring-filter-panel"
 import { JobFairMonitoring } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 
@@ -32,6 +39,8 @@ export default function MonitoringSummaryPage() {
     createMonitoring,
     updateMonitoring,
     deleteMonitoring,
+    restoreMonitoring,
+    permanentDeleteMonitoring,
     fetchMonitoring,
     searchMonitoring
   } = useJobFairMonitoring()
@@ -43,7 +52,22 @@ export default function MonitoringSummaryPage() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<JobFairMonitoring | null>(null)
   const [selectedRecord, setSelectedRecord] = useState<JobFairMonitoring | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
+  const [search, setSearch] = useState("")
+  const [panelQuery, setPanelQuery] = useState("")
+  const [showFilter, setShowFilter] = useState(false)
+
+  // Filter panel state
+  const [venueFilter, setVenueFilter] = useState("")
+  const [dateWithin, setDateWithin] = useState("")
+  const [maleApplicantsMin, setMaleApplicantsMin] = useState("")
+  const [maleApplicantsMax, setMaleApplicantsMax] = useState("")
+  const [femaleApplicantsMin, setFemaleApplicantsMin] = useState("")
+  const [femaleApplicantsMax, setFemaleApplicantsMax] = useState("")
+  const [totalApplicantsMin, setTotalApplicantsMin] = useState("")
+  const [totalApplicantsMax, setTotalApplicantsMax] = useState("")
+  const [dmwStaffFilter, setDmwStaffFilter] = useState("")
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   const handleCreate = () => {
     setEditingRecord(null)
@@ -65,6 +89,16 @@ export default function MonitoringSummaryPage() {
     refreshLastModified()
   }
 
+  const handleRestore = async (id: string) => {
+    await restoreMonitoring(id)
+    refreshLastModified()
+  }
+
+  const handlePermanentDelete = async (id: string) => {
+    await permanentDeleteMonitoring(id)
+    refreshLastModified()
+  }
+
   const handleModalSubmit = async (data: Omit<JobFairMonitoring, 'id' | 'created_at' | 'updated_at'>) => {
     if (editingRecord) {
       await updateMonitoring(editingRecord.id, data)
@@ -74,19 +108,70 @@ export default function MonitoringSummaryPage() {
     refreshLastModified()
   }
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      searchMonitoring(searchQuery)
-    } else {
-      fetchMonitoring(pagination.page, pagination.limit)
-    }
+  // Get current user on mount
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        const response = await fetch('/api/profile', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setCurrentUser(userData.data.user); // Profile endpoint returns data.user
+        }
+      } catch (error) {
+        console.error('Failed to get user:', error);
+      }
+    };
+    getUser();
+  }, []);
+
+
+
+  // Handle search and filter changes
+  useEffect(() => {
+    fetchMonitoring(1, pagination.limit, search, panelQuery, showDeletedOnly)
+  }, [search, panelQuery, showDeletedOnly])
+
+  // Initial fetch
+  useEffect(() => {
+    fetchMonitoring(1, pagination.limit)
+  }, [])
+
+  const clearPanel = () => {
+    setVenueFilter("")
+    setDateWithin("")
+    setMaleApplicantsMin("")
+    setMaleApplicantsMax("")
+    setFemaleApplicantsMin("")
+    setFemaleApplicantsMax("")
+    setTotalApplicantsMin("")
+    setTotalApplicantsMax("")
+    setDmwStaffFilter("")
+    setPanelQuery("")
   }
 
   const handleExport = async (format: 'pdf' | 'excel') => {
     try {
       const exportFormat = format === 'excel' ? 'csv' : 'json';
-      const url = `/api/job-fair-monitoring/export?format=${exportFormat}&search=${encodeURIComponent(searchQuery)}`;
+      const params = new URLSearchParams({
+        format: exportFormat
+      });
+      
+      if (search) {
+        params.append('search', search);
+      }
+      
+      if (panelQuery) {
+        params.append('filter', panelQuery);
+      }
+      
+      if (showDeletedOnly) {
+        params.append('showDeletedOnly', 'true');
+      }
+      
+      const url = `/api/job-fair-monitoring/export?${params.toString()}`;
       
       if (format === 'excel') {
         // Download CSV file
@@ -122,31 +207,29 @@ export default function MonitoringSummaryPage() {
   return (
     <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
-      <main className="p-6 pt-24 flex-1">
+      <main className="p-6 pt-24 flex-1 relative">
         <div>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-[#1976D2]">Job Fair Monitoring Summary</h2>
-            <div className="flex items-center gap-2 relative">
-              <form onSubmit={handleSearch} className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <Input 
-                className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                placeholder="Search or key:value" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-                </div>
-                <Button 
-                  type="submit" 
-                  variant="outline" 
-                  className="h-9 bg-white border-gray-300"
-                  disabled={loading}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input 
+                  className="pl-8 pr-10 h-9 w-[240px] bg-white" 
+                  placeholder="Search or key:value" 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowFilter(!showFilter)}
                 >
-                  Search
+                  <Filter className="h-4 w-4" />
                 </Button>
-              </form>
-              
+              </div>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="bg-white border-gray-300 h-9">
@@ -163,16 +246,48 @@ export default function MonitoringSummaryPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              
+
               <Button 
-                className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" 
+                className="bg-[#1976D2] hover:bg-[#1565C0] h-9" 
                 onClick={handleCreate}
                 disabled={loading}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add
+                Create
               </Button>
             </div>
+
+            {/* Filter Panel - positioned outside the button container */}
+            {showFilter && (
+              <div className="absolute right-6 top-20 z-50">
+                <JobFairMonitoringFilterPanel 
+                  onClose={() => setShowFilter(false)} 
+                  onApply={(query) => {
+                    setPanelQuery(query)
+                    setShowFilter(false)
+                  }}
+                  venue={venueFilter}
+                  setVenue={setVenueFilter}
+                  dateWithin={dateWithin}
+                  setDateWithin={setDateWithin}
+                  maleApplicantsMin={maleApplicantsMin}
+                  setMaleApplicantsMin={setMaleApplicantsMin}
+                  maleApplicantsMax={maleApplicantsMax}
+                  setMaleApplicantsMax={setMaleApplicantsMax}
+                  femaleApplicantsMin={femaleApplicantsMin}
+                  setFemaleApplicantsMin={setFemaleApplicantsMin}
+                  femaleApplicantsMax={femaleApplicantsMax}
+                  setFemaleApplicantsMax={setFemaleApplicantsMax}
+                  totalApplicantsMin={totalApplicantsMin}
+                  setTotalApplicantsMin={setTotalApplicantsMin}
+                  totalApplicantsMax={totalApplicantsMax}
+                  setTotalApplicantsMax={setTotalApplicantsMax}
+                  dmwStaff={dmwStaffFilter}
+                  setDmwStaff={setDmwStaffFilter}
+                  onClear={clearPanel}
+                />
+              </div>
+            )}
           </div>
 
           {/* Error Display */}
@@ -181,6 +296,8 @@ export default function MonitoringSummaryPage() {
               <p className="text-red-600 text-sm">{error}</p>
             </div>
           )}
+
+
 
 
 
@@ -207,7 +324,7 @@ export default function MonitoringSummaryPage() {
                           key={i}
                           variant={i === currentPage ? "default" : "outline"}
                           size="sm"
-                          onClick={() => fetchMonitoring(i, pagination.limit)}
+                          onClick={() => fetchMonitoring(i, pagination.limit, search, panelQuery, showDeletedOnly)}
                           className="min-w-[40px] h-8"
                         >
                           {i}
@@ -231,7 +348,7 @@ export default function MonitoringSummaryPage() {
                           key={1}
                           variant={1 === currentPage ? "default" : "outline"}
                           size="sm"
-                          onClick={() => fetchMonitoring(1, pagination.limit)}
+                          onClick={() => fetchMonitoring(1, pagination.limit, search, panelQuery, showDeletedOnly)}
                           className="min-w-[40px] h-8"
                         >
                           1
@@ -254,7 +371,7 @@ export default function MonitoringSummaryPage() {
                           key={i}
                           variant={i === currentPage ? "default" : "outline"}
                           size="sm"
-                          onClick={() => fetchMonitoring(i, pagination.limit)}
+                          onClick={() => fetchMonitoring(i, pagination.limit, search, panelQuery, showDeletedOnly)}
                           className="min-w-[40px] h-8"
                         >
                           {i}
@@ -277,7 +394,7 @@ export default function MonitoringSummaryPage() {
                           key={totalPages}
                           variant={totalPages === currentPage ? "default" : "outline"}
                           size="sm"
-                          onClick={() => fetchMonitoring(totalPages, pagination.limit)}
+                          onClick={() => fetchMonitoring(totalPages, pagination.limit, search, panelQuery, showDeletedOnly)}
                           className="min-w-[40px] h-8"
                         >
                           {totalPages}
@@ -299,7 +416,15 @@ export default function MonitoringSummaryPage() {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onView={handleView}
+              onRestore={handleRestore}
+              onPermanentDelete={handlePermanentDelete}
               loading={loading}
+              search={search}
+              filterQuery={panelQuery}
+              showDeletedOnly={showDeletedOnly}
+              setShowDeletedOnly={setShowDeletedOnly}
+              currentUser={currentUser}
+              fetchMonitoring={fetchMonitoring}
             />
           </div>
 
@@ -334,6 +459,8 @@ export default function MonitoringSummaryPage() {
         onOpenChange={setDetailsOpen}
         record={selectedRecord}
       />
+
+
     </div>
   )
 } 

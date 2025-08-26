@@ -1,5 +1,5 @@
 // components/job-fair-monitoring-details.tsx
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { JobFairMonitoring } from '@/lib/types';
 
 interface JobFairMonitoringDetailsProps {
@@ -36,130 +36,99 @@ export default function JobFairMonitoringDetails({
     });
   };
 
-  const calculateParticipationRate = () => {
-    if (record.no_of_invited_agencies === 0) return 0;
-    return ((record.no_of_agencies_with_jfa / record.no_of_invited_agencies) * 100).toFixed(1);
-  };
 
-  const calculateGenderRatio = () => {
-    if (record.total_applicants === 0) return { male: 0, female: 0 };
-    return {
-      male: ((record.male_applicants / record.total_applicants) * 100).toFixed(1),
-      female: ((record.female_applicants / record.total_applicants) * 100).toFixed(1)
-    };
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-[#1976D2]">
-            Job Fair Monitoring Details
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
+        <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
+          <DialogTitle className="text-lg font-bold">Job Fair Monitoring Details</DialogTitle>
+          <DialogClose asChild>
+            <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
+          </DialogClose>
+        </div>
         
-        <div className="space-y-6">
+        <div className="px-8 py-6 max-h-[80vh] overflow-y-auto">
           {/* Basic Information */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">Basic Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-6">
+            <div className="font-semibold text-gray-700 mb-2">Basic Information</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
               <div>
-                <label className="text-sm font-medium text-gray-600">Date of Job Fair</label>
-                <p className="text-gray-900 font-medium">{formatDate(record.date_of_job_fair)}</p>
+                <div className="text-gray-500">Date of Job Fair:</div>
+                <div className="font-medium">{formatDate(record.date_of_job_fair)}</div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Venue</label>
-                <p className="text-gray-900 font-medium">{record.venue}</p>
+                <div className="text-gray-500">Venue:</div>
+                <div className="font-medium">{record.venue}</div>
               </div>
             </div>
           </div>
+          <hr className="my-4" />
 
           {/* Agency Information */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">Agency Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Invited Agencies</label>
-                <p className="text-2xl font-bold text-blue-600">{record.no_of_invited_agencies}</p>
+          <div className="mb-6">
+            <div className="font-semibold text-gray-700 mb-2">Agency Information</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div>
+                <div className="text-gray-500">No. of Invited Agencies:</div>
+                <div className="font-medium">{record.no_of_invited_agencies}</div>
               </div>
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Agencies with JFA</label>
-                <p className="text-2xl font-bold text-green-600">{record.no_of_agencies_with_jfa}</p>
-              </div>
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Participation Rate</label>
-                <p className="text-2xl font-bold text-purple-600">{calculateParticipationRate()}%</p>
+              <div>
+                <div className="text-gray-500">No. of Agencies with JFA:</div>
+                <div className="font-medium">{record.no_of_agencies_with_jfa}</div>
               </div>
             </div>
           </div>
+          <hr className="my-4" />
 
           {/* Applicant Information */}
-          <div className="bg-green-50 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">Applicant Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Male Applicants</label>
-                <p className="text-2xl font-bold text-blue-600">{record.male_applicants}</p>
-                <p className="text-sm text-gray-500">{calculateGenderRatio().male}%</p>
+          <div className="mb-6">
+            <div className="font-semibold text-gray-700 mb-2">Applicant Information</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div>
+                <div className="text-gray-500">Male Applicants:</div>
+                <div className="font-medium">{record.male_applicants}</div>
               </div>
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Female Applicants</label>
-                <p className="text-2xl font-bold text-pink-600">{record.female_applicants}</p>
-                <p className="text-sm text-gray-500">{calculateGenderRatio().female}%</p>
+              <div>
+                <div className="text-gray-500">Female Applicants:</div>
+                <div className="font-medium">{record.female_applicants}</div>
               </div>
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Total Applicants</label>
-                <p className="text-2xl font-bold text-green-600">{record.total_applicants}</p>
-              </div>
-              <div className="text-center">
-                <label className="text-sm font-medium text-gray-600">Average per Agency</label>
-                <p className="text-2xl font-bold text-purple-600">
-                  {record.no_of_agencies_with_jfa > 0 
-                    ? Math.round(record.total_applicants / record.no_of_agencies_with_jfa)
-                    : 0
-                  }
-                </p>
+              <div>
+                <div className="text-gray-500">Total Applicants:</div>
+                <div className="font-medium">{record.total_applicants}</div>
               </div>
             </div>
           </div>
+          <hr className="my-4" />
+
+          {/* DMW Staff Assigned */}
+          <div className="mb-6">
+            <div className="font-semibold text-gray-700 mb-2">DMW Staff Assigned</div>
+            <div className="text-sm">
+              {record.dmw_staff_assigned ? (
+                <ul className="list-disc list-inside space-y-1">
+                  {record.dmw_staff_assigned.split(',').map((staff, index) => (
+                    <li key={index} className="text-gray-700">{staff.trim()}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-gray-500">No staff assigned</div>
+              )}
+            </div>
+          </div>
+          <hr className="my-4" />
 
           {/* System Information */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">System Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="font-semibold text-gray-700 mb-2">System Information</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
               <div>
-                <label className="text-sm font-medium text-gray-600">Created</label>
-                <p className="text-gray-900">{formatDateTime(record.created_at)}</p>
+                <div className="text-gray-500">Created:</div>
+                <div className="font-medium">{formatDateTime(record.created_at)}</div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Last Updated</label>
-                <p className="text-gray-900">{formatDateTime(record.updated_at)}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Summary Statistics */}
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">Summary Statistics</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Agency Participation Rate:</span>
-                <span className="font-semibold">{calculateParticipationRate()}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Gender Distribution:</span>
-                <span className="font-semibold">
-                  {calculateGenderRatio().male}% Male / {calculateGenderRatio().female}% Female
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Applicants per Participating Agency:</span>
-                <span className="font-semibold">
-                  {record.no_of_agencies_with_jfa > 0 
-                    ? Math.round(record.total_applicants / record.no_of_agencies_with_jfa)
-                    : 0
-                  }
-                </span>
+                <div className="text-gray-500">Last Updated:</div>
+                <div className="font-medium">{formatDateTime(record.updated_at)}</div>
               </div>
             </div>
           </div>

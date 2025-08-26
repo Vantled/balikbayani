@@ -330,6 +330,7 @@ export interface JobFairMonitoring {
   male_applicants: number;
   female_applicants: number;
   total_applicants: number;
+  dmw_staff_assigned?: string;
   created_at: Date;
   updated_at: Date;
 }

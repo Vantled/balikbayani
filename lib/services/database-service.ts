@@ -1228,6 +1228,88 @@ export class DatabaseService {
     return (rowCount || 0) > 0;
   }
 
+  static async getPastJobFairs(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 50 }): Promise<PaginatedResponse<JobFair>> {
+    let query = 'SELECT * FROM job_fairs';
+    let countQuery = 'SELECT COUNT(*) FROM job_fairs';
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    // Only get job fairs that are in the past and not deleted
+    let whereConditions: string[] = ['date < CURRENT_DATE', 'deleted_at IS NULL'];
+
+    if (pagination.search && pagination.search.trim()) {
+      whereConditions.push(`(venue ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex})`);
+      params.push(`%${pagination.search.trim()}%`);
+      paramIndex++;
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    query += ` ${whereClause}`;
+    countQuery += ` ${whereClause}`;
+
+    query += ` ORDER BY date DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
+
+    const { rows } = await db.query(query, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
+    const total = parseInt(countRows[0].count);
+
+    // Get contacts and emails for all job fairs
+    const jobFairIds = rows.map(row => row.id);
+    let contacts: any[] = [];
+    let emails: any[] = [];
+    if (jobFairIds.length > 0) {
+      const placeholders = jobFairIds.map((_, index) => `$${index + 1}`).join(',');
+      const { rows: contactRows } = await db.query(
+        `SELECT * FROM job_fair_contacts WHERE job_fair_id IN (${placeholders}) ORDER BY job_fair_id, created_at ASC`,
+        jobFairIds
+      );
+      contacts = contactRows;
+      
+      const { rows: emailRows } = await db.query(
+        `SELECT * FROM job_fair_emails WHERE job_fair_id IN (${placeholders}) ORDER BY job_fair_id, created_at ASC`,
+        jobFairIds
+      );
+      emails = emailRows;
+    }
+
+    // Group contacts by job fair id
+    const contactsByJobFairId = contacts.reduce((acc, contact) => {
+      if (!acc[contact.job_fair_id]) {
+        acc[contact.job_fair_id] = [];
+      }
+      acc[contact.job_fair_id].push(contact);
+      return acc;
+    }, {});
+
+    // Group emails by job fair id
+    const emailsByJobFairId = emails.reduce((acc, email) => {
+      if (!acc[email.job_fair_id]) {
+        acc[email.job_fair_id] = [];
+      }
+      acc[email.job_fair_id].push(email);
+      return acc;
+    }, {});
+
+    // Add contacts and emails to job fairs and ensure is_rescheduled field exists
+    const jobFairsWithContacts = rows.map(jobFair => ({
+      ...jobFair,
+      is_rescheduled: jobFair.is_rescheduled || false, // Default to false if column doesn't exist
+      contacts: contactsByJobFairId[jobFair.id] || [],
+      emails: emailsByJobFairId[jobFair.id] || []
+    }));
+
+    return {
+      data: jobFairsWithContacts,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: Math.ceil(total / pagination.limit)
+      }
+    };
+  }
+
   // PESO Contacts
   static async createPesoContact(contactData: Omit<PesoContact, 'id' | 'created_at' | 'updated_at'>): Promise<PesoContact> {
     const { rows } = await db.query(
@@ -1467,24 +1549,151 @@ export class DatabaseService {
   // Job Fair Monitoring
   static async createJobFairMonitoring(monitoringData: Omit<JobFairMonitoring, 'id' | 'created_at' | 'updated_at'>): Promise<JobFairMonitoring> {
     const { rows } = await db.query(
-      'INSERT INTO job_fair_monitoring (date_of_job_fair, venue, no_of_invited_agencies, no_of_agencies_with_jfa, male_applicants, female_applicants, total_applicants) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [monitoringData.date_of_job_fair, monitoringData.venue, monitoringData.no_of_invited_agencies, monitoringData.no_of_agencies_with_jfa, monitoringData.male_applicants, monitoringData.female_applicants, monitoringData.total_applicants]
+      'INSERT INTO job_fair_monitoring (date_of_job_fair, venue, no_of_invited_agencies, no_of_agencies_with_jfa, male_applicants, female_applicants, total_applicants, dmw_staff_assigned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [monitoringData.date_of_job_fair, monitoringData.venue, monitoringData.no_of_invited_agencies, monitoringData.no_of_agencies_with_jfa, monitoringData.male_applicants, monitoringData.female_applicants, monitoringData.total_applicants, monitoringData.dmw_staff_assigned]
     );
     return rows[0];
   }
 
-  static async getJobFairMonitoring(pagination: PaginationOptions & { search?: string } = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFairMonitoring>> {
+  static async getJobFairMonitoring(pagination: PaginationOptions & { search?: string; filter?: string; showDeletedOnly?: boolean } = { page: 1, limit: 10 }): Promise<PaginatedResponse<JobFairMonitoring>> {
     let query = 'SELECT * FROM job_fair_monitoring';
     let countQuery = 'SELECT COUNT(*) FROM job_fair_monitoring';
     const params: any[] = [];
     let paramIndex = 1;
+    let whereConditions: string[] = [];
 
+    // Handle search parameter (key:value format or general search)
     if (pagination.search && pagination.search.trim()) {
-      const searchCondition = `WHERE venue ILIKE $${paramIndex}`;
-      query += ` ${searchCondition}`;
-      countQuery += ` ${searchCondition}`;
-      params.push(`%${pagination.search.trim()}%`);
-      paramIndex++;
+      const searchTerm = pagination.search.trim();
+      
+      // Check if it's a key:value format
+      if (searchTerm.includes(':')) {
+        const [key, value] = searchTerm.split(':', 2);
+        const trimmedKey = key.trim().toLowerCase();
+        const trimmedValue = value.trim();
+        
+        switch (trimmedKey) {
+          case 'venue':
+            whereConditions.push(`venue ILIKE $${paramIndex}`);
+            params.push(`%${trimmedValue}%`);
+            paramIndex++;
+            break;
+          case 'male':
+          case 'male_applicants':
+            whereConditions.push(`male_applicants = $${paramIndex}`);
+            params.push(parseInt(trimmedValue) || 0);
+            paramIndex++;
+            break;
+          case 'female':
+          case 'female_applicants':
+            whereConditions.push(`female_applicants = $${paramIndex}`);
+            params.push(parseInt(trimmedValue) || 0);
+            paramIndex++;
+            break;
+          case 'total':
+          case 'total_applicants':
+            whereConditions.push(`total_applicants = $${paramIndex}`);
+            params.push(parseInt(trimmedValue) || 0);
+            paramIndex++;
+            break;
+          case 'dmw_staff':
+          case 'dmw_staff_assigned':
+            whereConditions.push(`dmw_staff_assigned ILIKE $${paramIndex}`);
+            params.push(`%${trimmedValue}%`);
+            paramIndex++;
+            break;
+          default:
+            // Fallback to general search
+            whereConditions.push(`(venue ILIKE $${paramIndex} OR dmw_staff_assigned ILIKE $${paramIndex})`);
+            params.push(`%${searchTerm}%`);
+            paramIndex++;
+        }
+      } else {
+        // General search
+        whereConditions.push(`(venue ILIKE $${paramIndex} OR dmw_staff_assigned ILIKE $${paramIndex})`);
+        params.push(`%${searchTerm}%`);
+        paramIndex++;
+      }
+    }
+
+    // Handle filter parameter
+    if (pagination.filter && pagination.filter.trim()) {
+      const filterParts = pagination.filter.trim().split(' ');
+      
+      for (const part of filterParts) {
+        if (part.includes(':')) {
+          const [key, value] = part.split(':', 2);
+          const trimmedKey = key.trim().toLowerCase();
+          const trimmedValue = value.trim();
+          
+          switch (trimmedKey) {
+            case 'venue':
+              whereConditions.push(`venue ILIKE $${paramIndex}`);
+              params.push(`%${trimmedValue}%`);
+              paramIndex++;
+              break;
+            case 'date':
+              if (trimmedValue.includes('|')) {
+                const [startDate, endDate] = trimmedValue.split('|');
+                whereConditions.push(`date_of_job_fair >= $${paramIndex} AND date_of_job_fair <= $${paramIndex + 1}`);
+                params.push(startDate, endDate);
+                paramIndex += 2;
+              }
+              break;
+            case 'male_applicants_min':
+              whereConditions.push(`male_applicants >= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'male_applicants_max':
+              whereConditions.push(`male_applicants <= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'female_applicants_min':
+              whereConditions.push(`female_applicants >= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'female_applicants_max':
+              whereConditions.push(`female_applicants <= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'total_applicants_min':
+              whereConditions.push(`total_applicants >= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'total_applicants_max':
+              whereConditions.push(`total_applicants <= $${paramIndex}`);
+              params.push(parseInt(trimmedValue) || 0);
+              paramIndex++;
+              break;
+            case 'dmw_staff':
+              whereConditions.push(`dmw_staff_assigned ILIKE $${paramIndex}`);
+              params.push(`%${trimmedValue}%`);
+              paramIndex++;
+              break;
+          }
+        }
+      }
+    }
+
+    // Handle soft delete logic
+    if (pagination.showDeletedOnly) {
+      // Show only deleted records
+      whereConditions.push(`deleted_at IS NOT NULL`);
+    } else {
+      // Show only non-deleted records (default behavior)
+      whereConditions.push(`deleted_at IS NULL`);
+    }
+
+    // Add WHERE clause if there are conditions
+    if (whereConditions.length > 0) {
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+      query += ` ${whereClause}`;
+      countQuery += ` ${whereClause}`;
     }
 
     query += ` ORDER BY date_of_job_fair DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -1512,13 +1721,26 @@ export class DatabaseService {
 
   static async updateJobFairMonitoring(id: string, monitoringData: Omit<JobFairMonitoring, 'id' | 'created_at' | 'updated_at'>): Promise<JobFairMonitoring | null> {
     const { rows } = await db.query(
-      'UPDATE job_fair_monitoring SET date_of_job_fair = $1, venue = $2, no_of_invited_agencies = $3, no_of_agencies_with_jfa = $4, male_applicants = $5, female_applicants = $6, total_applicants = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
-      [monitoringData.date_of_job_fair, monitoringData.venue, monitoringData.no_of_invited_agencies, monitoringData.no_of_agencies_with_jfa, monitoringData.male_applicants, monitoringData.female_applicants, monitoringData.total_applicants, id]
+      'UPDATE job_fair_monitoring SET date_of_job_fair = $1, venue = $2, no_of_invited_agencies = $3, no_of_agencies_with_jfa = $4, male_applicants = $5, female_applicants = $6, total_applicants = $7, dmw_staff_assigned = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 RETURNING *',
+      [monitoringData.date_of_job_fair, monitoringData.venue, monitoringData.no_of_invited_agencies, monitoringData.no_of_agencies_with_jfa, monitoringData.male_applicants, monitoringData.female_applicants, monitoringData.total_applicants, monitoringData.dmw_staff_assigned, id]
     );
     return rows[0] || null;
   }
 
   static async deleteJobFairMonitoring(id: string): Promise<JobFairMonitoring | null> {
+    // Soft delete - set deleted_at timestamp
+    const { rows } = await db.query('UPDATE job_fair_monitoring SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
+  }
+
+  static async restoreJobFairMonitoring(id: string): Promise<JobFairMonitoring | null> {
+    // Restore - clear deleted_at timestamp
+    const { rows } = await db.query('UPDATE job_fair_monitoring SET deleted_at = NULL WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
+  }
+
+  static async permanentDeleteJobFairMonitoring(id: string): Promise<JobFairMonitoring | null> {
+    // Permanent delete - actually remove from database
     const { rows } = await db.query('DELETE FROM job_fair_monitoring WHERE id = $1 RETURNING *', [id]);
     return rows[0] || null;
   }

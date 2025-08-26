@@ -10,9 +10,11 @@
     "render:start": "npm run render:migrate && npm run start",
     "lint": "next lint",
     "install-deps": "npm install --legacy-peer-deps",
+    
     "db:init": "tsx lib/init-db.ts",
     "db:init-complete": "node scripts/init-database.js",
     "db:init-complete-alt": "node scripts/init-database-alt.js",
+    "db:manager": "node scripts/database-manager.js",
     "db:reset": "tsx lib/init-db.ts --reset",
     "db:migrate": "tsx lib/init-db.ts --migrate",
     "db:migrate-bm-clearance-extended": "tsx scripts/migrate-bm-clearance-extended.ts",
@@ -20,6 +22,12 @@
     "db:role-migrate": "tsx lib/migrate-role-hierarchy.ts",
     "db:set-superadmin-password": "tsx lib/set-superadmin-password.ts",
     "db:update-admin-names": "tsx lib/update-admin-names.ts",
+    
+    "db:seed-peso": "tsx scripts/seed-peso-contacts.ts",
+    "db:seed-pra": "tsx scripts/seed-pra-contacts.ts",
+    "db:seed-bm": "tsx scripts/seed-balik-manggagawa.ts",
+    "db:cleanup-users": "tsx scripts/cleanup-users.ts",
+    
     "debug:session": "tsx lib/debug-session.ts",
     "test:complete-auth": "tsx lib/test-complete-auth.ts",
     "test:user-management": "tsx lib/test-user-management.ts",

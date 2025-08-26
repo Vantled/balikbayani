@@ -68,8 +68,8 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 **Default login:**
-- Username: `admin`
-- Password: `admin123` (or your `ADMIN_PASSWORD` from `.env.local`)
+- **Admin:** Username: `admin`, Password: `admin123` (or your `ADMIN_PASSWORD` from `.env.local`)
+- **Superadmin:** Username: `superadmin`, Password: `superadmin123` (or your `SUPERADMIN_PASSWORD` from `.env.local`)
 
 ## System Transfer Instructions
 
@@ -107,6 +107,11 @@ npm run dev
    - Install PostgreSQL: `brew install postgresql`
    - Install Git: `brew install git`
 
+   Restart device, check if all softwares are working
+   node -v
+   git -v
+   open pgAdmin 4
+
 2. **Start PostgreSQL:**
 ```bash
 brew services start postgresql
@@ -114,9 +119,11 @@ brew services start postgresql
 
 3. **Clone and Setup:**
 ```bash
-git clone https://github.com/yourusername/balikbayani.git
+open Github Desktop
+click Current Repository > Add > Clone
+choose URL and paste this "https://github.com/Vantled/balikbayani.git"
 cd balikbayani
-npm install
+npm install --legacy-peer-deps
 ```
 
 4. **Configure Database:**
@@ -132,6 +139,17 @@ npm run dev
 
 ## Database Management
 
+### Quick Start (Recommended)
+For most users, use the consolidated database manager:
+
+```bash
+# Complete setup (recommended for new installations)
+npm run db:manager full
+
+# Or use the enhanced initialization script
+npm run db:init-complete-alt
+```
+
 ### Complete Database Initialization
 ```bash
 npm run db:init-complete
@@ -143,13 +161,36 @@ This script creates all tables, applies all migrations, and sets up the default 
 npm run db:init-complete-alt
 ```
 
+### Database Manager (New)
+The consolidated database manager provides all database operations in one tool:
+
+```bash
+npm run db:manager full          # Complete setup (init + admin + seed)
+npm run db:manager init          # Initialize schema and migrations
+npm run db:manager admin         # Setup admin user
+npm run db:manager seed          # Seed sample data
+npm run db:manager cleanup       # Remove users (except admin)
+npm run db:manager verify        # Verify database setup
+npm run db:manager reset         # Complete reset
+
+# Options
+npm run db:manager full --no-seed    # Skip seeding
+npm run db:manager cleanup --confirm # Confirm destructive operations
+```
+
 ### Individual Database Commands
 ```bash
 npm run db:init          # Basic schema only
 npm run db:migrate       # Run migrations
 npm run db:security-migrate  # Security features
 npm run db:role-migrate  # Role hierarchy
+npm run db:seed-peso     # Seed PESO contacts
+npm run db:seed-pra      # Seed PRA contacts
+npm run db:seed-bm       # Seed Balik Manggagawa data
+npm run db:cleanup-users # Clean up users (with --confirm flag)
 ```
+
+📖 **For detailed database script documentation, see [DATABASE_SCRIPTS.md](DATABASE_SCRIPTS.md)**
 
 ## Project Structure
 

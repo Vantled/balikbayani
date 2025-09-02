@@ -1,0 +1,653 @@
+REQUEST FOR DMW CLEARANCE TO PROCESS A
+
+DIRECT HIRED WORKER
+
+
+
+FOR:ASST. SECRETARY LEVINSON C. ALCANTARA
+
+Pre-Employment Services
+
+
+
+DATE:  {{created_date}}
+
+
+
+
+
+
+
+CONTROL NO.:{{control_number}}
+
+NAME OF WORKER:{{name}}
+
+JOBSITE:{{jobsite}}
+
+POSITION:{{position}}
+
+SALARY:{{salary}} USD PER MONTH
+
+EMPLOYER:{{employer}}
+
+
+
+
+
+FOR DMW CLEARANCE: 
+
+
+
+
+
+Employer qualifies under Section 124d (2) of the 2016 Revised POEA Landbased Rules and Regulations. Theverifiedemployment contract offered to the worker contains terms and conditions over and above the standards set by the POEA.
+
+
+
+
+
+
+
+Recommending Approval:
+
+
+
+
+
+ATTY. APRIL R. CASABUENA
+
+Regional Director
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MEMORANDUM
+
+
+
+
+
+TO:ATTY. APRIL R. CASABUENA
+
+Regional Director
+
+RO IVA
+
+
+
+SUBJECT:Issuance of Overseas Employment Certificate
+
+
+
+DATE:{{created_date}}
+
+
+
+
+
+Please be directed to cause the issuance of an Overseas Employment Certificate (OEC) to:
+
+
+
+{{name}}bound for
+
+{{jobsite}}as {{position}}.
+
+
+
+Employer is exempt from the existing ban on direct hiring under Section 124 (d) of the 2016 Revised POEA Rules and Regulations Governing the Recruitment and Employment of Landbased Overseas Filipino Workers.
+
+
+
+For compliance.
+
+
+
+
+
+
+
+LEVINSON C. ALCANTARA
+
+ Assistant Secretary
+
+Pre-EmploymentServices
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MIGRANT WORKERS OFFICE
+
+PHILIPPINE EMBASSY/ PHILIPPINE CONSULATE
+
+CONFIRMATION
+
+
+
+
+
+This is to certify that the original Offer of Employment/Contract of Employment of Mr./Ms. {{name}}as {{position}}under employer {{employer}}bound for {{jobsite}}has been confirmed:
+
+
+
+Verified by Migrant Workers Office     (MWO OFFICE)      on _{{date}}_.
+
+
+
+Authenticated by the Office of the Philippine Embassy / Office of the Consulate General of the Republic of the Philippines in _____________on ___________.
+
+
+
+Others:_________________________________________________.
+
+
+
+Attached is a copy of the transmittal for ready reference.
+
+Date:_{{created_date }}_
+
+
+
+Evaluator:_{{evaluator}}__
+
+
+
+ATTY. ROSEMARIE G. DUQUEZ, CESO V
+
+DIRECTOR IV
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CHECKLIST OF REQUIREMENTS FOR EVALUATION OF DIRECT HIRE APPLICATION
+
+BASIC SALARY:{{salary}} USDPER MONTHCONTRACT DURATION:  __monthsDHP: 0NO DMW/POEA RECORD✓EX-OFWLAST RECORD:BASIC SALARY:{{salary}} USDPER MONTHCONTRACT DURATION:  __monthsDHP: 0NO DMW/POEA RECORD✓EX-OFWLAST RECORD:PROFESSIONAL AND SKILLED WORKERS
+
+BASIC SALARY:{{salary}} USD
+
+PER MONTH
+
+CONTRACT DURATION:  __months
+
+DHP: 0
+
+NO DMW/POEA RECORD✓
+
+EX-OFW
+
+LAST RECORD:
+
+BASIC SALARY:{{salary}} USD
+
+PER MONTH
+
+CONTRACT DURATION:  __months
+
+DHP: 0
+
+NO DMW/POEA RECORD✓
+
+EX-OFW
+
+LAST RECORD:
+
+(All documents to be submitted must be in MWPS-Direct)
+
+
+
+WORKER:{{name}}
+
+EMPLOYER:{{employer}}
+
+WORKSITE:{{jobsite}}
+
+POSITION:{{position}}
+
+
+
+DOCUMENTARY REQUIREMENTS FOR CLEARANCE FROM THE DIRECT HIRE BAN
+
+
+
+
+
+ATTACHED(PASSPORT NUMBER AND EXPIRY) DATEATTACHED(PASSPORT NUMBER AND EXPIRY) DATETIME RECEIVED:                                                                                                                               Remarks
+
+ATTACHED
+
+(PASSPORT NUMBER AND EXPIRY) DATE
+
+ATTACHED
+
+(PASSPORT NUMBER AND EXPIRY) DATE
+
+✓✓
+
+✓
+
+✓
+
+Passport with validity period of not less than one (1) year (POEA Advisory 42, series of 2019)        ____________________________
+
+ATTACHEDVISA TYPE:VALIDITY: ATTACHEDVISA TYPE:VALIDITY: 
+
+ATTACHED
+
+VISA TYPE:
+
+VALIDITY: 
+
+ATTACHED
+
+VISA TYPE:
+
+VALIDITY: 
+
+
+
+✓✓✓✓Valid Work Visa, Entry/Work Permit (whichever is applicable per country).                                                                                                                                            If visa assurance or guarantee is issued by employer, the same should be               ____________________________                noted/acknowledged by the Government or Immigration Office in the jobsite.
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓✓Employment Contract or Offer of Employment (ORIGINAL COPY)(3)
+
+✓
+
+✓
+
+_____   Verified by the Philippines Overseas Labor Office (POLO)                                                                                                                                                                                                                                                _____   Authenticated by the Philippine Embassy/Consulate for countries with no POLO.
+
+ _____   Apostille with POLO Verification (MC 8, series of 2019)
+
+ATTACHED__(MWO OFFICE)__ISSUED: ATTACHED__(MWO OFFICE)__ISSUED: _____   Apostille with Philippine Embassy Acknowledgment (MC 8, series of 2019)
+
+ATTACHED
+
+__(MWO OFFICE)__
+
+ISSUED: 
+
+ATTACHED
+
+__(MWO OFFICE)__
+
+ISSUED: 
+
+                     _____   Notarized Employment Contract for DFA/Philippine Government Official Posted Overseas’ Private Staff 
+
+                     _____   Notice of Appointment with confirmation from SPAIN Embassy for JET Recipients
+
+_____   Employment contract with confirmation from SEM (Swiss Government) for Stagiaires Recipient                               ____________________________   
+
+✓✓
+
+✓
+
+✓
+
+                   Additional country-specific requirements:
+
+CANADA - Labor Market Opinion (LMO), Labor Market Impact Assessment (LMIA) for and Canadian Letter
+
+and Employer’s Certificate of Registration from ECON (Province of Saskatchewan Executive Council) 
+
+or Saskatchewan Immigration Nominee Program (SINP) approval required from workers to 
+
+Saskatchewan in lieu of LMO
+
+
+
+
+
+USA- Labor Condition Application and Notice of Action
+
+Middle East and African countries- Contingency plan issued by the employer                         ___________________________
+
+______(EXPERIENCE)_____(4)______(EXPERIENCE)_____(4)✓✓ATTACHEDATTACHED
+
+______(EXPERIENCE)_____(4)
+
+______(EXPERIENCE)_____(4)
+
+✓
+
+✓
+
+ATTACHED
+
+ATTACHED
+
+                    TESDA NC II/PRC License                                                                                                                                                                   ___________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Compliance Form (Print from MWPS-Direct if necessary)        ___________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    Valid Medical Certificate from DOH-accredited medical clinic authorized to conduct medical exam for OFWs.                     
+
+For African Countries – Yellow fever vaccination card by Bureau of Quarantine        ___________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    Pre-Employment Orientation Seminar Certificate (PEOS)       ____________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    Clearance       ____________________________
+
+
+
+
+
+
+
+                   Proof of certificate of insurance coverage covering at least the benefits provided
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+under Section 37-A of RA 8042 as amended;
+
+Repatriation in case of Death
+
+For drivers – Vehicle Insurance from Employer                                                                                                                                 ____________________________
+
+
+
+DOCUMENTARY REQUIREMENTS FOR OEC ISSUANCE (APPROVED STATUS IN MWPS-Direct)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+E-Registration Account(Print from MWPS-Direct Registration Form)____________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pre-Departure Orientation Seminar (PDOS) Certificate issued by OWWA                                                                                         ____________________________                            
+
+
+
+
+
+RECEIVING OFFICER: RECEIVED BY:
+
+
+
+___{{evaluator}}____________________________
+
+PRINTED NAME & SIGNATUREPRINTED NAME & SIGNATURE
+
+DATE: __{{created_date }}___DATE: __{{created_date }}___
+
+TIME CLOSED:QUEUE NO.________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+Note: This form is non-transferable and is issued for the sole purpose of above-stated worker only. Unauthorized replication of this form shall be dealt with accordingly.
+
+
+
+
+
+
+
+EMAIL ADDRESS:
+
+CP#:
+
+
+
+No. of Processed Workers = 0 in Principal,0 in Landbased Accreditation System(5)
+
+
+
+
+
+
+
+MWO/POLO/PE/PCG Validation(6)
+
+
+
+
+
+
+
+DHPSW-ROIVA-YYYY-MMDD-MonthTotal-YearTotal
+
+Currency based on contract converted to USD
+
+Check one only
+
+Encode some documents based on experience and highest education
+
+Attached screenshot

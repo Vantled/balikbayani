@@ -16,6 +16,7 @@ import { Document } from "@/lib/types"
 import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
+
 // Defer auth role check to client to avoid hydration mismatch
 
 interface DirectHireApplicationsTableProps {
@@ -54,6 +55,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
   const [statusChecklistOpen, setStatusChecklistOpen] = useState(false)
   const [selectedApplicationForStatus, setSelectedApplicationForStatus] = useState<DirectHireApplication | null>(null)
+
   const [formData, setFormData] = useState<any>({
     name: "",
     sex: "male",
@@ -549,35 +551,39 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     }
 
     return (
-      <div 
-        className={`${statusColor} text-sm px-3 py-1.5 rounded-full w-fit font-medium cursor-pointer hover:opacity-80 transition-opacity flex justify-center items-center`}
-        onClick={() => {
-          // Don't open status checklist for draft applications
-          if (application.status === 'draft') {
-            toast({
-              title: "Draft Application",
-              description: "This is a draft application. Complete the form to proceed with status updates.",
-              variant: "default"
-            });
-            return;
-          }
-          // Don't open for deleted applications
-          if ((application as any).deleted_at) {
-            toast({
-              title: "Deleted Application",
-              description: "This application is deleted. Restore it to update statuses.",
-              variant: "destructive"
-            })
-            return;
-          }
-          setSelectedApplicationForStatus(application)
-          setStatusChecklistOpen(true)
-        }}
-      >
-        {currentStatus}
-        {application.status !== 'draft' && (
-          <Settings className="h-3 w-3 ml-1" />
-        )}
+      <div className="flex flex-col gap-2">
+        <div 
+          className={`${statusColor} text-sm px-3 py-1.5 rounded-full w-fit font-medium cursor-pointer hover:opacity-80 transition-opacity flex justify-center items-center`}
+          onClick={() => {
+            // Don't open status checklist for draft applications
+            if (application.status === 'draft') {
+              toast({
+                title: "Draft Application",
+                description: "This is a draft application. Complete the form to proceed with status updates.",
+                variant: "default"
+              });
+              return;
+            }
+            // Don't open for deleted applications
+            if ((application as any).deleted_at) {
+              toast({
+                title: "Deleted Application",
+                description: "This application is deleted. Restore it to update statuses.",
+                variant: "destructive"
+              })
+              return;
+            }
+            setSelectedApplicationForStatus(application)
+            setStatusChecklistOpen(true)
+          }}
+        >
+          {currentStatus}
+          {application.status !== 'draft' && (
+            <Settings className="h-3 w-3 ml-1" />
+          )}
+        </div>
+        
+        
       </div>
     )
   }
@@ -1245,6 +1251,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           }}
         />
       )}
+
+      
 
       {/* Create Applicant Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

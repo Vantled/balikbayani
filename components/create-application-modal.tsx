@@ -6,15 +6,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { X, FileText, Loader2, Calculator, Upload, Eye, Trash2, File } from "lucide-react"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { X, FileText, Loader2, Calculator } from "lucide-react"
+
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
 import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { getUser } from "@/lib/auth"
 import React from "react"
-import DocumentViewerModal from "@/components/pdf-viewer-modal"
+
 
 interface CreateApplicationModalProps {
   onClose: () => void
@@ -31,17 +31,10 @@ interface CreateApplicationModalProps {
   onSuccess?: () => void
 }
 
-interface UploadedFile {
-  id: string
-  name: string
-  type: string
-  size: number
-  file: File | null
-  preview?: string
-}
+
 
 export default function CreateApplicationModal({ onClose, initialData = null, applicationId = null, onSuccess }: CreateApplicationModalProps) {
-  const [activeTab, setActiveTab] = useState("form1")
+
   const [loading, setLoading] = useState(false)
   const [controlNumberPreview, setControlNumberPreview] = useState("")
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
@@ -62,22 +55,12 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   // Get current user for evaluator
   const currentUser = getUser()
 
-  const [uploadedFiles, setUploadedFiles] = useState<{
-    passport: UploadedFile | null
-    visa: UploadedFile | null
-    tesda: UploadedFile | null
-  }>({
-    passport: null,
-    visa: null,
-    tesda: null
-  })
+
 
   // Confirmation dialog states
   const [draftConfirmOpen, setDraftConfirmOpen] = useState(false)
   
-  // PDF Viewer Modal state
-  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
-  const [selectedDocument, setSelectedDocument] = useState<{id?: string, name: string, fileBlob?: File | null} | null>(null)
+
 
   // Generate control number preview
   const generateControlNumberPreview = async () => {
@@ -217,9 +200,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       formDataToSend.append('status', 'draft');
       formDataToSend.append('employer', (formData.employer || '').toUpperCase());
 
-      if (uploadedFiles.passport && uploadedFiles.passport.file) formDataToSend.append('passport', uploadedFiles.passport.file);
-      if (uploadedFiles.visa && uploadedFiles.visa.file) formDataToSend.append('visa', uploadedFiles.visa.file);
-      if (uploadedFiles.tesda && uploadedFiles.tesda.file) formDataToSend.append('tesda', uploadedFiles.tesda.file);
+
 
       const response = await fetch('/api/direct-hire', { method: 'POST', body: formDataToSend });
       const result = await response.json();
@@ -283,99 +264,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     });
   };
 
-  // Handle file upload
-  const handleFileUpload = (fileType: 'passport' | 'visa' | 'tesda', file: File) => {
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-      toast({
-        title: 'Invalid file type',
-        description: 'Please upload only JPEG, PNG, or PDF files.',
-        variant: 'destructive'
-      });
-      return;
-    }
 
-    // Validate file size (5MB limit)
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      toast({
-        title: 'File too large',
-        description: 'Please upload files smaller than 5MB.',
-        variant: 'destructive'
-      });
-      return;
-    }
 
-    const uploadedFile: UploadedFile = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      file: file,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
-    };
 
-    setUploadedFiles(prev => ({
-      ...prev,
-      [fileType]: uploadedFile
-    }));
 
-    toast({
-      title: 'File uploaded successfully',
-      description: `${file.name} has been uploaded.`,
-    });
-  };
 
-  // Remove uploaded file
-  const removeFile = (fileType: 'passport' | 'visa' | 'tesda') => {
-    const file = uploadedFiles[fileType];
-    if (file?.preview) {
-      URL.revokeObjectURL(file.preview);
-    }
-    
-    setUploadedFiles(prev => ({
-      ...prev,
-      [fileType]: null
-    }));
 
-    toast({
-      title: 'File removed',
-      description: 'File has been removed from the application.',
-    });
-  };
 
-  // Format file size
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
 
-  // Get file icon based on type
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith('image/')) {
-      return <FileText className="h-8 w-8 text-blue-500" />;
-    } else if (fileType === 'application/pdf') {
-      return <FileText className="h-8 w-8 text-red-500" />;
-    }
-    return <File className="h-8 w-8 text-gray-500" />;
-  };
 
-  // Handle opening PDF viewer
-  const handleViewDocument = (fileType: 'passport' | 'visa' | 'tesda') => {
-    const file = uploadedFiles[fileType];
-    if (file) {
-      setSelectedDocument({
-        id: file.id,
-        name: file.name,
-        fileBlob: file.file
-      });
-      setPdfViewerOpen(true);
-    }
-  };
 
   useEffect(() => {
     const fetchPreview = async () => {
@@ -406,70 +303,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     }
   }, [initialData, prefillKey])
 
-  // Load existing documents when editing a draft
-  useEffect(() => {
-    const loadExistingDocuments = async () => {
-      if (applicationId) {
-        try {
-          const response = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=direct_hire`);
-          const result = await response.json();
-          
-          if (result.success && result.data) {
-            // Set the existing documents in the uploadedFiles state
-            const existingFiles = { ...uploadedFiles };
-            
-            result.data.forEach((doc: any) => {
-              if (doc.document_type === 'passport') {
-                existingFiles.passport = {
-                  id: doc.id,
-                  name: doc.file_name,
-                  type: doc.mime_type,
-                  size: doc.file_size,
-                  file: null as any, // We'll handle this differently
-                  preview: `/api/documents/${doc.id}/download`
-                };
-              } else if (doc.document_type === 'visa') {
-                existingFiles.visa = {
-                  id: doc.id,
-                  name: doc.file_name,
-                  type: doc.mime_type,
-                  size: doc.file_size,
-                  file: null as any, // We'll handle this differently
-                  preview: `/api/documents/${doc.id}/download`
-                };
-              } else if (doc.document_type === 'tesda') {
-                existingFiles.tesda = {
-                  id: doc.id,
-                  name: doc.file_name,
-                  type: doc.mime_type,
-                  size: doc.file_size,
-                  file: null as any, // We'll handle this differently
-                  preview: `/api/documents/${doc.id}/download`
-                };
-              }
-            });
-            
-            setUploadedFiles(existingFiles);
-          }
-        } catch (error) {
-          console.error('Error loading existing documents:', error);
-        }
-      }
-    };
-    
-    loadExistingDocuments();
-  }, [applicationId]);
 
-  // Cleanup file previews on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(uploadedFiles).forEach(file => {
-        if (file?.preview) {
-          URL.revokeObjectURL(file.preview);
-        }
-      });
-    };
-  }, []);
+
+
+
+
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
@@ -487,13 +325,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="form1">Form 1</TabsTrigger>
-              <TabsTrigger value="form2">Form 2</TabsTrigger>
-            </TabsList>
+          <div className="mb-6">
+            <h3 className="text-lg font-medium text-gray-900">Direct Hire Application Form</h3>
+          </div>
 
-            <TabsContent value="form1" className="space-y-4">
+            <div className="space-y-4">
               {/* Control No - Preview */}
               <div>
                 <Label className="text-sm font-medium">Control No. (Preview)</Label>
@@ -664,195 +500,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               </div>
 
 
-              <div className="flex justify-end pt-4 gap-2">
-                <Button 
-                  variant="outline"
-                  onClick={onClose}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
-                  onClick={() => setActiveTab("form2")}
-                  disabled={!formData.name || !formData.jobsite || !formData.position || !formData.salary}
-                >
-                  Next
-                </Button>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="form2" className="space-y-6">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Document Upload</h3>
-                  <p className="text-sm text-gray-600 mb-6">
-                    Please upload the required documents. Supported formats: JPEG, PNG, PDF (Max 5MB each)
-                  </p>
-                </div>
-
-                {/* Passport Upload */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Passport:</Label>
-                  {!uploadedFiles.passport ? (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                      <input
-                        type="file"
-                        id="passport-upload"
-                        className="hidden"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload('passport', file);
-                        }}
-                      />
-                      <label htmlFor="passport-upload" className="cursor-pointer">
-                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600">Click to upload passport</p>
-                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
-                      </label>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          {getFileIcon(uploadedFiles.passport.type)}
-                          <div>
-                            <p className="text-sm font-medium">{uploadedFiles.passport.name}</p>
-                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.passport.size)}</p>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          {uploadedFiles.passport && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDocument('passport')}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeFile('passport')}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Visa/Work Permit Upload */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Visa/Work Permit:</Label>
-                  {!uploadedFiles.visa ? (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                      <input
-                        type="file"
-                        id="visa-upload"
-                        className="hidden"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload('visa', file);
-                        }}
-                      />
-                      <label htmlFor="visa-upload" className="cursor-pointer">
-                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600">Click to upload visa/work permit</p>
-                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
-                      </label>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          {getFileIcon(uploadedFiles.visa.type)}
-                          <div>
-                            <p className="text-sm font-medium">{uploadedFiles.visa.name}</p>
-                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.visa.size)}</p>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          {uploadedFiles.visa && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDocument('visa')}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeFile('visa')}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* TESDA NC/PRC License Upload */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">TESDA NC/PRC License:</Label>
-                  {!uploadedFiles.tesda ? (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                      <input
-                        type="file"
-                        id="tesda-upload"
-                        className="hidden"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload('tesda', file);
-                        }}
-                      />
-                      <label htmlFor="tesda-upload" className="cursor-pointer">
-                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600">Click to upload TESDA NC/PRC license</p>
-                        <p className="text-xs text-gray-500">JPEG, PNG, or PDF (Max 5MB)</p>
-                      </label>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          {getFileIcon(uploadedFiles.tesda.type)}
-                          <div>
-                            <p className="text-sm font-medium">{uploadedFiles.tesda.name}</p>
-                            <p className="text-xs text-gray-500">{formatFileSize(uploadedFiles.tesda.size)}</p>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          {uploadedFiles.tesda && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDocument('tesda')}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeFile('tesda')}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               <div className="flex justify-between pt-4">
                 <Button 
                   variant="outline" 
@@ -868,141 +515,141 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                     applicationId ? 'Save Draft Changes' : 'Save as Draft'
                   )}
                 </Button>
-                <Button 
-                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
-                  onClick={async () => {
-                    // Validate form first
-                    const validationErrors = validateForm();
-                    const fieldErrors = getFieldErrors(false);
-                    
-                    if (validationErrors.length > 0) {
-                      // Set field-specific errors for visual indicators
-                      setValidationErrors(fieldErrors);
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={onClose}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="bg-[#1976D2] hover:bg-[#1565C0]" 
+                    onClick={async () => {
+                      // Validate form first
+                      const validationErrors = validateForm();
+                      const fieldErrors = getFieldErrors(false);
                       
-                      // Show first error message
-                      toast({
-                        title: 'Validation Error',
-                        description: validationErrors[0],
-                        variant: 'destructive'
-                      });
-                      return;
-                    }
-
-                    setLoading(true);
-                    try {
-                      // Convert salary to USD for storage
-                      const salaryInUSD = formData.salaryCurrency && formData.salary ? (
-                        formData.salaryCurrency === "USD" 
-                        ? parseFloat(formData.salary)
-                          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
-                      ) : 0;
-
-                      // If continuing a draft, update instead of creating
-                      if (applicationId) {
-                        const statusChecklist = {
-                          evaluated: { checked: true, timestamp: new Date().toISOString() },
-                          for_confirmation: { checked: false, timestamp: undefined },
-                          emailed_to_dhad: { checked: false, timestamp: undefined },
-                          received_from_dhad: { checked: false, timestamp: undefined },
-                          for_interview: { checked: false, timestamp: undefined }
-                        }
-
-                        const updated = await updateApplication(applicationId, {
-                          name: formData.name,
-                          sex: formData.sex,
-                          jobsite: formData.jobsite,
-                          position: formData.position,
-                          job_type: formData.job_type,
-                          salary: salaryInUSD,
-                          employer: formData.employer,
-                          evaluator: currentUser?.full_name || 'Unknown',
-                          status: 'evaluated',
-                          status_checklist: statusChecklist
-                        })
-
-                        if (!updated) throw new Error('Failed to update draft')
-
-                        // Try to generate and attach the clearance document
-                        try {
-                          await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
-                        } catch {}
-
-                        // Ensure parent refresh completes before toast
-                        await onSuccess?.()
-                        onClose();
+                      if (validationErrors.length > 0) {
+                        // Set field-specific errors for visual indicators
+                        setValidationErrors(fieldErrors);
+                        
+                        // Show first error message
                         toast({
-                          title: 'Application submitted',
-                          description: `${formData.name} has been updated and submitted.`,
+                          title: 'Validation Error',
+                          description: validationErrors[0],
+                          variant: 'destructive'
                         });
                         return;
                       }
 
-                      // Create FormData for file upload
-                      const formDataToSend = new FormData();
-                      formDataToSend.append('name', formData.name);
-                      formDataToSend.append('sex', formData.sex);
-                      formDataToSend.append('salary', salaryInUSD.toString());
-                      formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
-                      formDataToSend.append('jobsite', formData.jobsite);
-                      formDataToSend.append('position', formData.position);
-                      formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
-                      formDataToSend.append('status', 'pending');
-                      formDataToSend.append('employer', formData.employer);
+                      setLoading(true);
+                      try {
+                        // Convert salary to USD for storage
+                        const salaryInUSD = formData.salaryCurrency && formData.salary ? (
+                          formData.salaryCurrency === "USD" 
+                          ? parseFloat(formData.salary)
+                            : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
+                        ) : 0;
 
-                      // Add files if they exist
-                      if (uploadedFiles.passport && uploadedFiles.passport.file) {
-                        formDataToSend.append('passport', uploadedFiles.passport.file);
-                      }
-                      if (uploadedFiles.visa && uploadedFiles.visa.file) {
-                        formDataToSend.append('visa', uploadedFiles.visa.file);
-                      }
-                      if (uploadedFiles.tesda && uploadedFiles.tesda.file) {
-                        formDataToSend.append('tesda', uploadedFiles.tesda.file);
-                      }
+                        // If continuing a draft, update instead of creating
+                        if (applicationId) {
+                          const statusChecklist = {
+                            evaluated: { checked: false, timestamp: undefined },
+                            for_confirmation: { checked: false, timestamp: undefined },
+                            emailed_to_dhad: { checked: false, timestamp: undefined },
+                            received_from_dhad: { checked: false, timestamp: undefined },
+                            for_interview: { checked: false, timestamp: undefined }
+                          }
 
-                      const response = await fetch('/api/direct-hire', {
-                        method: 'POST',
-                        body: formDataToSend,
-                      });
+                          const updated = await updateApplication(applicationId, {
+                            name: formData.name,
+                            sex: formData.sex,
+                            jobsite: formData.jobsite,
+                            position: formData.position,
+                            job_type: formData.job_type,
+                            salary: salaryInUSD,
+                            employer: formData.employer,
+                            evaluator: currentUser?.full_name || 'Unknown',
+                            status: 'pending',
+                            status_checklist: statusChecklist
+                          })
 
-                      const result = await response.json();
+                          if (!updated) throw new Error('Failed to update draft')
 
-                      if (result.success) {
-                        // Ensure parent refresh completes before toast
-                        await onSuccess?.()
-                        onClose();
-                        toast({
-                          title: 'Application created successfully!',
-                          description: `${formData.name} has been added to the system`,
+                          // Try to generate and attach the clearance document
+                          try {
+                            await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
+                          } catch {}
+
+                          // Ensure parent refresh completes before toast
+                          await onSuccess?.()
+                          onClose();
+                          toast({
+                            title: 'Application submitted',
+                            description: `${formData.name} has been updated and submitted.`,
+                          });
+                          return;
+                        }
+
+                        // Create FormData for file upload
+                        const formDataToSend = new FormData();
+                        formDataToSend.append('name', formData.name);
+                        formDataToSend.append('sex', formData.sex);
+                        formDataToSend.append('salary', salaryInUSD.toString());
+                        formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
+                        formDataToSend.append('jobsite', formData.jobsite);
+                        formDataToSend.append('position', formData.position);
+                        formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
+                        formDataToSend.append('status', 'pending');
+                        formDataToSend.append('documents_completed', 'false');
+                        formDataToSend.append('employer', formData.employer);
+
+                        const response = await fetch('/api/direct-hire', {
+                          method: 'POST',
+                          body: formDataToSend,
                         });
-                      } else {
-                        throw new Error(result.error || 'Failed to create application');
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                          // Ensure parent refresh completes before toast
+                          await onSuccess?.()
+                          onClose();
+                          toast({
+                            title: 'Application created successfully!',
+                            description: `${formData.name} has been added to the system`,
+                          });
+                        } else {
+                          throw new Error(result.error || 'Failed to create application');
+                        }
+                      } catch (error) {
+                        console.error('Error creating application:', error);
+                        toast({
+                          title: 'Error creating application',
+                          description: 'Failed to create the application. Please try again.',
+                          variant: 'destructive'
+                        });
+                      } finally {
+                        setLoading(false);
                       }
-                    } catch (error) {
-                      console.error('Error creating application:', error);
-                      toast({
-                        title: 'Error creating application',
-                        description: 'Failed to create the application. Please try again.',
-                        variant: 'destructive'
-                      });
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    'Create'
-                  )}
-                </Button>
+                    }}
+                    disabled={loading || !formData.name || !formData.jobsite || !formData.position || !formData.salary}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Create'
+                    )}
+                  </Button>
+                </div>
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+
+
+
         </div>
       </div>
 
@@ -1033,19 +680,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Document Viewer Modal */}
-      {selectedDocument && (
-        <DocumentViewerModal
-          isOpen={pdfViewerOpen}
-          onClose={() => {
-            setPdfViewerOpen(false)
-            setSelectedDocument(null)
-          }}
-          documentId={selectedDocument.id}
-          documentName={selectedDocument.name}
-          fileBlob={selectedDocument.fileBlob}
-        />
-      )}
+
     </div>
   )
 }

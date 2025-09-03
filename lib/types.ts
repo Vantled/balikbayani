@@ -76,6 +76,8 @@ export interface DirectHireApplication {
   personal_info?: PersonalInfo;
   employment_info?: EmploymentInfo;
   documents?: Document[];
+  documents_completed?: boolean;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;
@@ -343,7 +345,19 @@ export interface Document {
   file_path: string;
   file_size: number;
   mime_type: string;
+  meta?: any;
   uploaded_at: Date;
+  updated_at: Date;
+}
+
+export interface DirectHireDocument {
+  id: string;
+  application_id: string;
+  document_type: string;
+  file_name: string;
+  file_path: string;
+  file_data?: Buffer;
+  created_at: Date;
   updated_at: Date;
 }
 

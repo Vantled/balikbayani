@@ -1746,10 +1746,10 @@ export class DatabaseService {
   }
 
   // Documents
-  static async createDocument(documentData: Omit<Document, 'id' | 'uploaded_at' | 'updated_at'>): Promise<Document> {
+  static async createDocument(documentData: Omit<Document, 'id' | 'uploaded_at' | 'updated_at'> & { meta?: any }): Promise<Document> {
     const { rows } = await db.query(
-      'INSERT INTO documents (application_id, application_type, document_type, file_name, file_path, file_size, mime_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [documentData.application_id, documentData.application_type, documentData.document_type, documentData.file_name, documentData.file_path, documentData.file_size, documentData.mime_type]
+      'INSERT INTO documents (application_id, application_type, document_type, file_name, file_path, file_size, mime_type, meta) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [documentData.application_id, documentData.application_type, documentData.document_type, documentData.file_name, documentData.file_path, documentData.file_size, documentData.mime_type, documentData.meta ?? null]
     );
     return rows[0];
   }
@@ -1765,6 +1765,19 @@ export class DatabaseService {
       [applicationId, applicationType]
     );
     return rows;
+  }
+
+  static async deleteDocumentById(id: string): Promise<boolean> {
+    const { rowCount } = await db.query('DELETE FROM documents WHERE id = $1', [id])
+    return (rowCount || 0) > 0
+  }
+
+  static async deleteDocumentsByType(applicationId: string, applicationType: string, documentType: string): Promise<number> {
+    const { rowCount } = await db.query(
+      'DELETE FROM documents WHERE application_id = $1 AND application_type = $2 AND document_type = $3',
+      [applicationId, applicationType, documentType]
+    )
+    return rowCount || 0
   }
 
   // Audit Logs

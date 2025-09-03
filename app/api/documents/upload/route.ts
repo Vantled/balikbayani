@@ -11,6 +11,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const applicationId = formData.get('applicationId') as string;
     const applicationType = formData.get('applicationType') as string;
     const documentName = formData.get('documentName') as string;
+    const metaRaw = formData.get('meta') as string | null;
+    let meta: any = null;
+    if (metaRaw) {
+      try { meta = JSON.parse(metaRaw); } catch {}
+    }
 
     // Validate required fields
     if (!file || !applicationId || !applicationType || !documentName) {
@@ -52,7 +57,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       file_name: uploadedFile.originalName,
       file_path: uploadedFile.filePath,
       file_size: uploadedFile.fileSize,
-      mime_type: uploadedFile.mimeType
+      mime_type: uploadedFile.mimeType,
+      // optional metadata
+      meta
     });
 
     return NextResponse.json({

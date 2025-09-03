@@ -70,7 +70,9 @@ export async function GET(
     // Set appropriate headers
     const headers = new Headers();
     headers.set('Content-Type', contentType);
-    headers.set('Content-Disposition', `attachment; filename="${fileName}"`);
+    // Preview inline for PDFs and images; download for everything else
+    const isPreviewable = contentType.includes('pdf') || contentType.startsWith('image/');
+    headers.set('Content-Disposition', `${isPreviewable ? 'inline' : 'attachment'}; filename="${fileName}"`);
     headers.set('Content-Length', fileBuffer.length.toString());
     
     // Return file

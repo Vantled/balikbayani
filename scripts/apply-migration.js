@@ -150,6 +150,12 @@ async function applyMigration() {
     `);
     console.log('pra_contacts trigger creation result:', result13);
     
+    console.log('Applying migration: Add document meta column...');
+    const resultMeta = await client.query(`
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS meta JSONB;
+    `);
+    console.log('documents.meta addition result:', resultMeta.rowCount ?? resultMeta);
+
     console.log('Migration applied successfully!');
     
     client.release();

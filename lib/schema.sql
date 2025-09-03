@@ -40,6 +40,8 @@ CREATE TABLE direct_hire_applications (
     evaluator VARCHAR(255),
     employer VARCHAR(255),
     status_checklist JSONB DEFAULT '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}',
+    documents_completed BOOLEAN DEFAULT FALSE,
+    completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -306,11 +308,27 @@ CREATE TABLE audit_logs (
 -- Create unique index for email (excluding NULL values)
 CREATE UNIQUE INDEX users_email_unique_idx ON users (email) WHERE email IS NOT NULL;
 
+-- Direct Hire Documents
+CREATE TABLE direct_hire_documents (
+    id SERIAL PRIMARY KEY,
+    application_id UUID NOT NULL REFERENCES direct_hire_applications(id) ON DELETE CASCADE,
+    document_type VARCHAR(100) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_data BYTEA NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for better performance
 CREATE INDEX idx_direct_hire_control_number ON direct_hire_applications(control_number);
 CREATE INDEX idx_direct_hire_status ON direct_hire_applications(status);
 CREATE INDEX idx_direct_hire_created_at ON direct_hire_applications(created_at);
 CREATE INDEX idx_direct_hire_sex ON direct_hire_applications(sex);
+CREATE INDEX idx_direct_hire_documents_completed ON direct_hire_applications(documents_completed);
+
+CREATE INDEX idx_direct_hire_documents_application_id ON direct_hire_documents(application_id);
+CREATE INDEX idx_direct_hire_documents_type ON direct_hire_documents(document_type);
 
 CREATE INDEX idx_clearance_control_number ON balik_manggagawa_clearance(control_number);
 CREATE INDEX idx_clearance_type ON balik_manggagawa_clearance(clearance_type);
@@ -355,6 +373,7 @@ $$ language 'plpgsql';
 -- Apply triggers to all tables with updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_direct_hire_applications_updated_at BEFORE UPDATE ON direct_hire_applications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_direct_hire_documents_updated_at BEFORE UPDATE ON direct_hire_documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_personal_info_updated_at BEFORE UPDATE ON personal_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_employment_info_updated_at BEFORE UPDATE ON employment_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_balik_manggagawa_clearance_updated_at BEFORE UPDATE ON balik_manggagawa_clearance FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

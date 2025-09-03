@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 
 interface StatusChecklistProps {
   applicationId: string
+  applicantName: string
   currentStatus: string
   statusChecklist: {
     evaluated: { checked: boolean; timestamp?: string }
@@ -35,6 +36,7 @@ const STATUS_OPTIONS = [
 
 export default function StatusChecklist({
   applicationId,
+  applicantName,
   currentStatus,
   statusChecklist,
   onStatusUpdate,
@@ -319,7 +321,7 @@ export default function StatusChecklist({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
         <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
-          <DialogTitle className="text-lg font-bold">Update Application Status</DialogTitle>
+          <DialogTitle className="text-lg font-bold">{applicantName}'s Application Status</DialogTitle>
         </div>
         
                  <div className="px-8 py-6 space-y-5 max-h-[80vh] overflow-y-auto">

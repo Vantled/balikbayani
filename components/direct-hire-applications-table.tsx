@@ -1228,6 +1228,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
       {selectedApplicationForStatus && (
         <StatusChecklist
           applicationId={selectedApplicationForStatus.id}
+          applicantName={selectedApplicationForStatus.name}
           currentStatus={selectedApplicationForStatus.status}
           statusChecklist={selectedApplicationForStatus.status_checklist || {
             evaluated: { checked: true, timestamp: new Date().toISOString() },

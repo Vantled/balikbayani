@@ -335,8 +335,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         })
       });
 
-      const result = await response.json();
-      
+          const result = await response.json();
+          
       if (result.success) {
         setPasswordError("");
         setPassword("");
@@ -424,7 +424,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         title: 'Application updated',
         description: `${formData.name} has been updated successfully.`,
       });
-    } catch (error) {
+        } catch (error) {
       console.error('Error updating application:', error);
       toast({
         title: 'Error updating application',
@@ -522,7 +522,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
           <div className="flex items-center">
             <FileText className="h-5 w-5 mr-2" />
             <h2 className="text-lg font-medium">
-              {applicationId ? 'Edit Application' : 'Fill Out Form'}
+              {applicationId ? `Edit ${formData.name}'s Application` : 'Fill Out Form'}
             </h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-blue-600">
@@ -532,11 +532,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-900">
-              {applicationId ? 'Edit Direct Hire Application' : 'Direct Hire Application Form'}
-            </h3>
-          </div>
 
             <div className="space-y-4">
               {/* Control No - Show actual number when editing, preview when creating */}
@@ -716,14 +711,14 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
               <div className="flex justify-end pt-4">
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline"
-                    onClick={onClose}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    className="bg-[#1976D2] hover:bg-[#1565C0]" 
+                <Button 
+                  variant="outline"
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
                     onClick={() => {
                       if (applicationId) {
                         // Show confirmation modal for editing
@@ -734,17 +729,17 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                       }
                     }}
                     disabled={loading || !formData.name || !formData.jobsite || !formData.position || !formData.salary}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         {applicationId ? 'Updating...' : 'Creating...'}
-                      </>
-                    ) : (
+                    </>
+                  ) : (
                       applicationId ? 'Update' : 'Create'
-                    )}
-                  </Button>
-                </div>
+                  )}
+                </Button>
+              </div>
               </div>
             </div>
 

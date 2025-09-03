@@ -248,6 +248,8 @@ export class DatabaseService {
     if (updateData.name !== undefined) { fields.push(`name = $${paramCount++}`); values.push(updateData.name); }
     if (updateData.sex !== undefined) { fields.push(`sex = $${paramCount++}`); values.push(updateData.sex); }
     if (updateData.salary !== undefined) { fields.push(`salary = $${paramCount++}`); values.push(updateData.salary); }
+    if ((updateData as any).raw_salary !== undefined) { fields.push(`raw_salary = $${paramCount++}`); values.push((updateData as any).raw_salary); }
+    if ((updateData as any).salary_currency !== undefined) { fields.push(`salary_currency = $${paramCount++}`); values.push((updateData as any).salary_currency); }
     if (updateData.status !== undefined) { fields.push(`status = $${paramCount++}`); values.push(updateData.status); }
     if (updateData.jobsite !== undefined) { fields.push(`jobsite = $${paramCount++}`); values.push(updateData.jobsite); }
     if (updateData.position !== undefined) { fields.push(`position = $${paramCount++}`); values.push(updateData.position); }

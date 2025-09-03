@@ -26,6 +26,9 @@ interface CreateApplicationModalProps {
     jobsite?: string
     position?: string
     salary?: number
+    control_number?: string
+    status?: string
+    status_checklist?: any
   } | null
   applicationId?: string | null
   onSuccess?: () => void
@@ -59,6 +62,16 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
   // Confirmation dialog states
   const [draftConfirmOpen, setDraftConfirmOpen] = useState(false)
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false)
+  const [password, setPassword] = useState("")
+  const [passwordError, setPasswordError] = useState("")
+
+  // Custom close handler for update confirmation modal
+  const handleCloseUpdateModal = () => {
+    setUpdateConfirmOpen(false);
+    setPassword("");
+    setPasswordError("");
+  };
   
 
 
@@ -294,14 +307,206 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
         position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
-        salary: initialData.salary && initialData.salary > 0 ? String(initialData.salary) : '',
-        salaryCurrency: (initialData as any).salaryCurrency ?? 'USD',
+        salary: (initialData as any).raw_salary && (initialData as any).raw_salary > 0 ? String((initialData as any).raw_salary) : (initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''),
+        salaryCurrency: (initialData as any).salary_currency ?? (initialData as any).salaryCurrency ?? 'USD',
         employer: (initialData as any).employer ?? '',
         raw_salary: (initialData as any).raw_salary ?? initialData.salary
       }))
       prefilledRef.current = prefillKey
     }
   }, [initialData, prefillKey])
+
+  // Handle password confirmation
+  const handlePasswordConfirm = async () => {
+    if (!password.trim()) {
+      setPasswordError("Password is required");
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: currentUser?.username || '',
+          password: password
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setPasswordError("");
+        setPassword("");
+        handleCloseUpdateModal();
+        // Proceed with update after password confirmation
+        handleUpdateApplication();
+      } else {
+        setPasswordError("Incorrect password");
+        // Keep modal open for incorrect password
+      }
+    } catch (error) {
+      setPasswordError("Failed to verify password");
+      // Keep modal open for errors
+    }
+  };
+
+  // Handle application update
+  const handleUpdateApplication = async () => {
+    // Validate form first
+    const validationErrors = validateForm();
+    const fieldErrors = getFieldErrors(false);
+    
+    if (validationErrors.length > 0) {
+      // Set field-specific errors for visual indicators
+      setValidationErrors(fieldErrors);
+      
+      // Show first error message
+      toast({
+        title: 'Validation Error',
+        description: validationErrors[0],
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Preserve existing status and status_checklist when editing
+      const existingStatus = initialData?.status || 'pending'
+      const existingStatusChecklist = initialData?.status_checklist || {
+        evaluated: { checked: false, timestamp: undefined },
+        for_confirmation: { checked: false, timestamp: undefined },
+        emailed_to_dhad: { checked: false, timestamp: undefined },
+        received_from_dhad: { checked: false, timestamp: undefined },
+        for_interview: { checked: false, timestamp: undefined }
+      }
+
+      // For editing, store USD equivalent in salary field for table display, original in raw_salary
+      const newSalary = parseFloat(formData.salary)
+      const salaryInUSD = formData.salaryCurrency === "USD" 
+        ? newSalary 
+        : convertToUSD(newSalary, formData.salaryCurrency)
+      
+      // Use direct API call to ensure raw_salary and salary_currency are updated
+      const response = await fetch(`/api/direct-hire/${applicationId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          sex: formData.sex,
+          jobsite: formData.jobsite,
+          position: formData.position,
+          job_type: formData.job_type,
+          salary: salaryInUSD,  // Store USD equivalent for table display
+          raw_salary: newSalary,  // Store original value for editing
+          salary_currency: formData.salaryCurrency,  // Store original currency
+          employer: formData.employer,
+          evaluator: currentUser?.full_name || 'Unknown',
+          status: existingStatus,
+          status_checklist: existingStatusChecklist
+        })
+      })
+
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update application')
+      }
+
+      // Ensure parent refresh completes before toast
+      await onSuccess?.()
+      onClose();
+      toast({
+        title: 'Application updated',
+        description: `${formData.name} has been updated successfully.`,
+      });
+    } catch (error) {
+      console.error('Error updating application:', error);
+      toast({
+        title: 'Error updating application',
+        description: 'Failed to update the application. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+      setUpdateConfirmOpen(false);
+    }
+  }
+
+  // Handle application creation
+  const handleCreateApplication = async () => {
+    // Validate form first
+    const validationErrors = validateForm();
+    const fieldErrors = getFieldErrors(false);
+    
+    if (validationErrors.length > 0) {
+      // Set field-specific errors for visual indicators
+      setValidationErrors(fieldErrors);
+      
+      // Show first error message
+      toast({
+        title: 'Validation Error',
+        description: validationErrors[0],
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Convert salary to USD for storage (only for new applications)
+      const salaryInUSD = formData.salaryCurrency && formData.salary ? (
+        formData.salaryCurrency === "USD" 
+        ? parseFloat(formData.salary)
+          : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
+      ) : 0;
+
+      // Create FormData for file upload
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('sex', formData.sex);
+      formDataToSend.append('salary', salaryInUSD.toString());
+      formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
+      formDataToSend.append('jobsite', formData.jobsite);
+      formDataToSend.append('position', formData.position);
+      formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
+      formDataToSend.append('status', 'pending');
+      formDataToSend.append('documents_completed', 'false');
+      formDataToSend.append('employer', formData.employer);
+
+      const response = await fetch('/api/direct-hire', {
+        method: 'POST',
+        body: formDataToSend,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Ensure parent refresh completes before toast
+        await onSuccess?.()
+        onClose();
+        toast({
+          title: 'Application created successfully!',
+          description: `${formData.name} has been added to the system`,
+        });
+      } else {
+        throw new Error(result.error || 'Failed to create application');
+      }
+    } catch (error) {
+      console.error('Error creating application:', error);
+      toast({
+        title: 'Error creating application',
+        description: 'Failed to create the application. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
 
 
 
@@ -316,7 +521,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center">
             <FileText className="h-5 w-5 mr-2" />
-            <h2 className="text-lg font-medium">Fill Out Form</h2>
+            <h2 className="text-lg font-medium">
+              {applicationId ? 'Edit Application' : 'Fill Out Form'}
+            </h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-blue-600">
             <X className="h-5 w-5" />
@@ -326,21 +533,28 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
           <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-900">Direct Hire Application Form</h3>
+            <h3 className="text-lg font-medium text-gray-900">
+              {applicationId ? 'Edit Direct Hire Application' : 'Direct Hire Application Form'}
+            </h3>
           </div>
 
             <div className="space-y-4">
-              {/* Control No - Preview */}
+              {/* Control No - Show actual number when editing, preview when creating */}
               <div>
-                <Label className="text-sm font-medium">Control No. (Preview)</Label>
+                <Label className="text-sm font-medium">
+                  {applicationId ? 'Control No.' : 'Control No. (Preview)'}
+                </Label>
                 <Input 
-                  value={controlNumberPreview} 
+                  value={applicationId ? (initialData?.control_number || 'Loading...') : controlNumberPreview} 
                   disabled
                   className="mt-1 bg-gray-50 font-mono text-sm" 
-                  placeholder="Generating preview..."
+                  placeholder={applicationId ? 'Loading...' : "Generating preview..."}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  This is a preview. The actual control number will be generated upon creation.
+                  {applicationId 
+                    ? 'Control number is fixed and cannot be changed.'
+                    : 'This is a preview. The actual control number will be generated upon creation.'
+                  }
                 </p>
               </div>
 
@@ -500,21 +714,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               </div>
 
 
-              <div className="flex justify-between pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setDraftConfirmOpen(true)}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    applicationId ? 'Save Draft Changes' : 'Save as Draft'
-                  )}
-                </Button>
+              <div className="flex justify-end pt-4">
                 <div className="flex gap-2">
                   <Button 
                     variant="outline"
@@ -524,113 +724,13 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                   </Button>
                   <Button 
                     className="bg-[#1976D2] hover:bg-[#1565C0]" 
-                    onClick={async () => {
-                      // Validate form first
-                      const validationErrors = validateForm();
-                      const fieldErrors = getFieldErrors(false);
-                      
-                      if (validationErrors.length > 0) {
-                        // Set field-specific errors for visual indicators
-                        setValidationErrors(fieldErrors);
-                        
-                        // Show first error message
-                        toast({
-                          title: 'Validation Error',
-                          description: validationErrors[0],
-                          variant: 'destructive'
-                        });
-                        return;
-                      }
-
-                      setLoading(true);
-                      try {
-                        // Convert salary to USD for storage
-                        const salaryInUSD = formData.salaryCurrency && formData.salary ? (
-                          formData.salaryCurrency === "USD" 
-                          ? parseFloat(formData.salary)
-                            : convertToUSD(parseFloat(formData.salary), formData.salaryCurrency)
-                        ) : 0;
-
-                        // If continuing a draft, update instead of creating
-                        if (applicationId) {
-                          const statusChecklist = {
-                            evaluated: { checked: false, timestamp: undefined },
-                            for_confirmation: { checked: false, timestamp: undefined },
-                            emailed_to_dhad: { checked: false, timestamp: undefined },
-                            received_from_dhad: { checked: false, timestamp: undefined },
-                            for_interview: { checked: false, timestamp: undefined }
-                          }
-
-                          const updated = await updateApplication(applicationId, {
-                            name: formData.name,
-                            sex: formData.sex,
-                            jobsite: formData.jobsite,
-                            position: formData.position,
-                            job_type: formData.job_type,
-                            salary: salaryInUSD,
-                            employer: formData.employer,
-                            evaluator: currentUser?.full_name || 'Unknown',
-                            status: 'pending',
-                            status_checklist: statusChecklist
-                          })
-
-                          if (!updated) throw new Error('Failed to update draft')
-
-                          // Try to generate and attach the clearance document
-                          try {
-                            await fetch(`/api/direct-hire/${applicationId}/generate`, { method: 'POST' })
-                          } catch {}
-
-                          // Ensure parent refresh completes before toast
-                          await onSuccess?.()
-                          onClose();
-                          toast({
-                            title: 'Application submitted',
-                            description: `${formData.name} has been updated and submitted.`,
-                          });
-                          return;
-                        }
-
-                        // Create FormData for file upload
-                        const formDataToSend = new FormData();
-                        formDataToSend.append('name', formData.name);
-                        formDataToSend.append('sex', formData.sex);
-                        formDataToSend.append('salary', salaryInUSD.toString());
-                        formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
-                        formDataToSend.append('jobsite', formData.jobsite);
-                        formDataToSend.append('position', formData.position);
-                        formDataToSend.append('evaluator', currentUser?.full_name || 'Unknown');
-                        formDataToSend.append('status', 'pending');
-                        formDataToSend.append('documents_completed', 'false');
-                        formDataToSend.append('employer', formData.employer);
-
-                        const response = await fetch('/api/direct-hire', {
-                          method: 'POST',
-                          body: formDataToSend,
-                        });
-
-                        const result = await response.json();
-
-                        if (result.success) {
-                          // Ensure parent refresh completes before toast
-                          await onSuccess?.()
-                          onClose();
-                          toast({
-                            title: 'Application created successfully!',
-                            description: `${formData.name} has been added to the system`,
-                          });
-                        } else {
-                          throw new Error(result.error || 'Failed to create application');
-                        }
-                      } catch (error) {
-                        console.error('Error creating application:', error);
-                        toast({
-                          title: 'Error creating application',
-                          description: 'Failed to create the application. Please try again.',
-                          variant: 'destructive'
-                        });
-                      } finally {
-                        setLoading(false);
+                    onClick={() => {
+                      if (applicationId) {
+                        // Show confirmation modal for editing
+                        setUpdateConfirmOpen(true)
+                      } else {
+                        // Direct create for new applications
+                        handleCreateApplication()
                       }
                     }}
                     disabled={loading || !formData.name || !formData.jobsite || !formData.position || !formData.salary}
@@ -638,10 +738,10 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Creating...
+                        {applicationId ? 'Updating...' : 'Creating...'}
                       </>
                     ) : (
-                      'Create'
+                      applicationId ? 'Update' : 'Create'
                     )}
                   </Button>
                 </div>
@@ -680,7 +780,55 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Update Confirmation Dialog */}
+      <AlertDialog open={updateConfirmOpen} onOpenChange={() => {
+        // Prevent automatic closing - only allow explicit closing
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Application Update</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to update the application for <strong>{formData.name}</strong>?<br />
+              This will modify the application information and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="password" className="text-sm font-medium">
+                Enter your password to confirm:
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
+                placeholder="Enter your password"
+                className={passwordError ? "border-red-500" : ""}
+              />
+              {passwordError && (
+                <p className="text-xs text-red-500 mt-1">{passwordError}</p>
+              )}
+            </div>
+          </div>
 
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCloseUpdateModal}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePasswordConfirm}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={!password.trim()}
+            >
+              Confirm Update
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

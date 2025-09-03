@@ -878,7 +878,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                                       View
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => {
-                                      toast({ title: "Edit functionality coming soon", description: "This feature will be available in the next update" })
+                                      setShowEditDraftModal({ open: true, app: application })
                                     }}>
                                       <Edit className="h-4 w-4 mr-2" />
                                       Edit
@@ -893,10 +893,12 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                                       <Trash2 className="h-4 w-4 mr-2" />
                                       Delete
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
-                                      <FileText className="h-4 w-4 mr-2" />
-                                      Compliance Form
-                                    </DropdownMenuItem>
+                                    {application.salary < 1000 && (
+                                      <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Compliance Form
+                                      </DropdownMenuItem>
+                                    )}
                                   </>
                                 )}
                               </>
@@ -1576,25 +1578,34 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
           </div>
         </DialogContent>
       </Dialog>
-      {showEditDraftModal.open && showEditDraftModal.app && (
-        <CreateApplicationModal 
-          onClose={() => setShowEditDraftModal({ open: false, app: null })}
-          initialData={{
-            id: showEditDraftModal.app.id,
-            name: showEditDraftModal.app.name,
-            sex: showEditDraftModal.app.sex,
-            job_type: showEditDraftModal.app.job_type,
-            jobsite: showEditDraftModal.app.jobsite,
-            position: showEditDraftModal.app.position,
-            salary: Number(showEditDraftModal.app.salary),
-            salaryCurrency: (showEditDraftModal.app as any).salary_currency || 'USD',
-            employer: (showEditDraftModal.app as any).employer || '',
-            raw_salary: (showEditDraftModal.app as any).raw_salary || Number(showEditDraftModal.app.salary)
-          }}
-          applicationId={showEditDraftModal.app.id}
-          onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
-        />
-      )}
+      {showEditDraftModal.open && showEditDraftModal.app && (() => {
+        // Get fresh data from the applications list instead of stale modal state
+        const freshApp = applications.find(app => app.id === showEditDraftModal.app?.id)
+        const appData = freshApp || showEditDraftModal.app
+        
+        return (
+          <CreateApplicationModal 
+            onClose={() => setShowEditDraftModal({ open: false, app: null })}
+            initialData={{
+              id: appData.id,
+              name: appData.name,
+              sex: appData.sex,
+              job_type: appData.job_type,
+              jobsite: appData.jobsite,
+              position: appData.position,
+              salary: (appData as any).raw_salary || Number(appData.salary),
+              salaryCurrency: (appData as any).salary_currency || 'USD',
+              employer: (appData as any).employer || '',
+              raw_salary: (appData as any).raw_salary || Number(appData.salary),
+              control_number: appData.control_number,
+              status: appData.status,
+              status_checklist: appData.status_checklist
+            }}
+            applicationId={appData.id}
+            onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
+          />
+        )
+      })()}
       
       {/* Document Viewer Modal */}
       {selectedDocument && (

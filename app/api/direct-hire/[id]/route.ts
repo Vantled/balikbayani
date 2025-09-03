@@ -60,6 +60,8 @@ export async function PUT(
     if (body.name) updateData.name = String(body.name).toUpperCase();
     if (body.sex) updateData.sex = body.sex as any;
     if (body.salary !== undefined) updateData.salary = Number(body.salary);
+    if (body.raw_salary !== undefined) updateData.raw_salary = Number(body.raw_salary);
+    if (body.salary_currency) updateData.salary_currency = body.salary_currency;
     if (body.status) updateData.status = body.status;
     if (body.jobsite) updateData.jobsite = String(body.jobsite).toUpperCase();
     if (body.position) updateData.position = String(body.position).toUpperCase();

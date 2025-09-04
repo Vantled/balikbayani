@@ -77,7 +77,7 @@ export async function POST(
         position: application.position,
         salary: String(application.salary ?? ''),
         salary_currency: 'USD',
-        created_date: createdDateStr,
+        created_date: formatLongDate(createdDateStr),
 
         // Checklist checks based on uploaded docs
         passport_check: check(hasAny('passport', 'valid_passport', 'passport_copy')),

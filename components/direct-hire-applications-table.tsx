@@ -203,6 +203,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     pending: 'pending',
     evaluated: 'evaluated',
     for_confirmation: 'for confirmation',
+    for_confirmation_confirmed: 'confirmed',
     emailed_to_dhad: 'emailed to dhad',
     received_from_dhad: 'received from dhad',
     for_interview: 'for interview',
@@ -507,6 +508,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
       case "evaluated":
         currentStatus = "Evaluated"
         statusColor = "bg-blue-100 text-blue-800"
+        break
+      case "for_confirmation_confirmed":
+        currentStatus = "Confirmed"
+        statusColor = "bg-teal-100 text-teal-800"
         break
       case "for_confirmation":
         currentStatus = "For Confirmation"
@@ -948,6 +953,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                         const latestKey = getDerivedStatusKey(selected)
                         switch (latestKey) {
                           case 'evaluated': return 'Evaluated'
+                          case 'for_confirmation_confirmed': return 'Confirmed'
                           case 'for_confirmation': return 'For Confirmation'
                           case 'emailed_to_dhad': return 'Emailed to DHAD'
                           case 'received_from_dhad': return 'Received from DHAD'

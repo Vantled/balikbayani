@@ -115,19 +115,25 @@ export async function POST(request: NextRequest) {
         employer: (employer || '').toUpperCase(),
         salary_currency: salaryCurrency || 'USD',
         raw_salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
-        status_checklist: status === 'draft' ? {
-          evaluated: { checked: false, timestamp: undefined },
-          for_confirmation: { checked: false, timestamp: undefined },
-          emailed_to_dhad: { checked: false, timestamp: undefined },
-          received_from_dhad: { checked: false, timestamp: undefined },
-          for_interview: { checked: false, timestamp: undefined }
-        } : {
-          evaluated: { checked: true, timestamp: new Date().toISOString() },
-          for_confirmation: { checked: false, timestamp: undefined },
-          emailed_to_dhad: { checked: false, timestamp: undefined },
-          received_from_dhad: { checked: false, timestamp: undefined },
-          for_interview: { checked: false, timestamp: undefined }
-        }
+        status_checklist: (() => {
+          if (status === 'draft') {
+            return {
+              evaluated: { checked: false, timestamp: undefined },
+              for_confirmation: { checked: false, timestamp: undefined },
+              emailed_to_dhad: { checked: false, timestamp: undefined },
+              received_from_dhad: { checked: false, timestamp: undefined },
+              for_interview: { checked: false, timestamp: undefined }
+            }
+          }
+          const evaluatedChecked = status === 'evaluated'
+          return {
+            evaluated: { checked: evaluatedChecked, timestamp: evaluatedChecked ? new Date().toISOString() : undefined },
+            for_confirmation: { checked: false, timestamp: undefined },
+            emailed_to_dhad: { checked: false, timestamp: undefined },
+            received_from_dhad: { checked: false, timestamp: undefined },
+            for_interview: { checked: false, timestamp: undefined }
+          }
+        })()
       };
 
       console.log('Saving application data:', applicationData);
@@ -303,13 +309,16 @@ export async function POST(request: NextRequest) {
         job_type: body.job_type as 'household' | 'professional' || 'professional',
         evaluator: body.evaluator || '',
         employer: body.employer || '',
-        status_checklist: {
-          evaluated: { checked: true, timestamp: new Date().toISOString() },
-          for_confirmation: { checked: false, timestamp: undefined },
-          emailed_to_dhad: { checked: false, timestamp: undefined },
-          received_from_dhad: { checked: false, timestamp: undefined },
-          for_interview: { checked: false, timestamp: undefined }
-        }
+        status_checklist: (() => {
+          const evaluatedChecked = body.status === 'evaluated'
+          return {
+            evaluated: { checked: evaluatedChecked, timestamp: evaluatedChecked ? new Date().toISOString() : undefined },
+            for_confirmation: { checked: false, timestamp: undefined },
+            emailed_to_dhad: { checked: false, timestamp: undefined },
+            received_from_dhad: { checked: false, timestamp: undefined },
+            for_interview: { checked: false, timestamp: undefined }
+          }
+        })()
       };
 
       const result = await DatabaseService.createDirectHireApplication(applicationData);

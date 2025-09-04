@@ -53,6 +53,37 @@ export default function StatusChecklist({
   const [docsLoading, setDocsLoading] = useState(false)
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
   const [showFinishConfirm, setShowFinishConfirm] = useState(false)
+  const [showConfirmVerified, setShowConfirmVerified] = useState(false)
+  const [showConfirmGenerate, setShowConfirmGenerate] = useState(false)
+  const [verifierType, setVerifierType] = useState<'MWO' | 'PEPCG' | 'OTHERS' | ''>('')
+  const [verifierOffice, setVerifierOffice] = useState('')
+  const [othersText, setOthersText] = useState('')
+  const [pePcgCity, setPePcgCity] = useState('')
+  const [verifiedDate, setVerifiedDate] = useState('')
+  const [submittingConfirm, setSubmittingConfirm] = useState(false)
+  const [confirmModalMarksStatus, setConfirmModalMarksStatus] = useState(true)
+  const [verificationImage, setVerificationImage] = useState<File | null>(null)
+  const [pasteMessage, setPasteMessage] = useState<string>("")
+
+  useEffect(() => {
+    if (!showConfirmVerified) return
+    const onPaste = (e: ClipboardEvent) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [] as any
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i] as DataTransferItem
+        if (it && it.type && it.type.startsWith('image/')) {
+          const file = it.getAsFile()
+          if (file) {
+            setVerificationImage(new File([file], `verification-${Date.now()}.${(file.type.split('/')[1]||'png')}`, { type: file.type }))
+            e.preventDefault()
+            break
+          }
+        }
+      }
+    }
+    window.addEventListener('paste', onPaste as any)
+    return () => window.removeEventListener('paste', onPaste as any)
+  }, [showConfirmVerified])
 
   const REQUIRED_TYPES = useMemo(() => [
     'passport',
@@ -335,7 +366,7 @@ export default function StatusChecklist({
                       return (
                         <div 
                           key={option.key} 
-                          className={`flex items-center space-x-3 p-3 rounded-lg transition-colors border ${
+                          className={`flex items-center w-full space-x-3 p-3 rounded-lg transition-colors border ${
                             isCurrentlySelected ? 'bg-blue-50 border-blue-300 cursor-pointer' : 
                             isPreviouslyChecked ? 'bg-gray-50 border-gray-200' : 'hover:bg-gray-50 border-gray-200 cursor-pointer'
                           }`}
@@ -351,23 +382,40 @@ export default function StatusChecklist({
                             <Circle className="h-5 w-5 text-gray-400" />
                           )}
                           <label
-                            className={`text-sm font-medium leading-none flex items-center gap-2 ${
+                            className={`text-sm font-medium leading-none flex items-center gap-2 flex-shrink-0 ${
                               isPreviouslyChecked && option.key !== 'evaluated' ? 'cursor-not-allowed' : 'cursor-pointer'
                             }`}
                           >
-                            {option.label}
+                            {option.key === 'for_confirmation' 
+                              && Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked)
+                              ? 'Confirmed'
+                              : option.label}
                             {option.key === 'evaluated' && !status.checked && (
                               <span className="text-xs text-gray-600">{` ${docCounts.requiredCompleted}/${docCounts.requiredTotal} required documents | ${docCounts.optionalCompleted}/${docCounts.optionalTotal} optional documents`}</span>
                             )}
                           </label>
-                          <div className="ml-auto flex items-center gap-2">
-                            {status.checked && status.timestamp && (
-                              <span className="text-xs text-gray-500">
-                                {new Date(status.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                              </span>
+                          {status.checked && status.timestamp && (
+                            <span className="text-xs text-gray-500">
+                              {new Date(status.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {/* Right-side container for timestamp and other actions */}
+                          <div className="ml-auto flex items-center gap-2 flex-1 justify-end">
+                            {option.key === 'for_confirmation' 
+                              && Boolean((statusChecklist as any)?.for_confirmation?.checked) 
+                              && !Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked) && (
+                              <Button size="sm" onClick={(e) => { e.stopPropagation(); setConfirmModalMarksStatus(true); setShowConfirmVerified(true) }} disabled={loading}>
+                                Mark as Confirmed
+                              </Button>
                             )}
-                            {option.key === 'evaluated' && (
-                                <Button size="sm" variant="outline" disabled={!canGenerateChecklist || loading} onClick={(e) => { e.stopPropagation(); setShowGenerateConfirm(true); }}>
+                            {option.key === 'for_confirmation' 
+                              && Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked) && (
+                              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setShowConfirmGenerate(true) }} disabled={loading}>
+                                Generate
+                              </Button>
+                            )}
+                            {option.key === 'evaluated' && canGenerateChecklist && (
+                                <Button size="sm" variant="outline" disabled={loading} onClick={(e) => { e.stopPropagation(); setShowGenerateConfirm(true); }}>
                                   Generate
                                 </Button>
                               )}
@@ -398,6 +446,323 @@ export default function StatusChecklist({
              </Button>
            </div>
                   </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Confirmation Modal */}
+      <Dialog open={showConfirmGenerate} onOpenChange={setShowConfirmGenerate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Confirmation Document</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-gray-700">
+            This will generate the Confirmation document and attach it to the application. If a file already exists, you will be asked to override it.
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowConfirmGenerate(false)}>Cancel</Button>
+            <Button onClick={async ()=>{ 
+              setShowConfirmGenerate(false);
+              setLoading(true)
+              try {
+                const meta: any = (localChecklist as any)?.for_confirmation_meta || (statusChecklist as any)?.for_confirmation_meta || {}
+                if (!meta.verifier_type) {
+                  setConfirmModalMarksStatus(false)
+                  setShowConfirmVerified(true)
+                  return
+                }
+                const payload = {
+                  verifier_type: meta.verifier_type,
+                  verifier_office: meta.verifier_office || '',
+                  pe_pcg_city: meta.pe_pcg_city || '',
+                  others_text: meta.others_text || '',
+                  verified_date: meta.verified_date || ''
+                }
+                let res = await fetch(`/api/direct-hire/${applicationId}/confirmation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                if (res.status === 409) {
+                  res = await fetch(`/api/direct-hire/${applicationId}/confirmation?override=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                }
+                if (!res.ok) throw new Error('Failed to generate confirmation')
+                toast({ title: 'Confirmation generated', description: 'The confirmation document has been attached.' })
+              } catch (err) {
+                toast({ title: 'Generation failed', description: 'Could not generate the confirmation document.', variant: 'destructive' })
+              } finally {
+                setLoading(false)
+              }
+            }}>Generate</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark as Confirm Modal */}
+      <Dialog open={showConfirmVerified} onOpenChange={setShowConfirmVerified}>
+        <DialogContent className="max-w-md w-full p-0 rounded-2xl overflow-hidden">
+          <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
+            <DialogTitle className="text-lg font-bold">Mark as Confirmed</DialogTitle>
+          </div>
+          <div className="px-8 py-6 space-y-3">
+            <div className="text-sm text-gray-700">Provide verification details to generate the confirmation document.</div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Who verified the Employment Contract?</label>
+              <select
+                className="w-full border rounded px-3 py-2 text-sm"
+                value={verifierType}
+                onChange={(e) => setVerifierType(e.target.value as any)}
+              >
+                <option value="">Select verifier</option>
+                <option value="MWO">MWO</option>
+                <option value="PEPCG">PE/PCG</option>
+                <option value="OTHERS">Others</option>
+              </select>
+            </div>
+            {verifierType === 'MWO' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Specify MWO Office</label>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm uppercase"
+                  placeholder="Office"
+                  value={verifierOffice}
+                  onChange={(e) => setVerifierOffice(e.target.value.toUpperCase())}
+                />
+              </div>
+            )}
+            {verifierType === 'PEPCG' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Specify PE/PCG</label>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="City/Office"
+                  value={pePcgCity}
+                  onChange={(e) => setPePcgCity(e.target.value)}
+                />
+              </div>
+            )}
+            {verifierType === 'OTHERS' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Specify</label>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="Enter details"
+                  value={othersText}
+                  onChange={(e) => setOthersText(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date Issued</label>
+              <input
+                type="date"
+                className="w-full border rounded px-3 py-2 text-sm"
+                value={verifiedDate}
+                onChange={(e) => setVerifiedDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Attach Verification Screenshot</label>
+              <div className="w-full">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="w-2/3 min-w-0 border rounded px-3 py-2 text-sm"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null
+                      setVerificationImage(f)
+                      setPasteMessage(f ? `Attached: ${f.name}` : '')
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 w-1/4 justify-center"
+                    onClick={async () => {
+                      try {
+                        const hasApi = typeof navigator !== 'undefined' && 'clipboard' in navigator && 'read' in navigator.clipboard
+                        if (!hasApi) {
+                          toast({ title: 'Paste not supported', description: 'Use Choose File instead.', variant: 'destructive' })
+                          return
+                        }
+                        const items = await (navigator.clipboard as any).read()
+                        let imgFile: File | null = null
+                        for (const item of items) {
+                          const type = item.types?.find((t: string) => t.startsWith('image/'))
+                          if (type) {
+                            const blob = await item.getType(type)
+                            imgFile = new File([blob], `verification-${Date.now()}.${(blob.type.split('/')[1]||'png')}`, { type: blob.type })
+                            break
+                          }
+                        }
+                        if (imgFile) {
+                          setVerificationImage(imgFile)
+                          setPasteMessage(`Attached: ${imgFile.name}`)
+                          toast({ title: 'Image pasted', description: 'Verification screenshot attached.' })
+                        } else {
+                          toast({ title: 'No image found', description: 'Copy an image to clipboard then click Paste.', variant: 'destructive' })
+                        }
+                      } catch (err) {
+                        toast({ title: 'Paste failed', description: 'Clipboard access denied or no image in clipboard.', variant: 'destructive' })
+                      }
+                    }}
+                  >Paste</Button>
+                </div>
+              </div>
+              {pasteMessage && (
+                <p className="text-xs text-gray-700">{pasteMessage}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowConfirmVerified(false)} disabled={submittingConfirm}>Cancel</Button>
+              <Button
+                onClick={async () => {
+                  if (!verifierType) {
+                    toast({ title: 'Missing verifier', description: 'Please select who verified the Employment Contract.', variant: 'destructive' })
+                    return
+                  }
+                  if (verifierType === 'MWO' && !verifierOffice.trim()) {
+                    toast({ title: 'Missing office', description: 'Please specify the MWO office.', variant: 'destructive' })
+                    return
+                  }
+                  if (verifierType === 'PEPCG' && !pePcgCity.trim()) {
+                    toast({ title: 'Missing city/office', description: 'Please specify the PE/PCG details.', variant: 'destructive' })
+                    return
+                  }
+                  if (verifierType === 'OTHERS' && !othersText.trim()) {
+                    toast({ title: 'Missing details', description: 'Please specify the verifier details for Others.', variant: 'destructive' })
+                    return
+                  }
+                  // Require an image unless one is already stored in meta
+                  const existingImage = (statusChecklist as any)?.for_confirmation_meta?.verification_image_url
+                  if (!verificationImage && !existingImage) {
+                    toast({ title: 'Verification image required', description: 'Please attach or paste a verification screenshot.', variant: 'destructive' })
+                    return
+                  }
+                  setSubmittingConfirm(true)
+                  try {
+                    // If an image is selected, upload it first and capture URL
+                    let uploadedImageMeta: any = {}
+                    if (verificationImage) {
+                      const fd = new FormData()
+                      fd.append('file', verificationImage)
+                      fd.append('applicationId', applicationId)
+                      fd.append('applicationType', 'direct_hire')
+                      fd.append('documentName', 'confirmation_verification_image')
+                      const upRes = await fetch('/api/documents/upload', { method: 'POST', body: fd })
+                      const upJson = await upRes.json()
+                      if (upJson?.success && upJson?.data) {
+                        const doc = upJson.data
+                        uploadedImageMeta = {
+                          verification_image_id: doc.id,
+                          verification_image_name: doc.file_name,
+                          verification_image_path: doc.file_path,
+                          verification_image_url: `/api/documents/${doc.id}/download?format=original`
+                        }
+                      }
+                    }
+                    let res = await fetch(`/api/direct-hire/${applicationId}/confirmation`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ verifier_type: verifierType, verifier_office: verifierOffice.trim(), pe_pcg_city: pePcgCity.trim(), others_text: othersText.trim(), verified_date: verifiedDate || undefined, ...uploadedImageMeta })
+                    })
+                    if (res.status === 409) {
+                      res = await fetch(`/api/direct-hire/${applicationId}/confirmation?override=true`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ verifier_type: verifierType, verifier_office: verifierOffice.trim(), pe_pcg_city: pePcgCity.trim(), others_text: othersText.trim(), verified_date: verifiedDate || undefined })
+                      })
+                    }
+                    const data = await res.json()
+                    if (data.success) {
+                      if (confirmModalMarksStatus) {
+                        // Persist the 'confirmed' step for For Confirmation
+                        const nowTs = new Date().toISOString()
+                        const updatedChecklist: any = {
+                          ...statusChecklist,
+                          for_confirmation_confirmed: { checked: true, timestamp: nowTs },
+                          for_confirmation_meta: {
+                            verifier_type: verifierType,
+                            verifier_office: verifierOffice.trim(),
+                            pe_pcg_city: pePcgCity.trim(),
+                            others_text: othersText.trim(),
+                            verified_date: verifiedDate || undefined,
+                            ...uploadedImageMeta
+                          }
+                        }
+                        // Reflect in local view immediately
+                        setLocalChecklist((prev: any) => ({ 
+                          ...prev, 
+                          for_confirmation_confirmed: { checked: true, timestamp: nowTs },
+                          for_confirmation_meta: {
+                            verifier_type: verifierType,
+                            verifier_office: verifierOffice.trim(),
+                            pe_pcg_city: pePcgCity.trim(),
+                            others_text: othersText.trim(),
+                            verified_date: verifiedDate || undefined,
+                            ...uploadedImageMeta
+                          }
+                        }))
+                        const saveRes = await fetch(`/api/direct-hire/${applicationId}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status_checklist: updatedChecklist })
+                        })
+                        const saveJson = await saveRes.json()
+                        if (!saveJson.success) {
+                          throw new Error(saveJson.error || 'Failed to save confirmation status')
+                        }
+                        toast({ title: 'Confirmation completed', description: 'Marked as confirmed and document attached.' })
+                        onStatusUpdate(currentStatus, updatedChecklist)
+                        onClose()
+                      } else {
+                        // Only generate document: store meta for future one-click generations
+                        const updatedChecklist: any = {
+                          ...statusChecklist,
+                          for_confirmation_meta: {
+                            verifier_type: verifierType,
+                            verifier_office: verifierOffice.trim(),
+                            pe_pcg_city: pePcgCity.trim(),
+                            others_text: othersText.trim(),
+                            verified_date: verifiedDate || undefined,
+                            ...uploadedImageMeta
+                          }
+                        }
+                        setLocalChecklist((prev: any) => ({
+                          ...prev,
+                          for_confirmation_meta: {
+                            verifier_type: verifierType,
+                            verifier_office: verifierOffice.trim(),
+                            pe_pcg_city: pePcgCity.trim(),
+                            others_text: othersText.trim(),
+                            verified_date: verifiedDate || undefined
+                          }
+                        }))
+                        const saveRes = await fetch(`/api/direct-hire/${applicationId}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status_checklist: updatedChecklist })
+                        })
+                        const saveJson = await saveRes.json()
+                        if (!saveJson.success) {
+                          throw new Error(saveJson.error || 'Failed to save confirmation meta')
+                        }
+                        onStatusUpdate(currentStatus, updatedChecklist)
+                        toast({ title: 'Confirmation generated', description: 'The confirmation document has been attached to the application.' })
+                      }
+                      setShowConfirmVerified(false)
+                    } else {
+                      throw new Error(data.error || 'Failed to generate confirmation')
+                    }
+                  } catch (err) {
+                    toast({ title: 'Generation failed', description: 'Could not generate the confirmation document.', variant: 'destructive' })
+                  } finally {
+                    setSubmittingConfirm(false)
+                  }
+                }}
+                disabled={submittingConfirm}
+              >
+                {submittingConfirm ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</>) : 'Generate'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

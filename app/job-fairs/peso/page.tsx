@@ -201,6 +201,7 @@ export default function PesoContactsPage() {
   
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
+  const [modalMounted, setModalMounted] = useState(false)
   const [editingContact, setEditingContact] = useState<PesoContact | null>(null)
   const [formData, setFormData] = useState<Partial<PesoContact>>({})
   const [showFilter, setShowFilter] = useState(false)
@@ -417,6 +418,7 @@ export default function PesoContactsPage() {
     setCustomCategories([""])
     setValidationErrors({})
     setModalOpen(true)
+    requestAnimationFrame(() => setModalMounted(true))
   }
 
   const handleEdit = (contact: PesoContact) => {
@@ -449,6 +451,7 @@ export default function PesoContactsPage() {
 
     setValidationErrors({})
     setModalOpen(true)
+    requestAnimationFrame(() => setModalMounted(true))
   }
 
   const handleDelete = async (id: string) => {
@@ -874,8 +877,9 @@ export default function PesoContactsPage() {
         </div>
       </main>
       {modalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+        <div className={`fixed inset-0 z-[60] flex items-center justify-center transition-opacity duration-150 ${modalMounted ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={`absolute inset-0 bg-black transition-opacity duration-150 ${modalMounted ? 'bg-opacity-50' : 'bg-opacity-0'}`} onClick={() => { setModalMounted(false); setModalOpen(false); }} />
+          <div className={`relative bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden transform transition-all duration-150 ${modalMounted ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-1'}`}>
             {/* Modal Header */}
             <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center">
@@ -884,7 +888,7 @@ export default function PesoContactsPage() {
                   {editingContact ? 'Edit PESO Contact' : 'Create PESO Contact'}
                 </h2>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setModalOpen(false)} className="text-white hover:bg-blue-600">
+              <Button variant="ghost" size="icon" onClick={() => { setModalMounted(false); setModalOpen(false); }} className="text-white hover:bg-blue-600">
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -1062,7 +1066,7 @@ export default function PesoContactsPage() {
                   <Button 
                     type="button"
                     variant="outline"
-                    onClick={() => setModalOpen(false)}
+                    onClick={() => { setModalMounted(false); setModalOpen(false); }}
                   >
                     Cancel
                   </Button>

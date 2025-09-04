@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, File, Image as ImageIcon, FileArchive, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -1806,6 +1806,26 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
   const [editName, setEditName] = useState('')
   const { toast } = useToast()
 
+  const getFileIcon = (fileName: string, mimeType: string) => {
+    const ext = (fileName.split('.').pop() || '').toLowerCase()
+    if (ext === 'pdf' || mimeType.includes('pdf')) {
+      return <FileText className="h-4 w-4 text-red-600" />
+    }
+    if (['doc', 'docx', 'rtf'].includes(ext) || mimeType.includes('word')) {
+      return <FileText className="h-4 w-4 text-blue-600" />
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext) || mimeType.includes('spreadsheet')) {
+      return <FileText className="h-4 w-4 text-green-600" />
+    }
+    if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext) || mimeType.startsWith('image/')) {
+      return <ImageIcon className="h-4 w-4 text-teal-600" />
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+      return <FileArchive className="h-4 w-4 text-yellow-600" />
+    }
+    return <File className="h-4 w-4 text-gray-500" />
+  }
+
   const formatDocumentType = (raw: string, fileName: string): string => {
     if (!raw) return ''
     
@@ -2068,7 +2088,7 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
       {documents.map((document) => (
         <div key={document.id} className="relative flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
           <div className="flex items-center space-x-3">
-            <FileText className="h-4 w-4 text-green-600" />
+            {getFileIcon(document.file_name, document.mime_type)}
             {editingDocument === document.id ? (
               <div className="flex items-center gap-2">
                 <input

@@ -1,6 +1,7 @@
 // components/job-fair-details.tsx
 import { Button } from '@/components/ui/button';
 import { X, Calendar, MapPin, User, Mail, Phone } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { JobFair } from '@/lib/types';
 
 interface JobFairDetailsProps {
@@ -9,6 +10,11 @@ interface JobFairDetailsProps {
 }
 
 export default function JobFairDetails({ jobFair, onClose }: JobFairDetailsProps) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(t)
+  }, [])
   const formatDate = (date: Date | string) => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
     return dateObj.toLocaleDateString('en-US', {
@@ -20,8 +26,9 @@ export default function JobFairDetails({ jobFair, onClose }: JobFairDetailsProps
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-      <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+    <div className={`fixed inset-0 z-[60] flex items-center justify-center transition-opacity duration-150 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`absolute inset-0 bg-black transition-opacity duration-150 ${mounted ? 'bg-opacity-50' : 'bg-opacity-0'}`} onClick={onClose} />
+      <div className={`relative bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden transform transition-all duration-150 ${mounted ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-1'}`}>
         {/* Header */}
         <div className="bg-[#1976D2] text-white p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Job Fair Details</h2>

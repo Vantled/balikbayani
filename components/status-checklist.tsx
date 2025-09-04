@@ -403,8 +403,8 @@ export default function StatusChecklist({
 
       {/* Warning Modal */}
       <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>
-        <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
-          <div className="bg-[#B91C1C] text-white px-8 py-4 flex items-center justify-between">
+        <DialogContent className="max-w-xl w-full p-0 rounded-2xl overflow-hidden">
+          <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">Confirm Status Changes</DialogTitle>
           </div>
           

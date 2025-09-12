@@ -942,6 +942,14 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     <div className="font-medium">{selected.name}</div>
                   </div>
                   <div>
+                    <div className="text-gray-500">Email:</div>
+                    <div className="font-medium">{(selected as any).email || 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Cellphone No.:</div>
+                    <div className="font-medium">{(selected as any).cellphone || 'N/A'}</div>
+                  </div>
+                  <div>
                     <div className="text-gray-500">Sex:</div>
                     <div className="font-medium capitalize">{selected.sex}</div>
                   </div>
@@ -1071,20 +1079,33 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     onClick={async () => {
                       if (!selected) return
                       try {
-                        const res = await fetch(`/api/direct-hire/${selected.id}/generate`, { method: 'POST' })
+                        const res = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance`, { method: 'POST' })
                         const result = await res.json()
                         if (result.success) {
                           setDocumentsRefreshTrigger(prev => prev + 1)
-                          toast({ title: 'Document generated', description: 'Clearance document has been attached.' })
+                          toast({ title: 'Document generated', description: 'Comprehensive clearance document has been attached.' })
+                        } else if (res.status === 409) {
+                          // Show confirmation modal for override
+                          const confirmOverride = window.confirm('A comprehensive clearance document already exists. Do you want to replace it?')
+                          if (confirmOverride) {
+                            const res2 = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance?override=true`, { method: 'POST' })
+                            const result2 = await res2.json()
+                            if (result2.success) {
+                              setDocumentsRefreshTrigger(prev => prev + 1)
+                              toast({ title: 'Document replaced', description: 'Comprehensive clearance document has been updated.' })
+                            } else {
+                              throw new Error(result2.error || 'Override failed')
+                            }
+                          }
                         } else {
                           throw new Error(result.error || 'Generation failed')
                         }
                       } catch (err) {
-                        toast({ title: 'Generation error', description: 'Failed to generate the document.', variant: 'destructive' })
+                        toast({ title: 'Generation error', description: 'Failed to generate the comprehensive clearance document.', variant: 'destructive' })
                       }
                     }}
                   >
-                    Generate
+                    Generate Clearance
                   </Button>
                   <Button 
                     className="bg-[#1976D2] text-white text-xs"
@@ -1596,6 +1617,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             initialData={{
               id: appData.id,
               name: appData.name,
+              email: (appData as any).email || '',
+              cellphone: (appData as any).cellphone || '',
               sex: appData.sex,
               job_type: appData.job_type,
               jobsite: appData.jobsite,
@@ -1848,6 +1871,10 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
       'tesda nc': 'TESDA NC/PRC License',
       'tesda nc/prc license': 'TESDA NC/PRC License',
       clearance: 'Clearance',
+      comprehensive_clearance: 'Comprehensive Clearance',
+      confirmation: 'MWO/POLO/PE/PCG Confirmation',
+      issuance_of_oec_memorandum: 'Memorandum Issuance of OEC',
+      dmw_clearance_request: 'Clearance Request',
     }
     
     let formattedName = ''
@@ -2072,6 +2099,149 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
     }
   }
 
+  const isImportantDocument = (doc: Document): boolean => {
+    const type = (doc.document_type || '').toLowerCase().trim()
+    const file = (doc.file_name || '').toLowerCase().trim()
+    const ext = file.split('.').pop() || ''
+
+    // Always include these explicit types
+    if (type === 'dmw_clearance_request') return true
+    if (type === 'evaluation_requirements_checklist') return true
+    if (type === 'issuance_of_oec_memorandum') return true
+    if (type === 'clearance') return true
+    if (type === 'comprehensive_clearance') return true
+
+    // Include the confirmation DOCX, but NOT its verification image
+    if (type === 'confirmation') return true
+    if (type === 'confirmation_verification_image') return false
+
+    // Fallback filename-based heuristics (DOCX only)
+    const isDocx = ext === 'docx'
+    if (isDocx && (file.includes('dmw clearance request') || file.includes('dmw-clearance-request'))) return true
+    if (isDocx && (file.includes('issuance of oec') || file.includes('issuance-of-oec') || file.includes('memorandum issuance of oec'))) return true
+    if (isDocx && (file.includes('evaluation requirements checklist') || file.includes('evaluation-requirements-checklist'))) return true
+    if (isDocx && (file.includes('mwo-polo-pe-pcg confirmation') || file.includes('mwo polo pe pcg confirmation'))) return true
+    if (isDocx && file.includes('clearance')) return true
+
+    return false
+  }
+
+  const renderDocumentRow = (document: Document) => (
+    <div key={document.id} className="relative flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
+      <div className="flex items-center space-x-3">
+        {getFileIcon(document.file_name, document.mime_type)}
+        {editingDocument === document.id ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="text-sm border rounded px-2 py-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleUpdateName(document)
+                } else if (e.key === 'Escape') {
+                  setEditingDocument(null)
+                  setEditName('')
+                }
+              }}
+              autoFocus
+            />
+            <Button
+              size="sm"
+              onClick={() => handleUpdateName(document)}
+              className="h-6 px-2 text-xs"
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEditingDocument(null)
+                setEditName('')
+              }}
+              className="h-6 px-2 text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <span className="text-sm font-medium">{formatDocumentType(document.document_type, document.file_name)}</span>
+        )}
+      </div>
+      <div className="flex items-center space-x-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {(() => {
+              const isDocx = document.file_name.toLowerCase().endsWith('.docx')
+              if (isDocx) return null
+              return (
+                <DropdownMenuItem onClick={() => handleView(document)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View
+                </DropdownMenuItem>
+              )
+            })()}
+            {(() => {
+              const fileExtension = document.file_name.split('.').pop()?.toLowerCase() || ''
+              let downloadText = 'Download'
+              if (document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx')) {
+                downloadText = 'Download DOCX'
+              } else if (document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')) {
+                downloadText = 'Download PDF'
+              } else if (document.mime_type.includes('image') || document.file_name.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+                downloadText = `Download ${fileExtension.toUpperCase()}`
+              } else {
+                downloadText = `Download ${fileExtension.toUpperCase()}`
+              }
+              return (
+                <DropdownMenuItem onClick={() => handleDownload(document, 'original')}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {downloadText}
+                </DropdownMenuItem>
+              )
+            })()}
+            {(() => {
+              // Hide edit for specific screenshot documents
+              const type = String(document.document_type || '').toLowerCase()
+              const isScreenshotType = type === 'for_interview_screenshot' || type === 'confirmation_verification_image'
+              const file = String(document.file_name || '')
+              const isScreenshotFile = file === 'For Interview Screenshot.png' || file === 'Confirmation Verification Image.png'
+              if (isScreenshotType || isScreenshotFile) return null
+              return (
+                <DropdownMenuItem onClick={() => handleEdit(document)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Name
+                </DropdownMenuItem>
+              )
+            })()}
+            {(() => {
+              // Hide delete button for specific screenshot documents
+              const type = String(document.document_type || '').toLowerCase()
+              const isScreenshotType = type === 'for_interview_screenshot' || type === 'confirmation_verification_image'
+              // Also fall back to filename check to be safe
+              const file = String(document.file_name || '')
+              const isScreenshotFile = file === 'For Interview Screenshot.png' || file === 'Confirmation Verification Image.png'
+              if (isScreenshotType || isScreenshotFile) return null
+              return (
+                <DropdownMenuItem className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(document)}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              )
+            })()}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-4">
@@ -2089,104 +2259,27 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
     )
   }
 
+  const importantDocs = documents.filter(isImportantDocument)
+  const otherDocs = documents.filter(d => !isImportantDocument(d))
+
   return (
-    <div className="space-y-2">
-      {documents.map((document) => (
-        <div key={document.id} className="relative flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
-          <div className="flex items-center space-x-3">
-            {getFileIcon(document.file_name, document.mime_type)}
-            {editingDocument === document.id ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="text-sm border rounded px-2 py-1"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleUpdateName(document)
-                    } else if (e.key === 'Escape') {
-                      setEditingDocument(null)
-                      setEditName('')
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button
-                  size="sm"
-                  onClick={() => handleUpdateName(document)}
-                  className="h-6 px-2 text-xs"
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingDocument(null)
-                    setEditName('')
-                  }}
-                  className="h-6 px-2 text-xs"
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span className="text-sm font-medium">{formatDocumentType(document.document_type, document.file_name)}</span>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {(() => {
-                  const isDocx = document.file_name.toLowerCase().endsWith('.docx')
-                  if (isDocx) return null
-                  return (
-                    <DropdownMenuItem onClick={() => handleView(document)}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
-                    </DropdownMenuItem>
-                  )
-                })()}
-                {(() => {
-                  const fileExtension = document.file_name.split('.').pop()?.toLowerCase() || ''
-                  let downloadText = 'Download'
-                  
-                  if (document.mime_type.includes('word') || document.file_name.toLowerCase().endsWith('.docx')) {
-                    downloadText = 'Download DOCX'
-                  } else if (document.mime_type.includes('pdf') || document.file_name.toLowerCase().endsWith('.pdf')) {
-                    downloadText = 'Download PDF'
-                  } else if (document.mime_type.includes('image') || document.file_name.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
-                    downloadText = `Download ${fileExtension.toUpperCase()}`
-                  } else {
-                    downloadText = `Download ${fileExtension.toUpperCase()}`
-                  }
-                  
-                  return (
-                    <DropdownMenuItem onClick={() => handleDownload(document, 'original')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      {downloadText}
-                    </DropdownMenuItem>
-                  )
-                })()}
-                <DropdownMenuItem onClick={() => handleEdit(document)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Name
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-red-600 hover:text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(document)}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+    <div className="space-y-4">
+      {importantDocs.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold text-gray-700 mb-2">Important Documents</div>
+          <div className="space-y-2">
+            {importantDocs.map(renderDocumentRow)}
           </div>
         </div>
-      ))}
+      )}
+      {otherDocs.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold text-gray-700 mb-2">Other Documents</div>
+          <div className="space-y-2">
+            {otherDocs.map(renderDocumentRow)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

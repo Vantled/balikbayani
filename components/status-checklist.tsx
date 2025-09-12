@@ -54,7 +54,9 @@ export default function StatusChecklist({
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
   const [showFinishConfirm, setShowFinishConfirm] = useState(false)
   const [showConfirmVerified, setShowConfirmVerified] = useState(false)
+  const [showConfirmInterview, setShowConfirmInterview] = useState(false)
   const [showConfirmGenerate, setShowConfirmGenerate] = useState(false)
+  const [showConfirmGenerateInterview, setShowConfirmGenerateInterview] = useState(false)
   const [verifierType, setVerifierType] = useState<'MWO' | 'PEPCG' | 'OTHERS' | ''>('')
   const [verifierOffice, setVerifierOffice] = useState('')
   const [othersText, setOthersText] = useState('')
@@ -64,6 +66,11 @@ export default function StatusChecklist({
   const [confirmModalMarksStatus, setConfirmModalMarksStatus] = useState(true)
   const [verificationImage, setVerificationImage] = useState<File | null>(null)
   const [pasteMessage, setPasteMessage] = useState<string>("")
+  const [interviewImage, setInterviewImage] = useState<File | null>(null)
+  const [pasteInterviewMessage, setPasteInterviewMessage] = useState<string>("")
+  const [submittingInterview, setSubmittingInterview] = useState(false)
+  const [processedWorkersPrincipal, setProcessedWorkersPrincipal] = useState<string>("")
+  const [processedWorkersLas, setProcessedWorkersLas] = useState<string>("")
 
   useEffect(() => {
     if (!showConfirmVerified) return
@@ -84,6 +91,26 @@ export default function StatusChecklist({
     window.addEventListener('paste', onPaste as any)
     return () => window.removeEventListener('paste', onPaste as any)
   }, [showConfirmVerified])
+
+  useEffect(() => {
+    if (!showConfirmInterview) return
+    const onPaste = (e: ClipboardEvent) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [] as any
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i] as DataTransferItem
+        if (it && it.type && it.type.startsWith('image/')) {
+          const file = it.getAsFile()
+          if (file) {
+            setInterviewImage(new File([file], `for-interview-${Date.now()}.${(file.type.split('/')[1]||'png')}`, { type: file.type }))
+            e.preventDefault()
+            break
+          }
+        }
+      }
+    }
+    window.addEventListener('paste', onPaste as any)
+    return () => window.removeEventListener('paste', onPaste as any)
+  }, [showConfirmInterview])
 
   const REQUIRED_TYPES = useMemo(() => [
     'passport',
@@ -149,6 +176,12 @@ export default function StatusChecklist({
     if (key === 'evaluated' && !isCurrentlyChecked && !isPreviouslyChecked) {
       setPendingEvaluatedStatus(true)
       setShowDocumentRequirements(true)
+      return
+    }
+
+    // If trying to check "For Interview", open modal to collect required fields and screenshot first
+    if (key === 'for_interview' && !isCurrentlyChecked && !isPreviouslyChecked) {
+      setShowConfirmInterview(true)
       return
     }
 
@@ -422,6 +455,20 @@ export default function StatusChecklist({
                               {option.key === 'evaluated' && !status.checked && (
                                 <Button size="sm" disabled={!canGenerateChecklist || loading} onClick={(e) => { e.stopPropagation(); setShowFinishConfirm(true); }}>
                                   Finish
+                                </Button>
+                              )}
+                              {option.key === 'for_interview' && status.checked && (
+                                <Button size="sm" variant="outline" disabled={loading} onClick={(e) => {
+                                  e.stopPropagation();
+                                  const meta: any = (localChecklist as any)?.for_interview_meta || (statusChecklist as any)?.for_interview_meta
+                                  if (!meta || typeof meta.processed_workers_principal !== 'number' || typeof meta.processed_workers_las !== 'number') {
+                                    toast({ title: 'Missing details', description: 'Open the For Interview modal to input required fields and attach a screenshot before generating.', variant: 'destructive' })
+                                    setShowConfirmInterview(true)
+                                    return
+                                  }
+                                  setShowConfirmGenerateInterview(true)
+                                }}>
+                                  Generate
                                 </Button>
                               )}
                           </div>
@@ -766,6 +813,183 @@ export default function StatusChecklist({
         </DialogContent>
       </Dialog>
 
+      {/* For Interview Pre-Mark Modal */}
+      <Dialog open={showConfirmInterview} onOpenChange={setShowConfirmInterview}>
+        <DialogContent className="max-w-md w-full p-0 rounded-2xl overflow-hidden">
+          <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
+            <DialogTitle className="text-lg font-bold">Mark as For Interview</DialogTitle>
+          </div>
+          <div className="px-8 py-6 space-y-3">
+            <div className="text-sm text-gray-700">Provide details and attach a screenshot before marking For Interview. These fields are required for the Issuance of OEC.</div>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">No. of Processed Workers (Principal)</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={processedWorkersPrincipal}
+                  onChange={(e) => setProcessedWorkersPrincipal(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Landbased Accreditation System</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={processedWorkersLas}
+                  onChange={(e) => setProcessedWorkersLas(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Attach Screenshot for Proof</label>
+              <div className="w-full">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="w-2/3 min-w-0 border rounded px-3 py-2 text-sm"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null
+                      setInterviewImage(f)
+                      setPasteInterviewMessage(f ? `Attached: ${f.name}` : '')
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 w-1/4 justify-center"
+                    onClick={async () => {
+                      try {
+                        const hasApi = typeof navigator !== 'undefined' && 'clipboard' in navigator && 'read' in navigator.clipboard
+                        if (!hasApi) {
+                          toast({ title: 'Paste not supported', description: 'Use Choose File instead.', variant: 'destructive' })
+                          return
+                        }
+                        const items = await (navigator.clipboard as any).read()
+                        let imgFile: File | null = null
+                        for (const item of items) {
+                          const type = item.types?.find((t: string) => t.startsWith('image/'))
+                          if (type) {
+                            const blob = await item.getType(type)
+                            imgFile = new File([blob], `for-interview-${Date.now()}.${(blob.type.split('/')[1]||'png')}`, { type: blob.type })
+                            break
+                          }
+                        }
+                        if (imgFile) {
+                          setInterviewImage(imgFile)
+                          setPasteInterviewMessage(`Attached: ${imgFile.name}`)
+                          toast({ title: 'Image pasted', description: 'Screenshot attached.' })
+                        } else {
+                          toast({ title: 'No image found', description: 'Copy an image to clipboard then click Paste.', variant: 'destructive' })
+                        }
+                      } catch (err) {
+                        toast({ title: 'Paste failed', description: 'Clipboard access denied or no image in clipboard.', variant: 'destructive' })
+                      }
+                    }}
+                  >Paste</Button>
+                </div>
+              </div>
+              {pasteInterviewMessage && (
+                <p className="text-xs text-gray-700">{pasteInterviewMessage}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowConfirmInterview(false)} disabled={submittingInterview}>Cancel</Button>
+              <Button
+                onClick={async () => {
+                  // Validate fields
+                  if (!processedWorkersPrincipal || Number(processedWorkersPrincipal) < 0) {
+                    toast({ title: 'Missing value', description: 'Enter a valid number for Processed Workers (Principal).', variant: 'destructive' })
+                    return
+                  }
+                  if (!processedWorkersLas || Number(processedWorkersLas) < 0) {
+                    toast({ title: 'Missing value', description: 'Enter a valid number for Processed Workers (Landbased Accreditation System).', variant: 'destructive' })
+                    return
+                  }
+                  // Require image? Spec says attach a screenshot; mirror confirmation behavior which requires unless already stored
+                  const existingImage = (statusChecklist as any)?.for_interview_meta?.screenshot_url
+                  if (!interviewImage && !existingImage) {
+                    toast({ title: 'Screenshot required', description: 'Please attach or paste a screenshot.', variant: 'destructive' })
+                    return
+                  }
+                  setSubmittingInterview(true)
+                  try {
+                    let uploadedImageMeta: any = {}
+                    if (interviewImage) {
+                      const fd = new FormData()
+                      fd.append('file', interviewImage)
+                      fd.append('applicationId', applicationId)
+                      fd.append('applicationType', 'direct_hire')
+                      fd.append('documentName', 'for_interview_screenshot')
+                      const upRes = await fetch('/api/documents/upload', { method: 'POST', body: fd })
+                      const upJson = await upRes.json()
+                      if (upJson?.success && upJson?.data) {
+                        const doc = upJson.data
+                        uploadedImageMeta = {
+                          screenshot_id: doc.id,
+                          screenshot_name: doc.file_name,
+                          screenshot_path: doc.file_path,
+                          screenshot_url: `/api/documents/${doc.id}/download?format=original`
+                        }
+                      }
+                    }
+
+                    // Generate documents first
+                    const genRes = await fetch(`/api/direct-hire/${applicationId}/interview-docs`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        processed_workers_principal: Number(processedWorkersPrincipal),
+                        processed_workers_las: Number(processedWorkersLas)
+                      })
+                    })
+                    if (!genRes.ok) {
+                      throw new Error('Failed to generate For Interview documents')
+                    }
+
+                    // Then mark status and save meta
+                    const nowTs = new Date().toISOString()
+                    const updatedChecklist: any = {
+                      ...statusChecklist,
+                      for_interview: { checked: true, timestamp: nowTs },
+                      for_interview_meta: {
+                        processed_workers_principal: Number(processedWorkersPrincipal),
+                        processed_workers_las: Number(processedWorkersLas),
+                        ...uploadedImageMeta
+                      }
+                    }
+                    const saveRes = await fetch(`/api/direct-hire/${applicationId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status_checklist: updatedChecklist })
+                    })
+                    const saveJson = await saveRes.json()
+                    if (!saveJson.success) {
+                      throw new Error(saveJson.error || 'Failed to save For Interview status')
+                    }
+                    toast({ title: 'Documents generated', description: 'OEC memorandum and attachments have been attached. Marked as For Interview.' })
+                    onStatusUpdate(currentStatus, updatedChecklist)
+                    setShowConfirmInterview(false)
+                    onClose()
+                  } catch (err) {
+                    toast({ title: 'Failed to generate', description: 'Could not generate For Interview documents.', variant: 'destructive' })
+                  } finally {
+                    setSubmittingInterview(false)
+                  }
+                }}
+                disabled={submittingInterview}
+              >
+                {submittingInterview ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</>) : 'Generate'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Warning Modal */}
       <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>
         <DialogContent className="max-w-xl w-full p-0 rounded-2xl overflow-hidden">
@@ -850,6 +1074,56 @@ export default function StatusChecklist({
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setShowFinishConfirm(false)}>Cancel</Button>
             <Button onClick={async ()=>{ setShowFinishConfirm(false); await handleFinishEvaluated(); }}>Finish</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate For Interview Documents Confirmation Modal */}
+      <Dialog open={showConfirmGenerateInterview} onOpenChange={setShowConfirmGenerateInterview}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate For Interview Documents</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-gray-700">
+            This will generate the For Interview documents and attach them to the application. If files already exist, they will be replaced.
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowConfirmGenerateInterview(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              setShowConfirmGenerateInterview(false);
+              setLoading(true);
+              try {
+                const meta: any = (localChecklist as any)?.for_interview_meta || (statusChecklist as any)?.for_interview_meta;
+                const res = await fetch(`/api/direct-hire/${applicationId}/interview-docs`, { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ 
+                    processed_workers_principal: meta.processed_workers_principal, 
+                    processed_workers_las: meta.processed_workers_las 
+                  }) 
+                });
+                if (res.status === 409) {
+                  const res2 = await fetch(`/api/direct-hire/${applicationId}/interview-docs?override=true`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ 
+                      processed_workers_principal: meta.processed_workers_principal, 
+                      processed_workers_las: meta.processed_workers_las 
+                    }) 
+                  });
+                  if (!res2.ok) throw new Error('Failed to override');
+                  toast({ title: 'Documents overridden', description: 'Existing For Interview documents were replaced.' });
+                } else if (res.ok) {
+                  toast({ title: 'Documents generated', description: 'For Interview documents have been attached.' });
+                } else {
+                  throw new Error('Failed to generate');
+                }
+              } catch (err) {
+                toast({ title: 'Failed to generate', description: 'Could not generate For Interview documents.', variant: 'destructive' });
+              } finally {
+                setLoading(false);
+              }
+            }}>Generate</Button>
           </div>
         </DialogContent>
       </Dialog>

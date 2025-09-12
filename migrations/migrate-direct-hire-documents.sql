@@ -22,6 +22,11 @@ ALTER TABLE direct_hire_applications
 ADD COLUMN IF NOT EXISTS documents_completed BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
 
+-- Add contact fields to direct_hire_applications
+ALTER TABLE direct_hire_applications 
+ADD COLUMN IF NOT EXISTS email VARCHAR(255),
+ADD COLUMN IF NOT EXISTS cellphone VARCHAR(20);
+
 -- Create index for documents_completed field
 CREATE INDEX IF NOT EXISTS idx_direct_hire_applications_documents_completed ON direct_hire_applications(documents_completed);
 

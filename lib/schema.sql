@@ -29,6 +29,8 @@ CREATE TABLE direct_hire_applications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     control_number VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    cellphone VARCHAR(20),
     sex VARCHAR(10) NOT NULL CHECK (sex IN ('male', 'female')),
     salary DECIMAL(12,2) NOT NULL,
     salary_currency VARCHAR(3) DEFAULT 'USD',

@@ -22,6 +22,20 @@ export async function initializeDatabase() {
     await db.query(schema);
     console.log('Database schema created successfully');
 
+    // Apply additive migrations that may not be present in old DBs (idempotent)
+    const migratePath = path.join(process.cwd(), 'migrations', 'migrate-direct-hire-documents.sql')
+    if (fs.existsSync(migratePath)) {
+      console.log('Applying migrate-direct-hire-documents.sql...')
+      const mig = fs.readFileSync(migratePath, 'utf8')
+      await db.query(mig)
+    }
+    const addSalaryCurrencyPath = path.join(process.cwd(), 'migrations', 'add_salary_currency_to_direct_hire.sql')
+    if (fs.existsSync(addSalaryCurrencyPath)) {
+      console.log('Applying add_salary_currency_to_direct_hire.sql...')
+      const mig2 = fs.readFileSync(addSalaryCurrencyPath, 'utf8')
+      await db.query(mig2)
+    }
+
     // Create default admin user if it doesn't exist
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const saltRounds = 12;

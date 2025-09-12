@@ -47,6 +47,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   
   const [formData, setFormData] = useState({
     name: "",
+    email: "",
+    cellphone: "",
     sex: "" as 'male' | 'female' | '',
     jobsite: "",
     position: "",
@@ -126,12 +128,20 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   // Validation function
   const validateForm = (): string[] => {
     const errors: string[] = [];
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
     
     // Form 1 validation
     if (!formData.name.trim() || !formData.jobsite.trim() || !formData.position.trim() || 
         !formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0 ||
         !formData.sex || !formData.job_type || !formData.salaryCurrency) {
       errors.push("Form 1 is incomplete");
+    }
+    // Optional but must be valid if provided
+    if (formData.email && !emailRegex.test(formData.email)) {
+      errors.push("Email address is invalid")
+    }
+    if (formData.cellphone && formData.cellphone.replace(/\D/g, '').length !== 11) {
+      errors.push("Cellphone number must be 11 digits")
     }
     
     return errors;
@@ -205,6 +215,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       // Create FormData for new draft (with files)
       const formDataToSend = new FormData();
       formDataToSend.append('name', formData.name.toUpperCase());
+      if (formData.email) formDataToSend.append('email', formData.email);
+      if (formData.cellphone) formDataToSend.append('cellphone', formData.cellphone);
       formDataToSend.append('sex', formData.sex);
       formDataToSend.append('salary', rawSalary);
       formDataToSend.append('salaryCurrency', salaryCurrency);
@@ -239,6 +251,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   // Get field-specific validation errors
   const getFieldErrors = (isDraft: boolean = false): {[key: string]: string} => {
     const errors: {[key: string]: string} = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
     
     if (!formData.name.trim()) {
       errors.name = "Name is required";
@@ -263,6 +276,12 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       }
       if (!formData.salaryCurrency) {
         errors.salaryCurrency = "Currency is required";
+      }
+      if (formData.email && !emailRegex.test(formData.email)) {
+        errors.email = "Enter a valid email"
+      }
+      if (formData.cellphone && formData.cellphone.replace(/\D/g, '').length !== 11) {
+        errors.cellphone = "Must be 11 digits"
       }
     }
     
@@ -307,6 +326,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       setFormData(prev => ({
         ...prev,
         name: initialData.name ?? '',
+        email: (initialData as any).email ?? '',
+        cellphone: (initialData as any).cellphone ?? '',
         sex: initialData.sex ?? 'male',
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
@@ -402,6 +423,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         },
         body: JSON.stringify({
           name: formData.name,
+          email: formData.email,
+          cellphone: formData.cellphone,
           sex: formData.sex,
           jobsite: formData.jobsite,
           position: formData.position,
@@ -472,6 +495,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       // Create FormData for file upload
       const formDataToSend = new FormData();
       formDataToSend.append('name', formData.name);
+      if (formData.email) formDataToSend.append('email', formData.email);
+      if (formData.cellphone) formDataToSend.append('cellphone', formData.cellphone);
       formDataToSend.append('sex', formData.sex);
       formDataToSend.append('salary', salaryInUSD.toString());
       formDataToSend.append('salaryCurrency', formData.salaryCurrency || 'USD');
@@ -573,6 +598,42 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 {validationErrors.name && (
                   <p className="text-xs text-red-500 mt-1">{validationErrors.name}</p>
                 )}
+              </div>
+
+              {/* Contact Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Email Address:</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => { setFormData({ ...formData, email: e.target.value }); clearFieldError('email') }}
+                    className="mt-1"
+                    placeholder="name@example.com"
+                  />
+                  {validationErrors.email && (
+                    <p className="text-xs text-red-500 mt-1">{validationErrors.email}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Cellphone No.:</Label>
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={formData.cellphone}
+                    onChange={(e) => {
+                      const digits = (e.target.value || '').replace(/\D/g, '').slice(0, 11)
+                      setFormData({ ...formData, cellphone: digits })
+                      clearFieldError('cellphone')
+                    }}
+                    className="mt-1"
+                    placeholder="09XXXXXXXXX"
+                  />
+                  {validationErrors.cellphone && (
+                    <p className="text-xs text-red-500 mt-1">{validationErrors.cellphone}</p>
+                  )}
+                </div>
               </div>
 
               {/* Sex */}

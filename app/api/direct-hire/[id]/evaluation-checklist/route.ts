@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { FileUploadService } from '@/lib/file-upload-service'
 import createReport from 'docx-templates'
+import { buildDirectHireDocxData } from '@/lib/docx-common'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { ApiResponse } from '@/lib/types'
@@ -25,6 +26,7 @@ export async function POST(
     // Fetch documents for this application (unified documents table)
     const docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
     const existingChecklist = (docs as any[]).find(d => String(d.document_type) === 'evaluation_requirements_checklist')
+    const existingDmw = (docs as any[]).find(d => String(d.document_type) === 'dmw_clearance_request')
     if (existingChecklist && !override) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Checklist already exists', data: { existingId: existingChecklist.id } }, { status: 409 })
     }
@@ -67,16 +69,11 @@ export async function POST(
       return `${year} ${month} ${day}`
     }
 
+    const common = buildDirectHireDocxData(application as any, docs as any)
     const report = await createReport({
       template,
       data: {
-        evaluator: application.evaluator || '',
-        name: application.name,
-        employer: (application as any).employer || '',
-        jobsite: application.jobsite,
-        position: application.position,
-        salary: String(application.salary ?? ''),
-        salary_currency: 'USD',
+        ...common.data,
         created_date: formatLongDate(createdDateStr),
 
         // Checklist checks based on uploaded docs
@@ -126,7 +123,10 @@ export async function POST(
         pdos_certificate_check: check(hasAny('pdos_certificate')),
         pdos_certificate_attached: hasAny('pdos_certificate') ? 'ATTACHED' : EMPTY
       },
-      cmdDelimiter: ['{{', '}}']
+      cmdDelimiter: ['{{', '}}'],
+      additionalJsContext: {
+        ...common.jsCtx
+      }
     })
 
     // Save DOCX into storage and documents table
@@ -153,6 +153,9 @@ export async function POST(
 
     // Additionally generate DMW Clearance Request (non-blocking)
     try {
+      if (existingDmw && override) {
+        try { await DatabaseService.deleteDocumentById((existingDmw as any).id) } catch {}
+      }
       const dmwTemplatePath = join(process.cwd(), 'public', 'templates', 'direct-hire', 'dmw-clearance-request.docx')
       const dmwTemplate = await readFile(dmwTemplatePath)
 
@@ -173,31 +176,18 @@ export async function POST(
 
       const dmwReport = await createReport({
         template: dmwTemplate,
-        data: {
-          control_number: application.control_number,
-          name: application.name,
-          sex: application.sex,
-          job_type: (application as any).job_type || '',
-          employer: (application as any).employer || '',
-          jobsite: application.jobsite,
-          position: application.position,
-          salary: String(application.salary ?? ''),
-          salary_currency: (application as any).salary_currency || 'USD',
-          evaluator: application.evaluator || '',
-          created_date: createdDateStr,
-          date: createdDateStr,
-          DATE: createdDateStr
-        },
+        data: { ...common.data, created_date: createdDateStr, date: createdDateStr, DATE: createdDateStr },
         cmdDelimiter: ['{{', '}}'],
         additionalJsContext: {
           date: dateCmd,
-          DATE: DATECmd
+          DATE: DATECmd,
+          ...common.jsCtx
         }
       })
 
       const dmwUpload = await FileUploadService.uploadBuffer(
         Buffer.from(dmwReport as any),
-        `DH-${application.control_number}-dmw-clearance-request.docx`,
+        `DH-${application.control_number}-Clearance Request.docx`,
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         application.id,
         'dmw_clearance_request'

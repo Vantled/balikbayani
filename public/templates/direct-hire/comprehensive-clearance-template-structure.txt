@@ -1,0 +1,65 @@
+COMPREHENSIVE CLEARANCE DOCUMENT TEMPLATE STRUCTURE
+====================================================
+
+This file describes the structure for creating the comprehensive-clearance.docx template.
+
+Create a new Word document and save it as: public/templates/direct-hire/comprehensive-clearance.docx
+
+The template should include the following sections and tags:
+
+1. HEADER SECTION
+   - Document Title: "COMPREHENSIVE CLEARANCE DOCUMENT"
+   - Control Number: {{control_number}}
+   - Date: {{date}}
+
+2. APPLICANT INFORMATION
+   - Name: {{name}}
+   - Email: {{email}}
+   - Cellphone: {{cellphone}}
+   - Sex: {{sex}}
+   - Job Type: {{job_type}}
+   - Employer: {{employer}}
+   - Jobsite: {{jobsite}}
+   - Position: {{position}}
+   - Salary: {{salary}} {{salary_currency}}
+   - Evaluator: {{evaluator}}
+
+3. APPLICATION STATUS
+   - Current Status: {{current_status}}
+   - Created Date: {{created_date}}
+   - Status Updated: {{status_updated_at}}
+
+4. EVALUATION SECTION
+   - Evaluation Date: {{evaluation_date}}
+   - Evaluation Status: {{evaluation_status}}
+   - Evaluation Notes: {{evaluation_notes}}
+
+5. INTERVIEW SECTION
+   - Interview Date: {{interview_date}}
+   - Processed Workers (Principal): {{processed_workers_principal}}
+   - Processed Workers (LAS): {{processed_workers_las}}
+   - Interview Notes: {{interview_notes}}
+
+6. CONFIRMATION SECTION
+   - Confirmation Date: {{confirmation_date}}
+   - Confirmation Status: {{confirmation_status}}
+   - Confirmation Notes: {{confirmation_notes}}
+
+7. DOCUMENT SUMMARY
+   - Total Documents: {{total_documents}}
+   - Important Documents: {{important_documents}}
+
+8. ADDITIONAL INFORMATION
+   - Application ID: {{application_id}}
+   - Created At: {{created_at}}
+   - Updated At: {{updated_at}}
+
+TEMPLATE CREATION INSTRUCTIONS:
+1. Open Microsoft Word
+2. Create a new document
+3. Add the sections and tags as described above
+4. Format the document as needed (headers, styling, etc.)
+5. Save as: public/templates/direct-hire/comprehensive-clearance.docx
+6. Ensure all tags use double braces: {{tag_name}}
+
+The template should be comprehensive and include all relevant information from the various document types in a single, well-organized document.

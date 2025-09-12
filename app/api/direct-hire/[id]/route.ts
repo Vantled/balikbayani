@@ -58,6 +58,8 @@ export async function PUT(
     // Prepare update data
     const updateData: any = {};
     if (body.name) updateData.name = String(body.name).toUpperCase();
+    if (body.email !== undefined) updateData.email = String(body.email || '');
+    if (body.cellphone !== undefined) updateData.cellphone = String(body.cellphone || '');
     if (body.sex) updateData.sex = body.sex as any;
     if (body.salary !== undefined) updateData.salary = Number(body.salary);
     if (body.raw_salary !== undefined) updateData.raw_salary = Number(body.raw_salary);

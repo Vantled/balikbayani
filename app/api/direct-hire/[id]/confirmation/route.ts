@@ -4,6 +4,7 @@ import { DatabaseService } from '@/lib/services/database-service'
 import { FileUploadService } from '@/lib/file-upload-service'
 import { ApiResponse } from '@/lib/types'
 import createReport from 'docx-templates'
+import { buildDirectHireDocxData } from '@/lib/docx-common'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 
@@ -93,31 +94,24 @@ export async function POST(
     if (existing && !override) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Confirmation already exists', data: { existingId: existing.id } }, { status: 409 })
     }
+    // If overriding, remove existing record before writing a new one
+    if (existing && override) {
+      try { await DatabaseService.deleteDocumentById((existing as any).id) } catch {}
+    }
 
+    const docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
+    const common = buildDirectHireDocxData(application as any, docs as any)
     const report = await createReport({
       template,
       data: {
-        control_number: application.control_number,
-        // Common identity fields
-        name: application.name,
+        ...common.data,
         applicant_name: application.name,
-        jobsite: application.jobsite,
-        position: application.position,
-        employer: (application as any).employer || '',
-        evaluator: application.evaluator || '',
         created_date: createdLong,
         verifier_type: verifierLabel,
         verified_date: confirmDateLong,
         pe_pcg_verified_date: isPePcg ? confirmDateLong : '',
         date: confirmDate,
         DATE: confirmDate,
-
-        // Checklist booleans (rendered as checks in the template)
-        mwo_check: check(isMWO),
-        pe_pcg_check: check(isPePcg),
-        others_check: check(isOthers),
-
-        // Fill-ins
         mwo_office: isMWO ? (verifierOffice || '') : '',
         pe_pcg_city: isPePcg ? (pePcgCity || '') : '',
         others_text: isOthers ? (othersText || '') : '',
@@ -130,13 +124,8 @@ export async function POST(
       additionalJsContext: {
         date: dateCmd,
         DATE: DATECmd,
-        // expose simple variables as callable + string to avoid sandbox ReferenceError
-        name: mk(application.name),
+        ...common.jsCtx,
         applicant_name: mk(application.name),
-        position: mk(application.position),
-        jobsite: mk(application.jobsite),
-        employer: mk((application as any).employer || ''),
-        evaluator: mk(application.evaluator || ''),
         created_date: mk(createdLong),
         verified_date: mk(confirmDateLong),
         pe_pcg_verified_date: mk(isPePcg ? confirmDateLong : ''),
@@ -150,10 +139,10 @@ export async function POST(
       }
     })
 
-    // Save document
+    // Save document (filename cannot contain slashes; use hyphens in storage name)
     const upload = await FileUploadService.uploadBuffer(
       Buffer.from(report),
-      `DH-${application.control_number}-confirmation.docx`,
+      `DH-${application.control_number}-MWO-POLO-PE-PCG Confirmation.docx`,
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       application.id,
       'confirmation'

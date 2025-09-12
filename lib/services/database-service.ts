@@ -110,6 +110,8 @@ export class DatabaseService {
   static async createDirectHireApplication(data: {
     control_number: string;
     name: string;
+    email?: string;
+    cellphone?: string;
     sex: 'male' | 'female';
     salary: number;
     status: string;
@@ -125,14 +127,16 @@ export class DatabaseService {
     console.log('Database service creating application with data:', data);
     const query = `
       INSERT INTO direct_hire_applications 
-      (control_number, name, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *
     `;
     
     const values = [
       data.control_number,
       data.name,
+      data.email || null,
+      data.cellphone || null,
       data.sex,
       data.salary,
       data.status,
@@ -246,6 +250,8 @@ export class DatabaseService {
 
     // Build dynamic query based on provided fields
     if (updateData.name !== undefined) { fields.push(`name = $${paramCount++}`); values.push(updateData.name); }
+    if ((updateData as any).email !== undefined) { fields.push(`email = $${paramCount++}`); values.push((updateData as any).email); }
+    if ((updateData as any).cellphone !== undefined) { fields.push(`cellphone = $${paramCount++}`); values.push((updateData as any).cellphone); }
     if (updateData.sex !== undefined) { fields.push(`sex = $${paramCount++}`); values.push(updateData.sex); }
     if (updateData.salary !== undefined) { fields.push(`salary = $${paramCount++}`); values.push(updateData.salary); }
     if ((updateData as any).raw_salary !== undefined) { fields.push(`raw_salary = $${paramCount++}`); values.push((updateData as any).raw_salary); }
@@ -270,10 +276,28 @@ export class DatabaseService {
       RETURNING *
     `;
 
-    const { rows } = await db.query(query, values);
-    if (rows.length === 0) return null;
+    let rowsResult;
+    try {
+      const { rows } = await db.query(query, values);
+      rowsResult = rows;
+    } catch (err: any) {
+      // If columns do not exist yet (older DBs), add them and retry once
+      if (err && err.code === '42703') {
+        try {
+          await db.query(`ALTER TABLE direct_hire_applications ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+          await db.query(`ALTER TABLE direct_hire_applications ADD COLUMN IF NOT EXISTS cellphone VARCHAR(20);`);
+          const { rows } = await db.query(query, values);
+          rowsResult = rows;
+        } catch (err2) {
+          throw err2;
+        }
+      } else {
+        throw err;
+      }
+    }
+    if (!rowsResult || rowsResult.length === 0) return null;
 
-    const result = rows[0];
+    const result = rowsResult[0];
     result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
     return result;
   }

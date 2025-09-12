@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
       const salaryCurrency = formData.get('salaryCurrency') as string | null;
       
       console.log('API received data:', {
-        name, sex, salary, status, jobsite, position, job_type, evaluator, employer, salaryCurrency
+        name, sex, salary, status, jobsite, position, job_type, evaluator, employer, salaryCurrency,
+        email: formData.get('email'), cellphone: formData.get('cellphone')
       });
       
       // Validate required fields based on status
@@ -115,6 +116,8 @@ export async function POST(request: NextRequest) {
         employer: (employer || '').toUpperCase(),
         salary_currency: salaryCurrency || 'USD',
         raw_salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
+        email: (formData.get('email') as string) || '',
+        cellphone: (formData.get('cellphone') as string) || '',
         status_checklist: (() => {
           if (status === 'draft') {
             return {
@@ -218,55 +221,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-generate clearance document (only for non-draft)
-      if (status !== 'draft') {
-        try {
-          const templatePath = join(process.cwd(), 'public', 'templates', 'direct-hire-clearance.docx');
-          const template = await readFile(templatePath);
-          const createdDate = new Date().toISOString().slice(0, 10);
-          const dateValue = createdDate
-          const dateCmd: any = () => dateValue
-          dateCmd.toString = () => dateValue
-          const DATECmd: any = () => dateValue
-          DATECmd.toString = () => dateValue
-
-          const report = await createReport({
-            template,
-            data: {
-              control_number: controlNumber,
-              name,
-              sex,
-              job_type,
-              employer: employer || '',
-              jobsite,
-              position,
-              salary,
-              salary_currency: salaryCurrency || 'USD',
-              evaluator: evaluator || '',
-              created_date: createdDate
-            },
-            cmdDelimiter: ['{{', '}}'],
-            additionalJsContext: {
-              date: dateCmd,
-              DATE: DATECmd
-            }
-          });
-          // Save as DOCX (fallback attachment)
-          const docxUpload = await FileUploadService.uploadBuffer(Buffer.from(report), `DH-${controlNumber}-clearance.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', application.id, 'clearance');
-          const docxRecord = await DatabaseService.createDocument({
-            application_id: application.id,
-            application_type: 'direct_hire',
-            document_type: 'clearance',
-            file_name: docxUpload.fileName,
-            file_path: docxUpload.filePath,
-            file_size: docxUpload.fileSize,
-            mime_type: docxUpload.mimeType
-          });
-          uploadedDocuments.push(docxRecord);
-        } catch (err) {
-          console.error('Error generating clearance document:', err);
-        }
-      }
+      // Auto-generate clearance document removed per user request
 
       const response: ApiResponse = {
         success: true,

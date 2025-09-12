@@ -2143,10 +2143,16 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleView(document)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  View
-                </DropdownMenuItem>
+                {(() => {
+                  const isDocx = document.file_name.toLowerCase().endsWith('.docx')
+                  if (isDocx) return null
+                  return (
+                    <DropdownMenuItem onClick={() => handleView(document)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </DropdownMenuItem>
+                  )
+                })()}
                 {(() => {
                   const fileExtension = document.file_name.split('.').pop()?.toLowerCase() || ''
                   let downloadText = 'Download'

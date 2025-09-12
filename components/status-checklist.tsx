@@ -271,17 +271,17 @@ export default function StatusChecklist({
         if (true) {
           const res2 = await fetch(`/api/direct-hire/${applicationId}/evaluation-checklist?override=true`, { method: 'POST' })
           if (!res2.ok) throw new Error('Failed to override')
-          toast({ title: 'Checklist overridden', description: 'Existing checklist has been replaced.' })
+          toast({ title: 'Documents overridden', description: 'Existing evaluation checklist was replaced. DMW clearance request regenerated.' })
         } else {
-          toast({ title: 'Generation cancelled', description: 'Existing checklist was kept.' })
+          toast({ title: 'Generation cancelled', description: 'Existing documents were kept.' })
         }
       } else if (res.ok) {
-        toast({ title: 'Checklist generated', description: 'The evaluation requirements checklist has been generated and attached.' })
+        toast({ title: 'Documents generated', description: 'Evaluation checklist and DMW clearance request have been attached.' })
       } else {
         throw new Error('Failed to generate')
       }
     } catch {
-      toast({ title: 'Failed to generate', description: 'Could not generate the checklist.', variant: 'destructive' })
+      toast({ title: 'Failed to generate', description: 'Could not generate the documents.', variant: 'destructive' })
     } finally {
       setLoading(false)
     }

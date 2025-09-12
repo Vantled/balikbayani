@@ -151,6 +151,72 @@ export async function POST(
       mime_type: upload.mimeType
     })
 
+    // Additionally generate DMW Clearance Request (non-blocking)
+    try {
+      const dmwTemplatePath = join(process.cwd(), 'public', 'templates', 'direct-hire', 'dmw-clearance-request.docx')
+      const dmwTemplate = await readFile(dmwTemplatePath)
+
+      const createdRaw: any = (application as any).created_at
+      let createdDateStr = new Date().toISOString().slice(0, 10)
+      if (createdRaw) {
+        const d = new Date(createdRaw)
+        if (!isNaN(d.getTime())) {
+          createdDateStr = d.toISOString().slice(0, 10)
+        }
+      }
+
+      const dateValue = createdDateStr
+      const dateCmd: any = () => dateValue
+      dateCmd.toString = () => dateValue
+      const DATECmd: any = () => dateValue
+      DATECmd.toString = () => dateValue
+
+      const dmwReport = await createReport({
+        template: dmwTemplate,
+        data: {
+          control_number: application.control_number,
+          name: application.name,
+          sex: application.sex,
+          job_type: (application as any).job_type || '',
+          employer: (application as any).employer || '',
+          jobsite: application.jobsite,
+          position: application.position,
+          salary: String(application.salary ?? ''),
+          salary_currency: (application as any).salary_currency || 'USD',
+          evaluator: application.evaluator || '',
+          created_date: createdDateStr,
+          date: createdDateStr,
+          DATE: createdDateStr
+        },
+        cmdDelimiter: ['{{', '}}'],
+        additionalJsContext: {
+          date: dateCmd,
+          DATE: DATECmd
+        }
+      })
+
+      const dmwUpload = await FileUploadService.uploadBuffer(
+        Buffer.from(dmwReport as any),
+        `DH-${application.control_number}-dmw-clearance-request.docx`,
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        application.id,
+        'dmw_clearance_request'
+      )
+
+      await DatabaseService.createDocument({
+        application_id: application.id,
+        application_type: 'direct_hire',
+        document_type: 'dmw_clearance_request',
+        file_name: dmwUpload.fileName,
+        file_path: dmwUpload.filePath,
+        file_size: dmwUpload.fileSize,
+        mime_type: dmwUpload.mimeType
+      })
+    } catch (err) {
+      console.error('Error generating DMW clearance request:', err)
+      // Do not fail the entire request if this secondary document fails
+    }
+
     return NextResponse.json<ApiResponse>({ success: true, data: document, message: 'Evaluation checklist generated and attached' })
   } catch (error) {
     console.error('Error generating evaluation checklist:', error)

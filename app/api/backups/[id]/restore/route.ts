@@ -1,4 +1,4 @@
-// app/api/backups/restore/route.ts
+// app/api/backups/[id]/restore/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { AuthService } from '@/lib/services/auth-service'
 import { isSuperadmin } from '@/lib/auth'
@@ -9,16 +9,6 @@ import { spawn } from 'child_process'
 
 const BACKUP_DIR = path.join(process.cwd(), 'uploads', 'backups')
 
-function ensureDir(p: string) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }) }
-
-async function saveUpload(request: NextRequest, dest: string) {
-  const form = await request.formData()
-  const file = form.get('file') as unknown as File
-  if (!file) throw new Error('No file provided')
-  const arrayBuffer = await file.arrayBuffer()
-  fs.writeFileSync(dest, Buffer.from(arrayBuffer))
-}
-
 function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv) {
   return new Promise<void>((resolve, reject) => {
     const p = spawn(cmd, args, { env })
@@ -27,40 +17,46 @@ function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv) {
   })
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const token = request.cookies.get('bb_auth_token')?.value
   if (!token) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   const user = await AuthService.validateSession(token)
   if (!user || !isSuperadmin(user)) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
 
+  const { id } = await context.params
+  // Find the matching backup file
+  const candidates = [
+    path.join(BACKUP_DIR, `${id}.tar.gz`),
+    path.join(BACKUP_DIR, `${id}.zip`),
+    path.join(BACKUP_DIR, `${id}.sql`),
+  ]
+  const filePath = candidates.find(p => fs.existsSync(p))
+  if (!filePath) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-restore-'))
   try {
-    ensureDir(BACKUP_DIR)
-    const uploadPath = path.join(tmpDir, 'backup')
-    await saveUpload(request, uploadPath)
-
-    // Detect type
-    const lower = uploadPath.toLowerCase()
     const extractDir = path.join(tmpDir, 'extracted')
-    ensureDir(extractDir)
+    fs.mkdirSync(extractDir, { recursive: true })
+    const lower = filePath.toLowerCase()
 
     if (lower.endsWith('.zip')) {
-      // Extract zip via archiver's unzip is not available; use unzipper
-      const unzipper = await import('unzipper')
-      await new Promise<void>((resolve, reject) => {
-        fs.createReadStream(uploadPath)
-          .pipe(unzipper.Extract({ path: extractDir }))
-          .on('close', () => resolve())
-          .on('error', reject)
-      })
+      try {
+        const AdmZip = (await import('adm-zip')).default as any
+        const zip = new AdmZip(filePath)
+        zip.extractAllTo(extractDir, true)
+      } catch (e) {
+        return NextResponse.json({ success: false, error: 'Failed to extract zip (missing adm-zip?)' }, { status: 500 })
+      }
     } else if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
-      const tarCmd = process.env.TAR_PATH && process.env.TAR_PATH.trim() !== '' ? process.env.TAR_PATH.trim() : 'tar'
-      await run(tarCmd, ['-xzf', uploadPath, '-C', extractDir])
+      try {
+        const tar = (await import('tar')).default as any
+        await tar.x({ file: filePath, cwd: extractDir })
+      } catch (e) {
+        return NextResponse.json({ success: false, error: 'Failed to extract tar.gz' }, { status: 500 })
+      }
     } else if (lower.endsWith('.sql')) {
+      fs.copyFileSync(filePath, path.join(extractDir, 'dump.sql'))
       fs.mkdirSync(path.join(extractDir, 'uploads'), { recursive: true })
-      fs.copyFileSync(uploadPath, path.join(extractDir, 'dump.sql'))
-    } else {
-      return NextResponse.json({ success: false, error: 'Unsupported file type' }, { status: 400 })
     }
 
     // Restore uploads
@@ -79,7 +75,7 @@ export async function POST(request: NextRequest) {
       copyRecursive(uploadsSrc, uploadsDst)
     }
 
-    // Restore DB
+    // Restore DB if dump.sql exists
     const dumpPath = path.join(extractDir, 'dump.sql')
     if (fs.existsSync(dumpPath)) {
       const psqlCmd = process.env.PSQL_PATH && process.env.PSQL_PATH.trim() !== '' ? process.env.PSQL_PATH.trim() : 'psql'
@@ -89,16 +85,12 @@ export async function POST(request: NextRequest) {
       const dbName = env.DB_NAME || env.PGDATABASE || 'postgres'
       const userName = env.DB_USER || env.PGUSER || 'postgres'
       const pass = env.DB_PASSWORD || env.PGPASSWORD || ''
-      console.log(`[BACKUPS] Starting DB restore to ${host}:${port}/${dbName} as ${userName}`)
-      // Use single transaction to avoid partial state; allow clean statements in dump
-      await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
-      console.log(`[BACKUPS] DB restore completed from ${dumpPath}`)
+      await run(psqlCmd, ['-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
     }
 
-    console.log('[BACKUPS] File restore completed to uploads directory')
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('Restore failed', e)
+    console.error('Inline restore failed', e)
     return NextResponse.json({ success: false, error: 'Restore failed' }, { status: 500 })
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}

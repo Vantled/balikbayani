@@ -598,7 +598,7 @@ export default function BalikManggagawaProcessingPage() {
                 ) : records.length === 0 ? (
                   <tr><td colSpan={7} className="py-8 text-center text-gray-500">No processing records found</td></tr>
                 ) : records.map((row: any, i: number) => (
-                  <tr key={row.id ?? i} className="hover:bg-gray-50">
+                  <tr key={row.id ?? i} className="hover:bg-gray-150 transition-colors duration-75">
                     <td className="py-3 px-4 text-center">{row.clearance_control_number || row.or_number}</td>
                     <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
                     <td className="py-3 px-4 text-center capitalize">{row.sex}</td>
@@ -633,7 +633,7 @@ export default function BalikManggagawaProcessingPage() {
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8"
+                        className="h-8 w-8 hover:bg-gray-150"
                         onClick={async () => {
                           const result = await getProcessingById(row.id)
                           if (result.success) {

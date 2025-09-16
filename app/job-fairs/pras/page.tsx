@@ -532,7 +532,7 @@ export default function PraContactsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {contacts.map((contact) => (
-                    <tr key={contact.id} className={`hover:bg-gray-50 ${contact.deleted_at ? 'bg-red-50' : ''}`}>
+                    <tr key={contact.id} className={`hover:bg-gray-150 transition-colors duration-75 ${contact.deleted_at ? 'bg-red-50' : ''}`}>
                       <td className="py-3 px-4 text-center">{contact.name_of_pras}</td>
                       <td className="py-3 px-4 text-center">{contact.pra_contact_person}</td>
                       <td className="py-3 px-4 text-center">{contact.office_head}</td>
@@ -568,7 +568,7 @@ export default function PraContactsPage() {
                       <td className="py-3 px-4 text-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
                               <MoreHorizontal className="h-4 w-4" />
                               <span className="sr-only">Open menu</span>
                             </Button>

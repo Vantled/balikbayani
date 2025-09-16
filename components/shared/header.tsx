@@ -15,11 +15,15 @@ export default function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  // Initialize as null on both server and client first render to avoid hydration mismatch
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     const user = getUser()
     setCurrentUser(user)
+    setMounted(true)
   }, [])
 
   // Heartbeat + event-driven checks to keep session alive and auto-logout if expired
@@ -59,7 +63,7 @@ export default function Header() {
     }
   }, [router])
 
-  // Validate on route changes as well
+  // Validate on route changes as well (but keep current user visible)
   useEffect(() => {
     const check = async () => {
       const ok = await validateSession()
@@ -71,7 +75,11 @@ export default function Header() {
         })
         await logout()
         router.push('/login?sessionExpired=true')
+      } else {
+        // Refresh currentUser from cookie (in case it changed) and mark ready
+        setCurrentUser(getUser())
       }
+      setAuthReady(true)
     }
     check()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +123,7 @@ export default function Header() {
     <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between fixed top-0 left-0 w-full z-30">
       <h1 className="text-[#1976D2] text-base md:text-lg lg:text-2xl font-bold">BalikBayani Portal</h1>
       <div className="flex items-center gap-2 lg:gap-4 min-w-0">
+        {mounted && authReady && (
         <nav className="hidden md:flex items-center gap-3 lg:gap-6 overflow-x-auto whitespace-nowrap max-w-[55vw] lg:max-w-[65vw] pr-2">
           <Link 
             href="/dashboard" 
@@ -212,8 +221,8 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {/* Superadmin Panel - Only visible to Superadmin */}
-          {isSuperadmin(currentUser) && (
+          {/* Superadmin Panel - Only visible after auth ready to avoid flicker */}
+          {authReady && mounted && isSuperadmin(currentUser) && (
             <div className="relative">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -241,38 +250,41 @@ export default function Header() {
             </div>
           )}
         </nav>
-        <div className="flex items-center gap-2">
-          <UserCircle className="h-7 lg:h-8 w-7 lg:w-8 text-gray-700" />
-          <span className="text-xs lg:text-sm hidden md:inline">
-            {currentUser?.full_name || 'System User'}
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                className={`text-xs lg:text-sm rounded-full border-gray-300 ml-2 ${roleDisplay.bgColor} ${roleDisplay.color}`}
-              >
-                {roleDisplay.text}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild>
-                <Link href="/profile" className="flex items-center">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="cursor-pointer text-red-600 focus:text-red-600"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        )}
+        {mounted && authReady && (
+          <div className="flex items-center gap-2">
+            <UserCircle className="h-7 lg:h-8 w-7 lg:w-8 text-gray-700" />
+            <span className="text-xs lg:text-sm hidden md:inline">
+              {currentUser?.full_name || ''}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className={`text-xs lg:text-sm rounded-full border-gray-300 ml-2 ${roleDisplay.bgColor} ${roleDisplay.color}`}
+                >
+                  {roleDisplay.text}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="cursor-pointer text-red-600 focus:text-red-600"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
     </header>
   )

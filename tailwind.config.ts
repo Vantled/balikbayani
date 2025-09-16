@@ -53,6 +53,10 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Custom intermediate gray for subtle row hover
+        gray: {
+          150: "#ececec",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

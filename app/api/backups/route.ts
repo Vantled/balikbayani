@@ -23,7 +23,16 @@ export async function GET(request: NextRequest) {
   const data = files.map(f => {
     const p = path.join(BACKUP_DIR, f)
     const s = fs.statSync(p)
-    const id = path.parse(f).name
+    let id: string
+    if (f.endsWith('.tar.gz')) {
+      id = f.slice(0, -7) // remove .tar.gz
+    } else if (f.endsWith('.zip')) {
+      id = f.slice(0, -4) // remove .zip
+    } else if (f.endsWith('.sql')) {
+      id = f.slice(0, -4) // remove .sql
+    } else {
+      id = path.parse(f).name
+    }
     return { id, file_name: f, file_size: s.size, created_at: s.birthtime.toISOString() }
   }).sort((a,b)=> (a.created_at < b.created_at ? 1 : -1))
   return NextResponse.json({ success: true, data })
@@ -44,10 +53,12 @@ export async function POST(request: NextRequest) {
     const yyyy = now.getFullYear()
     const mm = pad(now.getMonth() + 1)
     const dd = pad(now.getDate())
-    const hh = pad(now.getHours())
+    const hours24 = now.getHours()
+    const hours12 = ((hours24 + 11) % 12) + 1
+    const ampm = hours24 >= 12 ? 'PM' : 'AM'
+    const hh = pad(hours12)
     const mi = pad(now.getMinutes())
-    const ss = pad(now.getSeconds())
-    const id = `${system}-${yyyy}${mm}${dd}-${hh}${mi}${ss}` // [system]-[YYYYMMDD]-[HHMMSS]
+    const id = `${system}-${yyyy}${mm}${dd}-${hh}${mi}${ampm}` // [system]-[YYYYMMDD]-[HHMMAM/PM]
     const file = path.join(BACKUP_DIR, `${id}.sql`)
 
     // Simple logical backup: dump public schema via SQL (portable baseline)

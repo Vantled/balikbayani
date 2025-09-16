@@ -20,10 +20,12 @@ function tsId(system: string) {
   const yyyy = now.getFullYear()
   const mm = pad(now.getMonth() + 1)
   const dd = pad(now.getDate())
-  const hh = pad(now.getHours())
+  const h24 = now.getHours()
+  const hh12 = ((h24 + 11) % 12) + 1
+  const ampm = h24 >= 12 ? 'PM' : 'AM'
+  const hh = pad(hh12)
   const mi = pad(now.getMinutes())
-  const ss = pad(now.getSeconds())
-  return `${system}-${yyyy}${mm}${dd}-${hh}${mi}${ss}`
+  return `${system}-${yyyy}${mm}${dd}-${hh}${mi}${ampm}`
 }
 
 function sanitizeSystemName(name: string) {
@@ -53,7 +55,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const pgDumpCmd = process.env.PG_DUMP_PATH && process.env.PG_DUMP_PATH.trim() !== '' ? process.env.PG_DUMP_PATH.trim() : 'pg_dump'
-    const tarCmd = process.env.TAR_PATH && process.env.TAR_PATH.trim() !== '' ? process.env.TAR_PATH.trim() : 'tar'
     // 1) pg_dump to dump.sql
     const dumpPath = path.join(workDir, 'dump.sql')
     const env = process.env
@@ -75,6 +76,10 @@ export async function POST(request: NextRequest) {
       `-p`, port,
       `-U`, userName,
       `-d`, dbName,
+      `--clean`,
+      `--if-exists`,
+      `--no-owner`,
+      `--no-privileges`,
       `-F`, 'p', // plain SQL
       `-f`, dumpPath,
     ]
@@ -92,6 +97,8 @@ export async function POST(request: NextRequest) {
       // shallow copy preserving structure
       const copyRecursive = (src: string, dst: string) => {
         for (const entry of fs.readdirSync(src)) {
+          // Skip backing up previous backups to avoid recursion and size bloat
+          if (src === uploadsSrc && entry === 'backups') continue
           const sp = path.join(src, entry)
           const dp = path.join(dst, entry)
           const stat = fs.statSync(sp)
@@ -102,31 +109,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 3) tar.gz: [id].tar.gz containing dump.sql and uploads/
-    const tarPath = path.join(BACKUP_DIR, `${id}.tar.gz`)
-    try {
-      // Prefer native tar+gzip; if gzip is missing or path contains Windows drive letters, fallback to zip
-      try {
-        await run(tarCmd, ['-czf', tarPath, '-C', workDir, 'dump.sql', 'uploads'])
-      } catch (e) {
-        // Fallback to zip archive
-        const zipPath = tarPath.replace(/\.tar\.gz$/, '.zip')
-        const archiver = await import('archiver')
-        const out = fs.createWriteStream(zipPath)
-        const archive = archiver.default('zip', { zlib: { level: 9 } })
-        await new Promise<void>((resolve, reject) => {
-          out.on('close', () => resolve())
-          archive.on('error', reject)
-          archive.pipe(out)
-          archive.file(path.join(workDir, 'dump.sql'), { name: 'dump.sql' })
-          if (fs.existsSync(path.join(workDir, 'uploads'))){
-            archive.directory(path.join(workDir, 'uploads'), 'uploads')
-          }
-          archive.finalize()
-        })
+    // Produce ZIP by default for cross-platform restore
+    const zipPath = path.join(BACKUP_DIR, `${id}.zip`)
+    const archiver = await import('archiver')
+    const out = fs.createWriteStream(zipPath)
+    const archive = archiver.default('zip', { zlib: { level: 9 } })
+    await new Promise<void>((resolve, reject) => {
+      out.on('close', () => resolve())
+      archive.on('error', reject)
+      archive.pipe(out)
+      archive.file(path.join(workDir, 'dump.sql'), { name: 'dump.sql' })
+      if (fs.existsSync(path.join(workDir, 'uploads'))){
+        archive.directory(path.join(workDir, 'uploads'), 'uploads')
       }
-    } catch {
-      return NextResponse.json({ success: false, error: 'tar/zip not available on host' }, { status: 500 })
-    }
+      archive.finalize()
+    })
 
     return NextResponse.json({ success: true, id })
   } catch (e) {

@@ -66,6 +66,41 @@ npm run dev
 
 6. **Access the application:**
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+## Backups (Setup and Usage)
+
+### Configure
+
+- In `.env.local` set:
+  - `SYSTEM_NAME=balikbayani` (prefix for backup filenames)
+  - `CRON_SECRET=<strong-random-secret>` (for auto backup endpoint)
+  - Optional tool paths if not on PATH:
+    - `PG_DUMP_PATH` (pg_dump executable path)
+    - `PSQL_PATH` (psql executable path)
+
+### Manual Backup/Restore
+
+- Go to `/data-backups`.
+- Click "Manually Create Backup" to produce a ZIP archive with:
+  - `dump.sql` (database snapshot with --clean)
+  - `uploads/` files (excluding `uploads/backups`)
+- To restore:
+  - Use per-row "Restore" on an existing backup, or
+  - Use "Import Backup (.zip)" to upload a ZIP you saved
+
+### Automatic Backups (Monthly or as scheduled)
+
+- Trigger endpoint (superadmin auth not required; protected by secret):
+  - `POST /api/backups/auto`
+  - Header: `X-Cron-Secret: <CRON_SECRET>`
+- Local test:
+  - PowerShell: `Invoke-RestMethod -Method POST -Uri "http://localhost:3000/api/backups/auto" -Headers @{"X-Cron-Secret"="<CRON_SECRET>"}`
+  - curl: `curl -X POST http://localhost:3000/api/backups/auto -H "X-Cron-Secret: <CRON_SECRET>"`
+- Logs: server prints `[BACKUPS] Auto backup created: <id>.zip`
+
+### Filename Format
+
+- `[system]-[YYYYMMDD]-[HHMMAM/PM].zip` e.g. `balikbayani-20250916-0655PM.zip`
+
 
 **Default login:**
 - **Admin:** Username: `admin`, Password: `admin123` (or your `ADMIN_PASSWORD` from `.env.local`)

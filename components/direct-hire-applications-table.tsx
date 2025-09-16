@@ -797,7 +797,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                 </tr>
               ) : (
                 filteredApplications.map((application) => (
-                  <tr key={application.id} className="hover:bg-gray-50">
+                  <tr key={application.id} className="hover:bg-gray-150 transition-colors duration-75">
                     <td className="py-3 px-4 text-center">{application.control_number}</td>
                     <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
                     <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
@@ -809,7 +809,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                       <div className="flex justify-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
                               <MoreHorizontal className="h-4 w-4" />
                               <span className="sr-only">Open menu</span>
                             </Button>
@@ -2200,8 +2200,9 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
       <div className="flex items-center space-x-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
+            <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-gray-150">
               <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

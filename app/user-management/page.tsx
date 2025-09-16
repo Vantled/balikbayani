@@ -423,20 +423,7 @@ export default function UserManagementPage() {
     return <Badge variant="default">Active</Badge>;
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="pt-20">
-          <div className="container mx-auto p-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="text-lg">Loading...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Avoid blocking overlay; render page with possible empty table while loading
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -445,13 +432,13 @@ export default function UserManagementPage() {
         <div className="container mx-auto p-6">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-3xl font-bold">User Management</h1>
+              <h1 className="text-3xl font-bold text-[#1976D2]">User Management</h1>
             </div>
             <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create User
+                <Button className="h-9 px-3">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Create
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -515,19 +502,19 @@ export default function UserManagementPage() {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead>Actions</TableHead>
+                  <TableRow className="bg-[#1976D2] text-white hover:bg-[#1976D2]">
+                    <TableHead className="text-white">Name</TableHead>
+                    <TableHead className="text-white">Username</TableHead>
+                    <TableHead className="text-white">Email</TableHead>
+                    <TableHead className="text-white">Role</TableHead>
+                    <TableHead className="text-white">Status</TableHead>
+                    <TableHead className="text-white">Last Login</TableHead>
+                    <TableHead className="text-white">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map((user) => (
-                    <TableRow key={user.id}>
+                    <TableRow key={user.id} className="hover:bg-gray-150 transition-colors duration-75">
                       <TableCell className="font-medium">
                         <div 
                           className="flex items-center space-x-2 group relative w-full"
@@ -639,7 +626,7 @@ export default function UserManagementPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeactivateUser(user.id)}
-                              className="text-orange-600 hover:text-orange-700"
+                              className="text-orange-600 hover:text-orange-700 hover:bg-gray-150"
                               title="Deactivate User"
                             >
                               <UserX className="w-4 h-4" />
@@ -649,7 +636,7 @@ export default function UserManagementPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleActivateUser(user.id)}
-                              className="text-green-600 hover:text-green-700"
+                              className="text-green-600 hover:text-green-700 hover:bg-gray-150"
                               title="Activate User"
                             >
                               <Eye className="w-4 h-4" />

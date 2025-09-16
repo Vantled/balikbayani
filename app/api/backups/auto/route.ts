@@ -26,10 +26,12 @@ export async function POST(request: NextRequest) {
     const yyyy = now.getFullYear()
     const mm = pad(now.getMonth() + 1)
     const dd = pad(now.getDate())
-    const hh = pad(now.getHours())
+    const hours24 = now.getHours()
+    const hours12 = ((hours24 + 11) % 12) + 1
+    const ampm = hours24 >= 12 ? 'PM' : 'AM'
+    const hh = pad(hours12)
     const mi = pad(now.getMinutes())
-    const ss = pad(now.getSeconds())
-    const id = `${system}-${yyyy}${mm}${dd}-${hh}${mi}${ss}`
+    const id = `${system}-auto-${yyyy}${mm}${dd}-${hh}${mi}${ampm}`
     const file = path.join(BACKUP_DIR, `${id}.sql`)
     const res = await db.query(`
       SELECT string_agg(format('CREATE TABLE IF NOT EXISTS %I.%I AS TABLE %I.%I;', schemaname, tablename, schemaname, tablename), '\n') AS sql
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
     `)
     const content = `-- BalikBayani logical backup (auto)\n-- Created at: ${now.toISOString()}\n\n${res.rows?.[0]?.sql || '-- no tables'}\n`
     fs.writeFileSync(file, content, 'utf8')
+    console.log(`[BACKUPS] Auto backup created: ${id}.zip`)
     return NextResponse.json({ success: true, id })
   } catch (e) {
     console.error('Auto backup failed', e)

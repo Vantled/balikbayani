@@ -43,4 +43,27 @@ export async function GET(
   })
 }
 
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const token = request.cookies.get('bb_auth_token')?.value
+  if (!token) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  const user = await AuthService.validateSession(token)
+  if (!user || !isSuperadmin(user)) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+
+  const { id } = await context.params
+  const candidates = [
+    path.join(BACKUP_DIR, `${id}.tar.gz`),
+    path.join(BACKUP_DIR, `${id}.zip`),
+    path.join(BACKUP_DIR, `${id}.sql`),
+  ]
+  const filePath = candidates.find(p => fs.existsSync(p))
+  if (!filePath) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+  try { fs.unlinkSync(filePath) } catch (e) {
+    return NextResponse.json({ success: false, error: 'Delete failed' }, { status: 500 })
+  }
+  return NextResponse.json({ success: true })
+}
+
 

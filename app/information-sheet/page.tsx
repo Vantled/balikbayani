@@ -288,7 +288,7 @@ export default function InformationSheetPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {filteredRecords.map((row, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
+                        <tr key={i} className="hover:bg-gray-150 transition-colors duration-75">
                           <td className="py-3 px-4 text-center">{row.familyName}</td>
                           <td className="py-3 px-4 text-center">{row.firstName}</td>
                           <td className="py-3 px-4 text-center">{row.gender}</td>

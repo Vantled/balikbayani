@@ -329,7 +329,7 @@ export default function JobFairTable({
             </thead>
                          <tbody className="divide-y divide-gray-200">
                {filteredData.map((record) => (
-                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'bg-red-50' : ''}`}>
+                <tr key={record.id} className={`hover:bg-gray-150 transition-colors duration-75 ${record.deleted_at ? 'bg-red-50' : ''}`}>
                                      <td className="py-3 px-4 text-center">
                      <div className="flex flex-col items-center">
                        <span>{formatDate(record.date)}</span>
@@ -381,7 +381,7 @@ export default function JobFairTable({
                   <td className="py-3 px-4 text-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Open menu</span>
                         </Button>

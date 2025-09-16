@@ -490,7 +490,7 @@ export default function BalikManggagawaClearancePage() {
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="bg-white border-gray-300 h-9">
+                <Button variant="outline" className="bg-white border-gray-300 h-9 hover:bg-gray-150">
                   <Download className="h-4 w-4 mr-2" />
                   Export Sheet
                 </Button>
@@ -780,7 +780,7 @@ export default function BalikManggagawaClearancePage() {
                 </tr>
               ) : (
                 clearances.map((clearance) => (
-                  <tr key={clearance.id} className={`hover:bg-gray-50 ${(clearance as any).deleted_at ? 'bg-red-50' : ''}`}>
+                  <tr key={clearance.id} className={`hover:bg-gray-150 transition-colors duration-75 ${(clearance as any).deleted_at ? 'bg-red-50' : ''}`}>
                     <td className="py-3 px-4 text-center">{clearance.control_number}</td>
                     <td className="py-3 px-4 text-center">{clearance.name_of_worker}</td>
                     <td className="py-3 px-4 text-center capitalize">{clearance.sex}</td>
@@ -790,7 +790,7 @@ export default function BalikManggagawaClearancePage() {
                   <td className="py-3 px-4 text-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Open menu</span>
                         </Button>
@@ -1855,7 +1855,7 @@ function ApplicantDocumentsListBM({ applicationId, refreshTrigger, onRefresh, on
           <div className="flex items-center space-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-gray-150"><MoreHorizontal className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => handleDownload(document)}>

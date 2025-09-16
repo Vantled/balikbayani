@@ -212,18 +212,33 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {/* User Management - Only visible to Superadmin */}
+          {/* Superadmin Panel - Only visible to Superadmin */}
           {isSuperadmin(currentUser) && (
-            <Link 
-              href="/user-management" 
-              className={`text-xs lg:text-sm pb-1 ${
-                isActive('/user-management') 
-                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
-                  : 'text-gray-600 hover:text-[#1976D2]'
-              }`}
-            >
-              User Management
-            </Link>
+            <div className="relative">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={`text-xs lg:text-sm pb-1 flex items-center gap-1 ${
+                      pathname.startsWith('/user-management') || pathname.startsWith('/data-backups')
+                        ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
+                        : 'text-gray-600 hover:text-[#1976D2]'
+                    }`}
+                    aria-label="Superadmin Panel menu"
+                  >
+                    Superadmin Panel
+                    <ChevronDown className="h-4 w-4 ml-1" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link href="/user-management">User Management</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/data-backups">Data Backups</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </nav>
         <div className="flex items-center gap-2">

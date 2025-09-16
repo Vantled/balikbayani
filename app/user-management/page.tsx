@@ -38,13 +38,18 @@ export default function UserManagementPage() {
   const [formData, setFormData] = useState({
     full_name: '',
     confirm_full_name: '',
-    role: 'staff' as 'admin' | 'staff'
+    role: 'staff' as 'superadmin' | 'admin' | 'staff'
   });
   const [activatePassword, setActivatePassword] = useState('');
   const [activatePasswordDialogOpen, setActivatePasswordDialogOpen] = useState(false);
   const [userToActivate, setUserToActivate] = useState<string | null>(null);
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
   const [tempCredentials, setTempCredentials] = useState({ username: '', password: '' });
+  const [passwordConfirmDialogOpen, setPasswordConfirmDialogOpen] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [deactivatePasswordDialogOpen, setDeactivatePasswordDialogOpen] = useState(false);
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [userToDeactivate, setUserToDeactivate] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -187,8 +192,13 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleUpdateUser = async () => {
+  const handleUpdateUser = () => {
     if (!selectedUser) return;
+    setPasswordConfirmDialogOpen(true);
+  };
+
+  const handleConfirmPasswordUpdate = async () => {
+    if (!selectedUser || !confirmPassword) return;
 
     try {
       const response = await fetch(`/api/users/${selectedUser.id}`, {
@@ -197,7 +207,10 @@ export default function UserManagementPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include', // Include cookies in the request
-        body: JSON.stringify({ role: formData.role })
+        body: JSON.stringify({ 
+          role: formData.role,
+          current_password: confirmPassword 
+        })
       });
 
       const data = await response.json();
@@ -205,15 +218,17 @@ export default function UserManagementPage() {
       if (data.success) {
         toast({
           title: 'Success',
-          description: 'User updated successfully'
+          description: 'User role updated successfully'
         });
         setEditDialogOpen(false);
+        setPasswordConfirmDialogOpen(false);
         setSelectedUser(null);
+        setConfirmPassword('');
         fetchUsers();
       } else {
         toast({
           title: 'Error',
-          description: data.error || 'Failed to update user',
+          description: data.error || 'Failed to update user role',
           variant: 'destructive'
         });
       }
@@ -221,19 +236,28 @@ export default function UserManagementPage() {
       console.error('Error updating user:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update user',
+        description: 'Failed to update user role',
         variant: 'destructive'
       });
     }
   };
 
-  const handleDeactivateUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to deactivate this user? This action can be reversed later.')) return;
+  const handleDeactivateUser = (userId: string) => {
+    setUserToDeactivate(userId);
+    setDeactivatePasswordDialogOpen(true);
+  };
+
+  const handleConfirmDeactivateUser = async () => {
+    if (!userToDeactivate || !deactivatePassword) return;
 
     try {
-      const response = await fetch(`/api/users/${userId}/deactivate`, {
+      const response = await fetch(`/api/users/${userToDeactivate}/deactivate`, {
         method: 'PUT',
-        credentials: 'include' // Include cookies in the request
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies in the request
+        body: JSON.stringify({ current_password: deactivatePassword })
       });
 
       const data = await response.json();
@@ -243,6 +267,9 @@ export default function UserManagementPage() {
           title: 'Success',
           description: 'User deactivated successfully'
         });
+        setDeactivatePasswordDialogOpen(false);
+        setUserToDeactivate(null);
+        setDeactivatePassword('');
         fetchUsers();
       } else {
         toast({
@@ -585,13 +612,14 @@ export default function UserManagementPage() {
                               <div className="space-y-4">
                                 <div>
                                   <Label htmlFor="edit-role">Role</Label>
-                                                                     <Select value={formData.role} onValueChange={(value: 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
+                                                                     <Select value={formData.role} onValueChange={(value: 'superadmin' | 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
                                      <SelectTrigger>
                                        <SelectValue />
                                      </SelectTrigger>
                                      <SelectContent>
                                        <SelectItem value="staff">Staff</SelectItem>
                                        <SelectItem value="admin">Admin</SelectItem>
+                                       <SelectItem value="superadmin">Superadmin</SelectItem>
                                      </SelectContent>
                                    </Select>
                                 </div>
@@ -600,7 +628,7 @@ export default function UserManagementPage() {
                                     Cancel
                                   </Button>
                                   <Button onClick={handleUpdateUser}>
-                                    Update Role
+                                    Update
                                   </Button>
                                 </div>
                               </div>
@@ -758,6 +786,92 @@ export default function UserManagementPage() {
              <div className="flex justify-end">
                <Button onClick={() => setCredentialsModalOpen(false)}>
                  Close
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+
+       {/* Password Confirmation Dialog for Role Update */}
+       <Dialog open={passwordConfirmDialogOpen} onOpenChange={setPasswordConfirmDialogOpen}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>Confirm Password</DialogTitle>
+             <DialogDescription>
+               Please enter your current password to confirm the role change for {selectedUser ? anonymizeName(selectedUser.full_name) : 'this user'}.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4">
+             <div>
+               <Label htmlFor="confirm-password">Current Password</Label>
+               <Input
+                 id="confirm-password"
+                 type="password"
+                 value={confirmPassword}
+                 onChange={(e) => setConfirmPassword(e.target.value)}
+                 placeholder="Enter your current password"
+                 className="mt-1"
+               />
+             </div>
+             <div className="flex justify-end space-x-2">
+               <Button 
+                 variant="outline" 
+                 onClick={() => {
+                   setPasswordConfirmDialogOpen(false);
+                   setConfirmPassword('');
+                 }}
+               >
+                 Cancel
+               </Button>
+               <Button 
+                 onClick={handleConfirmPasswordUpdate}
+                 disabled={!confirmPassword}
+               >
+                 Confirm Update
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+
+       {/* Password Confirmation Dialog for User Deactivation */}
+       <Dialog open={deactivatePasswordDialogOpen} onOpenChange={setDeactivatePasswordDialogOpen}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>Confirm User Deactivation</DialogTitle>
+             <DialogDescription>
+               Please enter your current password to confirm deactivating this user. This action can be reversed later.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4">
+             <div>
+               <Label htmlFor="deactivate-password">Current Password</Label>
+               <Input
+                 id="deactivate-password"
+                 type="password"
+                 value={deactivatePassword}
+                 onChange={(e) => setDeactivatePassword(e.target.value)}
+                 placeholder="Enter your current password"
+                 className="mt-1"
+               />
+             </div>
+             <div className="flex justify-end space-x-2">
+               <Button 
+                 variant="outline" 
+                 onClick={() => {
+                   setDeactivatePasswordDialogOpen(false);
+                   setUserToDeactivate(null);
+                   setDeactivatePassword('');
+                 }}
+               >
+                 Cancel
+               </Button>
+               <Button 
+                 onClick={handleConfirmDeactivateUser}
+                 disabled={!deactivatePassword}
+                 variant="destructive"
+               >
+                 Confirm Deactivation
                </Button>
              </div>
            </div>

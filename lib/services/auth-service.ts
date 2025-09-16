@@ -43,6 +43,27 @@ export class AuthService {
   }
 
   /**
+   * Verify a user's password by user ID
+   */
+  static async verifyUserPassword(userId: string, password: string): Promise<boolean> {
+    try {
+      const result = await db.query(
+        'SELECT password_hash FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return false;
+      }
+
+      return await this.verifyPassword(password, result.rows[0].password_hash);
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return false;
+    }
+  }
+
+  /**
    * Register a new user
    */
   static async registerUser(userData: {
@@ -165,7 +186,7 @@ export class AuthService {
    */
   static async updateUserRole(
     userId: string, 
-    newRole: 'admin' | 'staff', 
+    newRole: 'superadmin' | 'admin' | 'staff', 
     updatedBy: string
   ): Promise<{ success: boolean; error?: string }> {
     try {

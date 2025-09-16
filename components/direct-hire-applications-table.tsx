@@ -504,30 +504,35 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     let currentStatus = "No statuses checked"
     let statusColor = "bg-gray-100 text-gray-800"
 
+    // Compute progress based on how many main statuses are completed
+    const STATUS_KEYS = ['evaluated','for_confirmation','emailed_to_dhad','received_from_dhad','for_interview'] as const
+    const completedCount = STATUS_KEYS.reduce((acc, key) => acc + (status_checklist?.[key]?.checked ? 1 : 0), 0)
+    const totalCount = STATUS_KEYS.length
+
     switch (latestKey) {
       case "evaluated":
         currentStatus = "Evaluated"
-        statusColor = "bg-blue-100 text-blue-800"
+        statusColor = "bg-blue-50 text-blue-700" // Very Light Blue
         break
       case "for_confirmation_confirmed":
         currentStatus = "Confirmed"
-        statusColor = "bg-teal-100 text-teal-800"
+        statusColor = "bg-blue-100 text-blue-800" // Light Blue
         break
       case "for_confirmation":
         currentStatus = "For Confirmation"
-        statusColor = "bg-yellow-100 text-yellow-800"
+        statusColor = "bg-blue-100 text-blue-800" // Light Blue
         break
       case "emailed_to_dhad":
         currentStatus = "Emailed to DHAD"
-        statusColor = "bg-purple-100 text-purple-800"
+        statusColor = "bg-blue-200 text-blue-800" // Medium Blue
         break
       case "received_from_dhad":
         currentStatus = "Received from DHAD"
-        statusColor = "bg-green-100 text-green-800"
+        statusColor = "bg-teal-100 text-teal-800" // Teal / Aqua
         break
       case "for_interview":
         currentStatus = "For Interview"
-        statusColor = "bg-pink-100 text-pink-800"
+        statusColor = "bg-green-500 text-white" // Medium Green
         break
       case null:
       default:
@@ -535,7 +540,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
         switch (application.status) {
           case 'evaluated':
             currentStatus = 'Evaluated'
-            statusColor = 'bg-blue-100 text-blue-800'
+            statusColor = 'bg-blue-50 text-blue-700' // Very Light Blue
             break
           case 'pending':
             currentStatus = 'Pending'
@@ -551,9 +556,17 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             break
           default:
             currentStatus = 'No statuses checked'
-            statusColor = 'bg-gray-100 text-gray-800'
+            statusColor = 'bg-gray-100 text-gray-800' // 0 – Gray
         }
     }
+
+    // If all statuses are checked, show Finished
+    if (totalCount > 0 && completedCount === totalCount) {
+      currentStatus = 'Finished'
+      statusColor = 'bg-green-600 text-white' // Bold Green
+    }
+
+    // Keep numeric indicator only (no progress bar colors)
 
     return (
       <div className="flex flex-col gap-2">
@@ -582,7 +595,13 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
             setStatusChecklistOpen(true)
           }}
         >
-          {currentStatus}
+          <span>{currentStatus}</span>
+          {status_checklist && (
+            <span className="ml-2 flex items-center gap-1">
+              <span className="opacity-60">|</span>
+              <span className="text-xs opacity-80">{completedCount}/{totalCount}</span>
+            </span>
+          )}
           {application.status !== 'draft' && (
             <Settings className="h-3 w-3 ml-1" />
           )}
@@ -1009,11 +1028,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                   {(() => {
                     const { status_checklist } = selected
                     const statusOptions = [
-                      { key: 'evaluated', label: 'Evaluated', color: 'text-blue-600' },
-                      { key: 'for_confirmation', label: 'For Confirmation', color: 'text-yellow-600' },
-                      { key: 'emailed_to_dhad', label: 'Emailed to DHAD', color: 'text-purple-600' },
-                      { key: 'received_from_dhad', label: 'Received from DHAD', color: 'text-green-600' },
-                      { key: 'for_interview', label: 'For Interview', color: 'text-pink-600' }
+                      { key: 'evaluated', label: 'Evaluated', dot: 'text-blue-600', text: 'text-blue-700' },
+                      { key: 'for_confirmation', label: 'For Confirmation', dot: 'text-blue-500', text: 'text-blue-800' },
+                      { key: 'emailed_to_dhad', label: 'Emailed to DHAD', dot: 'text-blue-600', text: 'text-blue-800' },
+                      { key: 'received_from_dhad', label: 'Received from DHAD', dot: 'text-teal-600', text: 'text-teal-700' },
+                      { key: 'for_interview', label: 'For Interview', dot: 'text-green-600', text: 'text-green-700' }
                     ]
                     
                     if (!status_checklist) {
@@ -1045,17 +1064,25 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     const currentStatusKey = checkedItems.length > 0 ? checkedItems[checkedItems.length - 1][0] : null
                     
                     return statusOptions.map(status => {
-                      const isChecked = status_checklist[status.key as keyof typeof status_checklist]?.checked
-                      const timestamp = status_checklist[status.key as keyof typeof status_checklist]?.timestamp
+                      // Special handling: For Confirmation should consider confirmed state as checked
+                      const isForConfirmation = status.key === 'for_confirmation'
+                      const baseChecked = status_checklist[status.key as keyof typeof status_checklist]?.checked
+                      const confirmedChecked = (status_checklist as any)?.for_confirmation_confirmed?.checked
+                      const isChecked = isForConfirmation ? (baseChecked || confirmedChecked) : baseChecked
+
+                      // Prefer confirmed timestamp if available for For Confirmation
+                      const baseTs = status_checklist[status.key as keyof typeof status_checklist]?.timestamp
+                      const confirmedTs = (status_checklist as any)?.for_confirmation_confirmed?.timestamp
+                      const timestamp = isForConfirmation ? (confirmedTs || baseTs) : baseTs
                       const isCurrent = currentStatusKey === status.key
                       
                       return (
                         <li key={status.key} className="flex items-center gap-2 mb-1">
-                          <span className={`text-lg ${isChecked ? status.color : 'text-gray-400'}`}>●</span>
-                          <span className={`font-semibold ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
+                          <span className={`text-lg ${isChecked ? (status as any).dot : 'text-gray-400'}`}>●</span>
+                          <span className={`font-semibold ${isChecked ? (status as any).text : 'text-gray-700'}`}>
                             {status.label}
                     </span>
-                          <span className={`ml-auto text-xs ${isChecked ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-500'}`}>
+                          <span className={`ml-auto text-xs ${isChecked ? (status as any).text : 'text-gray-500'}`}>
                             {isChecked ? (
                               timestamp 
                                 ? new Date(timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })

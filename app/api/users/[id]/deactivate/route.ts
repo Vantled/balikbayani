@@ -43,6 +43,26 @@ export async function PUT(
       }, { status: 400 });
     }
 
+    // Get password from request body
+    const body = await request.json();
+    const { current_password } = body;
+
+    if (!current_password) {
+      return NextResponse.json({
+        success: false,
+        error: 'Current password is required'
+      }, { status: 400 });
+    }
+
+    // Verify current password
+    const passwordValid = await AuthService.verifyUserPassword(user.id, current_password);
+    if (!passwordValid) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid current password'
+      }, { status: 400 });
+    }
+
     // Deactivate user
     const result = await AuthService.deactivateUser(params.id, user.id);
 

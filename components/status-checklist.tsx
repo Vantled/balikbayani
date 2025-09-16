@@ -27,11 +27,11 @@ interface StatusChecklistProps {
 }
 
 const STATUS_OPTIONS = [
-  { key: 'evaluated', label: 'Evaluated', color: 'bg-blue-100 text-blue-800' },
-  { key: 'for_confirmation', label: 'For Confirmation', color: 'bg-yellow-100 text-yellow-800' },
-  { key: 'emailed_to_dhad', label: 'Emailed to DHAD', color: 'bg-purple-100 text-purple-800' },
-  { key: 'received_from_dhad', label: 'Received from DHAD', color: 'bg-green-100 text-green-800' },
-  { key: 'for_interview', label: 'For Interview', color: 'bg-pink-100 text-pink-800' }
+  { key: 'evaluated', label: 'Evaluated', color: 'bg-blue-50 text-blue-700' },            // Soft blue
+  { key: 'for_confirmation', label: 'For Confirmation', color: 'bg-blue-100 text-blue-800' }, // Light blue
+  { key: 'emailed_to_dhad', label: 'Emailed to DHAD', color: 'bg-blue-200 text-blue-800' },   // Slightly darker pastel blue
+  { key: 'received_from_dhad', label: 'Received from DHAD', color: 'bg-teal-100 text-teal-800' }, // Teal / Aqua
+  { key: 'for_interview', label: 'For Interview', color: 'bg-green-500 text-white' }       // Medium green
 ]
 
 export default function StatusChecklist({

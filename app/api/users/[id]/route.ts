@@ -37,7 +37,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { role } = body;
+    const { role, current_password } = body;
 
     // Validation
     if (!role) {
@@ -51,6 +51,22 @@ export async function PUT(
       return NextResponse.json({
         success: false,
         error: 'Invalid role'
+      }, { status: 400 });
+    }
+
+    if (!current_password) {
+      return NextResponse.json({
+        success: false,
+        error: 'Current password is required'
+      }, { status: 400 });
+    }
+
+    // Verify current password
+    const passwordValid = await AuthService.verifyUserPassword(user.id, current_password);
+    if (!passwordValid) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid current password'
       }, { status: 400 });
     }
 

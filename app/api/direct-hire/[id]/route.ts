@@ -71,6 +71,17 @@ export async function PUT(
     if (body.evaluator !== undefined) updateData.evaluator = String(body.evaluator || '').toUpperCase();
     if (body.employer !== undefined) updateData.employer = String(body.employer || '').toUpperCase();
 
+    // Merge metadata into status_checklist if provided
+    if (body.for_interview_meta || body.for_confirmation_meta) {
+      const existingSc: any = (existingApplication as any).status_checklist || {}
+      updateData.status_checklist = {
+        ...existingSc,
+        ...(body.status_checklist || {}),
+        ...(body.for_interview_meta ? { for_interview_meta: body.for_interview_meta } : {}),
+        ...(body.for_confirmation_meta ? { for_confirmation_meta: body.for_confirmation_meta } : {}),
+      }
+    }
+
     // If client didn't send checklist but sets status to evaluated, set it here
     if (body.status === 'evaluated' && !body.status_checklist) {
       updateData.status_checklist = {

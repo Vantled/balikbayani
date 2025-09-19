@@ -99,6 +99,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Extract metadata for status checklist from form fields
+      const processedWorkersPrincipal = formData.get('processed_workers_principal') as string | null
+      const processedWorkersLas = formData.get('processed_workers_las') as string | null
+      const verifierType = formData.get('verifier_type') as string | null
+      const verifierOffice = formData.get('verifier_office') as string | null
+      const pePcgCity = formData.get('pe_pcg_city') as string | null
+      const othersText = formData.get('others_text') as string | null
+      const verifiedDate = formData.get('verified_date') as string | null
+
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
 
@@ -125,7 +134,19 @@ export async function POST(request: NextRequest) {
               for_confirmation: { checked: false, timestamp: undefined },
               emailed_to_dhad: { checked: false, timestamp: undefined },
               received_from_dhad: { checked: false, timestamp: undefined },
-              for_interview: { checked: false, timestamp: undefined }
+              for_interview: { checked: false, timestamp: undefined },
+              // Persist metadata inside checklist for compatibility
+              for_interview_meta: {
+                processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : undefined,
+                processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : undefined,
+              },
+              for_confirmation_meta: {
+                verifier_type: (verifierType || '').toUpperCase() || undefined,
+                verifier_office: verifierOffice || undefined,
+                pe_pcg_city: pePcgCity || undefined,
+                others_text: othersText || undefined,
+                verified_date: verifiedDate || undefined,
+              }
             }
           }
           const evaluatedChecked = status === 'evaluated'
@@ -134,7 +155,18 @@ export async function POST(request: NextRequest) {
             for_confirmation: { checked: false, timestamp: undefined },
             emailed_to_dhad: { checked: false, timestamp: undefined },
             received_from_dhad: { checked: false, timestamp: undefined },
-            for_interview: { checked: false, timestamp: undefined }
+            for_interview: { checked: false, timestamp: undefined },
+            for_interview_meta: {
+              processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : undefined,
+              processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : undefined,
+            },
+            for_confirmation_meta: {
+              verifier_type: (verifierType || '').toUpperCase() || undefined,
+              verifier_office: verifierOffice || undefined,
+              pe_pcg_city: pePcgCity || undefined,
+              others_text: othersText || undefined,
+              verified_date: verifiedDate || undefined,
+            }
           }
         })()
       };
@@ -276,7 +308,17 @@ export async function POST(request: NextRequest) {
         })()
       };
 
-      const result = await DatabaseService.createDirectHireApplication(applicationData);
+      // Attach optional metadata into status_checklist if provided
+      const applicationDataWithMeta = {
+        ...applicationData,
+        status_checklist: {
+          ...(applicationData as any).status_checklist,
+          for_interview_meta: body.for_interview_meta || undefined,
+          for_confirmation_meta: body.for_confirmation_meta || undefined,
+        }
+      }
+
+      const result = await DatabaseService.createDirectHireApplication(applicationDataWithMeta as any);
 
       const response: ApiResponse = {
         success: true,

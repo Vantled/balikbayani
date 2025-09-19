@@ -55,8 +55,19 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     job_type: "" as 'household' | 'professional' | '',
     salary: "",
     employer: "",
-    salaryCurrency: "" as Currency | ''
+    salaryCurrency: "" as Currency | '',
+    // New metadata fields
+    processed_workers_principal: "",
+    processed_workers_las: "",
+    verifier_type: "" as 'MWO' | 'PEPCG' | 'OTHERS' | '',
+    verifier_office: "",
+    pe_pcg_city: "",
+    others_text: "",
+    verified_date: "",
   })
+
+  // Tile navigation state
+  const [activeTile, setActiveTile] = useState<'form1' | 'form2'>('form1')
 
   // Get current user for evaluator
   const currentUser = getUser()
@@ -378,6 +389,41 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     }
   };
 
+  // Document checklist state (Evaluated)
+  const [docFiles, setDocFiles] = useState<Record<string, File | null>>({
+    passport: null,
+    work_visa: null,
+    employment_contract: null,
+    tesda_license: null,
+    country_specific: null,
+    compliance_form: null,
+    medical_certificate: null,
+    peos_certificate: null,
+    clearance: null,
+    insurance_coverage: null,
+    eregistration: null,
+    pdos_certificate: null,
+  })
+
+  const handleDocChange = (key: string, file: File | null) => {
+    setDocFiles(prev => ({ ...prev, [key]: file }))
+  }
+
+  const uploadSelectedDocuments = async (createdId: string) => {
+    const entries = Object.entries(docFiles).filter(([_, f]) => !!f)
+    for (const [documentType, file] of entries) {
+      if (!file) continue
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('applicationId', createdId)
+      fd.append('applicationType', 'direct_hire')
+      fd.append('documentType', documentType)
+      try {
+        await fetch('/api/documents/upload', { method: 'POST', body: fd })
+      } catch {}
+    }
+  }
+
   // Handle application update
   const handleUpdateApplication = async () => {
     // Validate form first
@@ -435,7 +481,27 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
           employer: formData.employer,
           evaluator: currentUser?.full_name || 'Unknown',
           status: existingStatus,
-          status_checklist: existingStatusChecklist
+          status_checklist: existingStatusChecklist,
+          // pass-through meta also supported by backend
+          for_interview_meta: (function(){
+            const p = Number(formData.processed_workers_principal)
+            const l = Number(formData.processed_workers_las)
+            return (isFinite(p) || isFinite(l)) ? {
+              processed_workers_principal: isFinite(p) ? p : undefined,
+              processed_workers_las: isFinite(l) ? l : undefined,
+            } : undefined
+          })(),
+          for_confirmation_meta: (function(){
+            const vt = formData.verifier_type
+            if (!vt) return undefined
+            return {
+              verifier_type: vt,
+              verifier_office: formData.verifier_office || undefined,
+              pe_pcg_city: formData.pe_pcg_city || undefined,
+              others_text: formData.others_text || undefined,
+              verified_date: formData.verified_date || undefined,
+            }
+          })()
         })
       })
 
@@ -443,6 +509,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       if (!result.success) {
         throw new Error(result.error || 'Failed to update application')
       }
+
+      // Upload selected documents
+      try { if (applicationId) await uploadSelectedDocuments(applicationId) } catch {}
 
       // Ensure parent refresh completes before toast
       await onSuccess?.()
@@ -507,6 +576,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       formDataToSend.append('documents_completed', 'false');
       formDataToSend.append('employer', formData.employer);
 
+      // Attach metadata fields so backend persists into status_checklist
+      if (formData.processed_workers_principal) formDataToSend.append('processed_workers_principal', formData.processed_workers_principal)
+      if (formData.processed_workers_las) formDataToSend.append('processed_workers_las', formData.processed_workers_las)
+      if (formData.verifier_type) formDataToSend.append('verifier_type', formData.verifier_type)
+      if (formData.verifier_office) formDataToSend.append('verifier_office', formData.verifier_office)
+      if (formData.pe_pcg_city) formDataToSend.append('pe_pcg_city', formData.pe_pcg_city)
+      if (formData.others_text) formDataToSend.append('others_text', formData.others_text)
+      if (formData.verified_date) formDataToSend.append('verified_date', formData.verified_date)
+
       const response = await fetch('/api/direct-hire', {
         method: 'POST',
         body: formDataToSend,
@@ -515,12 +593,39 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       const result = await response.json();
 
       if (result.success) {
+        const createdId: string = result.data?.id || result.data?.application?.id || ''
+        
+        // Upload selected documents
+        if (createdId) {
+          try { await uploadSelectedDocuments(createdId) } catch (error) {
+            console.error('Error uploading documents:', error)
+          }
+        }
+
+        // Generate comprehensive clearance document
+        if (createdId) {
+          try {
+            const clearanceResponse = await fetch(`/api/direct-hire/${createdId}/comprehensive-clearance?override=true`, {
+              method: 'POST'
+            })
+            if (clearanceResponse.ok) {
+              toast({
+                title: 'Comprehensive Clearance Generated',
+                description: 'The comprehensive clearance document has been created and attached.',
+              })
+            }
+          } catch (error) {
+            console.error('Error generating comprehensive clearance:', error)
+            // Don't fail the entire operation if clearance generation fails
+          }
+        }
+
         // Ensure parent refresh completes before toast
         await onSuccess?.()
         onClose();
         toast({
           title: 'Application created successfully!',
-          description: `${formData.name} has been added to the system`,
+          description: `${formData.name} has been added to the system with comprehensive clearance generated`,
         });
       } else {
         throw new Error(result.error || 'Failed to create application');
@@ -562,7 +667,38 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+          {/* Tile Navigation */}
+          <div className="flex mb-6">
+            <button
+              onClick={() => setActiveTile('form1')}
+              className={`flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTile === 'form1'
+                  ? 'text-[#1976D2] border-[#1976D2]'
+                  : 'text-gray-600 border-transparent hover:text-gray-800'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FileText className="h-4 w-4" />
+                Basic Information
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTile('form2')}
+              className={`flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTile === 'form2'
+                  ? 'text-[#1976D2] border-[#1976D2]'
+                  : 'text-gray-600 border-transparent hover:text-gray-800'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Calculator className="h-4 w-4" />
+                Additional Details & Documents
+              </div>
+            </button>
+          </div>
 
+          {/* Tile Content */}
+          {activeTile === 'form1' && (
             <div className="space-y-4">
               {/* Control No - Show actual number when editing, preview when creating */}
               <div>
@@ -774,40 +910,219 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 />
               </div>
 
+               {/* Navigation buttons for Form 1 */}
+               <div className="flex justify-between pt-6">
+                 <div></div>
+                 <Button 
+                   onClick={() => setActiveTile('form2')}
+                   className="bg-[#1976D2] hover:bg-[#1565C0]"
+                 >
+                   Next
+                 </Button>
+               </div>
+             </div>
+           )}
 
-              <div className="flex justify-end pt-4">
-                <div className="flex gap-2">
-                <Button 
-                  variant="outline"
-                  onClick={onClose}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  className="bg-[#1976D2] hover:bg-[#1565C0]" 
-                    onClick={() => {
-                      if (applicationId) {
-                        // Show confirmation modal for editing
-                        setUpdateConfirmOpen(true)
-                      } else {
-                        // Direct create for new applications
-                        handleCreateApplication()
-                      }
-                    }}
-                    disabled={loading || !formData.name || !formData.jobsite || !formData.position || !formData.salary}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        {applicationId ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                      applicationId ? 'Update' : 'Create'
-                  )}
-                </Button>
-              </div>
-              </div>
-            </div>
+           {activeTile === 'form2' && (
+             <div className="space-y-6">
+               {/* Additional Details for Comprehensive Clearance */}
+               <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                   <Calculator className="h-5 w-5 mr-2 text-blue-600" />
+                   Additional Details for Comprehensive Clearance
+                 </h3>
+                 <p className="text-sm text-gray-600 mb-4">These fields are used to generate the comprehensive clearance document.</p>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                     <Label className="text-sm font-medium">Processed Workers (Principal):</Label>
+                     <Input 
+                       type="number"
+                       value={formData.processed_workers_principal}
+                       onChange={(e) => setFormData({ ...formData, processed_workers_principal: e.target.value })}
+                       className="mt-1"
+                       placeholder="e.g., 10" 
+                     />
+                   </div>
+                   <div>
+                     <Label className="text-sm font-medium">Processed Workers (LAS):</Label>
+                     <Input 
+                       type="number"
+                       value={formData.processed_workers_las}
+                       onChange={(e) => setFormData({ ...formData, processed_workers_las: e.target.value })}
+                       className="mt-1"
+                       placeholder="e.g., 8" 
+                     />
+                   </div>
+                   <div>
+                     <Label className="text-sm font-medium">Verifier Type:</Label>
+                     <select 
+                       className="w-full border rounded px-3 py-2 text-sm mt-1"
+                       value={formData.verifier_type}
+                       onChange={(e) => setFormData({ ...formData, verifier_type: e.target.value as any })}
+                     >
+                       <option value="">----</option>
+                       <option value="MWO">MWO</option>
+                       <option value="PEPCG">PE/PCG</option>
+                       <option value="OTHERS">Others</option>
+                     </select>
+                   </div>
+                   {formData.verifier_type === 'MWO' && (
+                     <div>
+                       <Label className="text-sm font-medium">MWO Office:</Label>
+                       <Input 
+                         value={formData.verifier_office}
+                         onChange={(e) => setFormData({ ...formData, verifier_office: e.target.value.toUpperCase() })}
+                         className="mt-1"
+                         placeholder="Office"
+                       />
+                     </div>
+                   )}
+                   {formData.verifier_type === 'PEPCG' && (
+                     <div>
+                       <Label className="text-sm font-medium">PE/PCG City/Office:</Label>
+                       <Input 
+                         value={formData.pe_pcg_city}
+                         onChange={(e) => setFormData({ ...formData, pe_pcg_city: e.target.value })}
+                         className="mt-1"
+                         placeholder="City/Office"
+                       />
+                     </div>
+                   )}
+                   {formData.verifier_type === 'OTHERS' && (
+                     <div>
+                       <Label className="text-sm font-medium">Specify:</Label>
+                       <Input 
+                         value={formData.others_text}
+                         onChange={(e) => setFormData({ ...formData, others_text: e.target.value })}
+                         className="mt-1"
+                         placeholder="Details"
+                       />
+                     </div>
+                   )}
+                   <div>
+                     <Label className="text-sm font-medium">Verification Date:</Label>
+                     <Input 
+                       type="date"
+                       value={formData.verified_date}
+                       onChange={(e) => setFormData({ ...formData, verified_date: e.target.value })}
+                       className="mt-1"
+                     />
+                   </div>
+                 </div>
+               </div>
+
+               {/* Document Checklist (Evaluated) */}
+               <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                   <FileText className="h-5 w-5 mr-2 text-green-600" />
+                   Document Checklist for Evaluated
+                 </h3>
+                 <p className="text-sm text-gray-600 mb-4">Upload required and optional documents for the evaluated status.</p>
+                 
+                 {/* Required Documents */}
+                 <div className="mb-6">
+                   <h4 className="text-sm font-medium text-red-600 mb-3">Required Documents</h4>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                       <Label className="text-sm font-medium">Passport</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('passport', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Work Visa / Entry Permit</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('work_visa', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Employment Contract / Offer</Label>
+                       <Input type="file" accept=".pdf,image/*,.doc,.docx" className="mt-1" onChange={(e)=>handleDocChange('employment_contract', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">TESDA/PRC License</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('tesda_license', e.target.files?.[0]||null)} />
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Optional Documents */}
+                 <div>
+                   <h4 className="text-sm font-medium text-blue-600 mb-3">Optional Documents</h4>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                       <Label className="text-sm font-medium">Country-specific Requirement</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('country_specific', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Compliance Form</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('compliance_form', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Medical Certificate</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('medical_certificate', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">PEOS Certificate</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('peos_certificate', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Clearance</Label>
+                       <Input type="file" accept=".pdf,image/*,.doc,.docx" className="mt-1" onChange={(e)=>handleDocChange('clearance', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">Insurance Coverage</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('insurance_coverage', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">e-Registration</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('eregistration', e.target.files?.[0]||null)} />
+                     </div>
+                     <div>
+                       <Label className="text-sm font-medium">PDOS Certificate</Label>
+                       <Input type="file" accept=".pdf,image/*" className="mt-1" onChange={(e)=>handleDocChange('pdos_certificate', e.target.files?.[0]||null)} />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+
+               {/* Navigation buttons for Form 2 */}
+               <div className="flex justify-between pt-6">
+                 <Button 
+                   variant="outline"
+                   onClick={() => setActiveTile('form1')}
+                 >
+                   Back: Basic Information
+                 </Button>
+                 <div className="flex gap-2">
+                   <Button 
+                     variant="outline"
+                     onClick={onClose}
+                   >
+                     Cancel
+                   </Button>
+                   <Button 
+                     className="bg-[#1976D2] hover:bg-[#1565C0]" 
+                     onClick={() => {
+                       if (applicationId) {
+                         // Show confirmation modal for editing
+                         setUpdateConfirmOpen(true)
+                       } else {
+                         // Direct create for new applications
+                         handleCreateApplication()
+                       }
+                     }}
+                     disabled={loading || !formData.name || !formData.jobsite || !formData.position || !formData.salary}
+                   >
+                     {loading ? (
+                       <>
+                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                         {applicationId ? 'Updating...' : 'Creating...'}
+                       </>
+                     ) : (
+                       applicationId ? 'Update' : 'Create'
+                     )}
+                   </Button>
+                 </div>
+               </div>
+             </div>
+           )}
 
 
 

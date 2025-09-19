@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle2, Circle, CircleCheck } from "lucide-react"
-import DirectHireDocumentRequirements from "./direct-hire-document-requirements"
 import { Progress } from "@/components/ui/progress"
 
 interface StatusChecklistProps {
@@ -47,12 +46,10 @@ export default function StatusChecklist({
   const [loading, setLoading] = useState(false)
   const [localChecklist, setLocalChecklist] = useState(statusChecklist)
   const [showWarningModal, setShowWarningModal] = useState(false)
-  const [showDocumentRequirements, setShowDocumentRequirements] = useState(false)
-  const [pendingEvaluatedStatus, setPendingEvaluatedStatus] = useState(false)
-  const [docCounts, setDocCounts] = useState({ requiredCompleted: 0, requiredTotal: 0, optionalCompleted: 0, optionalTotal: 0 })
-  const [docsLoading, setDocsLoading] = useState(false)
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
   const [showFinishConfirm, setShowFinishConfirm] = useState(false)
+  // Deprecated: metadata moved to fill-out form; generation removed
+  // Reintroduce placeholders to avoid ReferenceErrors while modals are being fully removed
   const [showConfirmVerified, setShowConfirmVerified] = useState(false)
   const [showConfirmInterview, setShowConfirmInterview] = useState(false)
   const [showConfirmGenerate, setShowConfirmGenerate] = useState(false)
@@ -112,51 +109,6 @@ export default function StatusChecklist({
     return () => window.removeEventListener('paste', onPaste as any)
   }, [showConfirmInterview])
 
-  const REQUIRED_TYPES = useMemo(() => [
-    'passport',
-    'work_visa',
-    'employment_contract',
-    'tesda_license'
-  ], [])
-  const OPTIONAL_TYPES = useMemo(() => [
-    'country_specific',
-    'compliance_form',
-    'medical_certificate',
-    'peos_certificate',
-    'clearance',
-    'insurance_coverage',
-    'eregistration',
-    'pdos_certificate'
-  ], [])
-
-  const computeCounts = (docs: any[]) => {
-    const has = (type: string) => docs.some(d => String((d as any).document_type).toLowerCase() === type)
-    const requiredCompleted = REQUIRED_TYPES.filter(has).length
-    const optionalCompleted = OPTIONAL_TYPES.filter(has).length
-    return {
-      requiredCompleted,
-      requiredTotal: REQUIRED_TYPES.length,
-      optionalCompleted,
-      optionalTotal: OPTIONAL_TYPES.length
-    }
-  }
-
-  useEffect(() => {
-    const load = async () => {
-      if (!isOpen) return
-      try {
-        setDocsLoading(true)
-        const res = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=direct_hire`)
-        const json = await res.json()
-        if (json.success) {
-          setDocCounts(computeCounts(json.data || []))
-        }
-      } finally {
-        setDocsLoading(false)
-      }
-    }
-    load()
-  }, [isOpen, applicationId])
 
   const handleStatusClick = (key: string) => {
     const isPreviouslyChecked = statusChecklist[key as keyof typeof statusChecklist]?.checked
@@ -172,18 +124,9 @@ export default function StatusChecklist({
       return
     }
 
-    // If trying to check "Evaluated" status, check document requirements first
-    if (key === 'evaluated' && !isCurrentlyChecked && !isPreviouslyChecked) {
-      setPendingEvaluatedStatus(true)
-      setShowDocumentRequirements(true)
-      return
-    }
+    // Document checklist moved to fill-out form - no special handling needed for evaluated
 
-    // If trying to check "For Interview", open modal to collect required fields and screenshot first
-    if (key === 'for_interview' && !isCurrentlyChecked && !isPreviouslyChecked) {
-      setShowConfirmInterview(true)
-      return
-    }
+    // If trying to check "For Interview", metadata is now part of the form; proceed without modal
 
     // Toggle the current selection
     const newChecked = !isCurrentlyChecked
@@ -265,111 +208,6 @@ export default function StatusChecklist({
     }
   }
 
-  const handleDocumentRequirementsComplete = () => {
-    // Mark evaluated status as checked
-    setLocalChecklist(prev => ({
-      ...prev,
-      evaluated: { checked: true, timestamp: new Date().toISOString() }
-    }))
-    
-    // Uncheck other statuses that were not previously checked
-    setLocalChecklist(prev => {
-      const next = { ...prev }
-      Object.keys(next).forEach(k => {
-        const wasPrevChecked = statusChecklist[k as keyof typeof statusChecklist]?.checked
-        if (!wasPrevChecked && k !== 'evaluated') {
-          next[k as keyof typeof next] = { checked: false, timestamp: undefined }
-        }
-      })
-      return next
-    })
-    
-    setPendingEvaluatedStatus(false)
-    setShowDocumentRequirements(false)
-    
-    toast({
-      title: "Document Requirements Complete",
-      description: "Evaluated status is now available. Click 'Save Changes' to confirm.",
-    })
-  }
-
-  const canGenerateChecklist = docCounts.requiredCompleted === docCounts.requiredTotal
-
-  const handleGenerateChecklist = async () => {
-    if (!canGenerateChecklist) return
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/direct-hire/${applicationId}/evaluation-checklist`, { method: 'POST' })
-      if (res.status === 409) {
-        if (true) {
-          const res2 = await fetch(`/api/direct-hire/${applicationId}/evaluation-checklist?override=true`, { method: 'POST' })
-          if (!res2.ok) throw new Error('Failed to override')
-          toast({ title: 'Documents overridden', description: 'Existing evaluation checklist was replaced. DMW clearance request regenerated.' })
-        } else {
-          toast({ title: 'Generation cancelled', description: 'Existing documents were kept.' })
-        }
-      } else if (res.ok) {
-        toast({ title: 'Documents generated', description: 'Evaluation checklist and DMW clearance request have been attached.' })
-      } else {
-        throw new Error('Failed to generate')
-      }
-    } catch {
-      toast({ title: 'Failed to generate', description: 'Could not generate the documents.', variant: 'destructive' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleFinishEvaluated = async () => {
-    // Mark evaluated as checked (auto) and uncheck other newly checked ones
-    const updatedChecklist = { ...localChecklist }
-    Object.keys(updatedChecklist).forEach(k => {
-      const wasPrevChecked = statusChecklist[k as keyof typeof statusChecklist]?.checked
-      if (!wasPrevChecked && k !== 'evaluated') {
-        updatedChecklist[k as keyof typeof updatedChecklist] = { checked: false, timestamp: undefined }
-      }
-    })
-    updatedChecklist.evaluated = { checked: true, timestamp: new Date().toISOString() }
-    
-    // Update local state immediately
-    setLocalChecklist(updatedChecklist)
-    
-    // Save to database
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/direct-hire/${applicationId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status_checklist: updatedChecklist
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        // Update parent component
-        onStatusUpdate(currentStatus, updatedChecklist)
-        toast({
-          title: "Status updated",
-          description: "Evaluated status has been marked as completed.",
-        })
-        onClose()
-      } else {
-        throw new Error(result.error || 'Failed to update status')
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update status checklist. Please try again.",
-        variant: "destructive"
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getCurrentStatusDisplay = () => {
     const checkedItems = Object.entries(localChecklist).filter(([_, status]) => status.checked)
@@ -423,9 +261,6 @@ export default function StatusChecklist({
                               && Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked)
                               ? 'Confirmed'
                               : option.label}
-                            {option.key === 'evaluated' && !status.checked && (
-                              <span className="text-xs text-gray-600">{` ${docCounts.requiredCompleted}/${docCounts.requiredTotal} required documents | ${docCounts.optionalCompleted}/${docCounts.optionalTotal} optional documents`}</span>
-                            )}
                           </label>
                           {status.checked && status.timestamp && (
                             <span className="text-xs text-gray-500">
@@ -434,43 +269,7 @@ export default function StatusChecklist({
                           )}
                           {/* Right-side container for timestamp and other actions */}
                           <div className="ml-auto flex items-center gap-2 flex-1 justify-end">
-                            {option.key === 'for_confirmation' 
-                              && Boolean((statusChecklist as any)?.for_confirmation?.checked) 
-                              && !Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked) && (
-                              <Button size="sm" onClick={(e) => { e.stopPropagation(); setConfirmModalMarksStatus(true); setShowConfirmVerified(true) }} disabled={loading}>
-                                Mark as Confirmed
-                              </Button>
-                            )}
-                            {option.key === 'for_confirmation' 
-                              && Boolean((statusChecklist as any)?.for_confirmation_confirmed?.checked) && (
-                              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setShowConfirmGenerate(true) }} disabled={loading}>
-                                Generate
-                              </Button>
-                            )}
-                            {option.key === 'evaluated' && canGenerateChecklist && (
-                                <Button size="sm" variant="outline" disabled={loading} onClick={(e) => { e.stopPropagation(); setShowGenerateConfirm(true); }}>
-                                  Generate
-                                </Button>
-                              )}
-                              {option.key === 'evaluated' && !status.checked && (
-                                <Button size="sm" disabled={!canGenerateChecklist || loading} onClick={(e) => { e.stopPropagation(); setShowFinishConfirm(true); }}>
-                                  Finish
-                                </Button>
-                              )}
-                              {option.key === 'for_interview' && status.checked && (
-                                <Button size="sm" variant="outline" disabled={loading} onClick={(e) => {
-                                  e.stopPropagation();
-                                  const meta: any = (localChecklist as any)?.for_interview_meta || (statusChecklist as any)?.for_interview_meta
-                                  if (!meta || typeof meta.processed_workers_principal !== 'number' || typeof meta.processed_workers_las !== 'number') {
-                                    toast({ title: 'Missing details', description: 'Open the For Interview modal to input required fields and attach a screenshot before generating.', variant: 'destructive' })
-                                    setShowConfirmInterview(true)
-                                    return
-                                  }
-                                  setShowConfirmGenerateInterview(true)
-                                }}>
-                                  Generate
-                                </Button>
-                              )}
+                            {/* Document checklist and generation moved to fill-out form */}
                           </div>
                         </div>
                       )
@@ -497,7 +296,7 @@ export default function StatusChecklist({
       </Dialog>
 
       {/* Generate Confirmation Modal */}
-      <Dialog open={showConfirmGenerate} onOpenChange={setShowConfirmGenerate}>
+      <Dialog open={showConfirmGenerate} onOpenChange={setShowGenerateConfirm}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Generate Confirmation Document</DialogTitle>
@@ -1028,55 +827,6 @@ export default function StatusChecklist({
         </DialogContent>
       </Dialog>
 
-      {/* Document Requirements Modal */}
-      {showDocumentRequirements && (
-        <DirectHireDocumentRequirements
-          applicationId={applicationId}
-          currentStatus={currentStatus}
-          isOpen={showDocumentRequirements}
-          onClose={() => {
-            setShowDocumentRequirements(false)
-            setPendingEvaluatedStatus(false)
-          }}
-          onStatusUpdate={(newStatus) => {
-            if (newStatus === 'evaluated') {
-              handleDocumentRequirementsComplete()
-            }
-          }}
-        />
-      )}
-
-      {/* Generate Confirmation Modal */}
-      <Dialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Generate Evaluation Checklist</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-gray-700">
-            This will generate the Evaluation Requirements Checklist and attach it to the application. If a file already exists, you will be asked to override it.
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setShowGenerateConfirm(false)}>Cancel</Button>
-            <Button onClick={async ()=>{ setShowGenerateConfirm(false); await handleGenerateChecklist(); }}>Generate</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Finish Confirmation Modal */}
-      <Dialog open={showFinishConfirm} onOpenChange={setShowFinishConfirm}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Finish Evaluated Status</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-gray-700">
-            This will mark Evaluated as completed for this application. Proceed?
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setShowFinishConfirm(false)}>Cancel</Button>
-            <Button onClick={async ()=>{ setShowFinishConfirm(false); await handleFinishEvaluated(); }}>Finish</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Generate For Interview Documents Confirmation Modal */}
       <Dialog open={showConfirmGenerateInterview} onOpenChange={setShowConfirmGenerateInterview}>

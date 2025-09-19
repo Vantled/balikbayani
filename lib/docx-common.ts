@@ -15,8 +15,8 @@ function mk(value: any) {
 
 export function buildDirectHireDocxData(application: DirectHireApplication, documents?: Document[]): CommonDocxData {
   const evalMeta = safeParse((application as any).evaluation_meta)
-  const interviewMeta = safeParse((application as any).for_interview_meta) || safeParse((application as any).status_checklist?.for_interview_meta)
-  const confirmMeta = safeParse((application as any).confirmation_meta) || safeParse((application as any).status_checklist?.for_confirmation_meta)
+  const interviewMeta = safeParse((application as any).status_checklist?.for_interview_meta) || safeParse((application as any).for_interview_meta)
+  const confirmMeta = safeParse((application as any).status_checklist?.for_confirmation_meta) || safeParse((application as any).confirmation_meta)
 
   const createdAtIso = new Date(((application as any)?.created_at || Date.now())).toISOString().slice(0,10)
 
@@ -103,16 +103,18 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     DATE: createdAtIso,
 
     // Passport fields
-    passport_number: evalMeta.passport_number || confirmMeta.passport_number || (application as any).passport_number || '',
-    passport_expiry: evalMeta.passport_expiry || confirmMeta.passport_expiry || (application as any).passport_expiry || '',
+    passport_number: evalMeta.passport_number || confirmMeta.passport_number || (application as any).passport_number || 'TO BE PROVIDED',
+    passport_expiry: evalMeta.passport_expiry || confirmMeta.passport_expiry || (application as any).passport_expiry || 'TO BE PROVIDED',
     passport_check: passportPresent ? CHECK : EMPTY,
     passport_attached: passportPresent ? 'ATTACHED' : EMPTY,
 
     // Visa fields
     visa_type: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type
-      || evalMeta.visa_type || confirmMeta.visa_type || (application as any).visa_type || ''),
+      || evalMeta.visa_type || confirmMeta.visa_type || (application as any).visa_type || 'TO BE PROVIDED'),
     visa_validity: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity
-      || evalMeta.visa_validity || confirmMeta.visa_validity || (application as any).visa_validity || ''),
+      || evalMeta.visa_validity || confirmMeta.visa_validity || (application as any).visa_validity || 'TO BE PROVIDED'),
+    visa_number: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_number
+      || evalMeta.visa_number || confirmMeta.visa_number || (application as any).visa_number || 'TO BE PROVIDED'),
     work_visa_check: visaPresent ? CHECK : EMPTY,
     visa_attached: visaPresent ? 'ATTACHED' : EMPTY,
     employment_contract_check: employmentContractPresent ? CHECK : EMPTY,
@@ -173,6 +175,10 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     mwo_office: isMWO ? (confirmMeta.verifier_office || '') : '',
     pe_pcg_city: isPePcg ? (confirmMeta.pe_pcg_city || '') : '',
     others_text: isOthers ? (confirmMeta.others_text || '') : '',
+    
+    // Screenshot fields for attachment_screenshots
+    image_screenshot1: interviewMeta.screenshot_url || interviewMeta.verification_image_url || '',
+    image_screenshot2: confirmMeta.verification_image_url || '',
   }
 
   const jsCtx = {
@@ -194,6 +200,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     passport_attached: mk(data.passport_attached),
     visa_type: mk(data.visa_type),
     visa_validity: mk(data.visa_validity),
+    visa_number: mk(data.visa_number),
     work_visa_check: mk(data.work_visa_check),
     visa_attached: mk(data.visa_attached),
     employment_contract_check: mk(data.employment_contract_check),
@@ -236,6 +243,10 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     mwo_check: mk(data.mwo_check),
     pe_pcg_check: mk(data.pe_pcg_check),
     others_check: mk(data.others_check),
+    
+    // Screenshot fields for attachment_screenshots
+    image_screenshot1: mk(interviewMeta.screenshot_url || interviewMeta.verification_image_url || ''),
+    image_screenshot2: mk(confirmMeta.verification_image_url || ''),
   }
 
   return { data, jsCtx }

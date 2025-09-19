@@ -95,8 +95,8 @@ export async function POST(
     // Extract metadata from application fields and fall back to status_checklist meta
     const sc: any = (application as any).status_checklist || {}
     const evaluationMeta = application.evaluation_meta ? JSON.parse(application.evaluation_meta) : (sc.evaluation_meta || {})
-    const interviewMeta = application.for_interview_meta ? JSON.parse(application.for_interview_meta) : (sc.for_interview_meta || {})
-    const confirmationMeta = application.confirmation_meta ? JSON.parse(application.confirmation_meta) : (sc.for_confirmation_meta || {})
+    const interviewMeta = sc.for_interview_meta || (application.for_interview_meta ? JSON.parse(application.for_interview_meta) : {})
+    const confirmationMeta = sc.for_confirmation_meta || (application.confirmation_meta ? JSON.parse(application.confirmation_meta) : {})
     
     console.log('[Comprehensive] interviewMeta:', interviewMeta)
     console.log('[Comprehensive] sc.for_interview_meta:', sc.for_interview_meta)
@@ -115,6 +115,12 @@ export async function POST(
       const lower = types.map(t => t.toLowerCase())
       const doc = (allDocs || []).find(d => lower.includes(String((d as any).document_type || '').toLowerCase())) as any
       return (doc?.meta as any) || {}
+    }
+
+    // Helper to check if document type exists
+    const hasDoc = (...types: string[]) => {
+      const lower = types.map(t => t.toLowerCase())
+      return (allDocs || []).some(d => lower.includes(String((d as any).document_type || '').toLowerCase()))
     }
 
     // Prepare comprehensive data object with all possible tags
@@ -168,7 +174,8 @@ export async function POST(
       total_documents: allDocs?.length || 0,
       important_documents: allDocs?.filter(d => {
         const type = (d.document_type || '').toLowerCase()
-        return ['dmw_clearance_request', 'evaluation_requirements_checklist', 'issuance_of_oec_memorandum', 'confirmation', 'clearance'].includes(type)
+        // Only count documents that are still being generated
+        return ['comprehensive_clearance'].includes(type)
       }).length || 0,
 
       // Status information
@@ -178,7 +185,42 @@ export async function POST(
       // Additional fields that might be useful
       application_id: application.id,
       created_at: createdDateStr,
-      updated_at: application.updated_at || createdDateStr
+      updated_at: application.updated_at || createdDateStr,
+
+      // Evaluation Checklist Tags
+      passport_check: hasDoc('passport', 'valid_passport', 'passport_copy') ? CHECK : EMPTY,
+      passport_attached: hasDoc('passport', 'valid_passport', 'passport_copy') ? 'ATTACHED' : EMPTY,
+      work_visa_check: hasDoc('work_visa', 'visa', 'visa_work_permit', 'entry_permit') ? CHECK : EMPTY,
+      visa_attached: hasDoc('work_visa', 'visa', 'visa_work_permit', 'entry_permit') ? 'ATTACHED' : EMPTY,
+      employment_contract_check: hasDoc('employment_contract', 'offer_of_employment') ? CHECK : EMPTY,
+      employment_contract_attached: hasDoc('employment_contract', 'offer_of_employment') ? 'ATTACHED' : EMPTY,
+      country_specific_check: hasDoc('country_specific') ? CHECK : EMPTY,
+      country_specific_attached: hasDoc('country_specific') ? 'ATTACHED' : EMPTY,
+      tesda_license_check: hasDoc('tesda_license', 'tesda', 'prc_license') ? CHECK : EMPTY,
+      tesda_license_attached: hasDoc('tesda_license', 'tesda', 'prc_license') ? 'ATTACHED' : EMPTY,
+      compliance_form_check: hasDoc('compliance_form') ? CHECK : EMPTY,
+      compliance_form_attached: hasDoc('compliance_form') ? 'ATTACHED' : EMPTY,
+      medical_certificate_check: hasDoc('medical_certificate') ? CHECK : EMPTY,
+      medical_certificate_attached: hasDoc('medical_certificate') ? 'ATTACHED' : EMPTY,
+      peos_certificate_check: hasDoc('peos_certificate') ? CHECK : EMPTY,
+      peos_certificate_attached: hasDoc('peos_certificate') ? 'ATTACHED' : EMPTY,
+      clearance_check: hasDoc('clearance') ? CHECK : EMPTY,
+      clearance_attached: hasDoc('clearance') ? 'ATTACHED' : EMPTY,
+      insurance_coverage_check: hasDoc('insurance_coverage') ? CHECK : EMPTY,
+      insurance_coverage_attached: hasDoc('insurance_coverage') ? 'ATTACHED' : EMPTY,
+      eregistration_check: hasDoc('eregistration') ? CHECK : EMPTY,
+      eregistration_attached: hasDoc('eregistration') ? 'ATTACHED' : EMPTY,
+      pdos_certificate_check: hasDoc('pdos_certificate') ? CHECK : EMPTY,
+      pdos_certificate_attached: hasDoc('pdos_certificate') ? 'ATTACHED' : EMPTY,
+
+      // Visa details
+      visa_type: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type || 'TO BE PROVIDED'),
+      visa_validity: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity || 'TO BE PROVIDED'),
+      visa_number: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_number || 'TO BE PROVIDED'),
+
+      // Screenshot fields for attachment_screenshots
+      image_screenshot1: interviewMeta.screenshot_url || interviewMeta.verification_image_url || '',
+      image_screenshot2: confirmationMeta.verification_image_url || ''
     }
 
     // Generate the comprehensive clearance document
@@ -305,6 +347,41 @@ export async function POST(
         mwo_check: mk(check(isMWO)),
         pe_pcg_check: mk(check(isPePcg)),
         others_check: mk(check(isOthers)),
+        
+        // Evaluation Checklist Tags
+        passport_check: mk(comprehensiveData.passport_check),
+        passport_attached: mk(comprehensiveData.passport_attached),
+        work_visa_check: mk(comprehensiveData.work_visa_check),
+        visa_attached: mk(comprehensiveData.visa_attached),
+        employment_contract_check: mk(comprehensiveData.employment_contract_check),
+        employment_contract_attached: mk(comprehensiveData.employment_contract_attached),
+        country_specific_check: mk(comprehensiveData.country_specific_check),
+        country_specific_attached: mk(comprehensiveData.country_specific_attached),
+        tesda_license_check: mk(comprehensiveData.tesda_license_check),
+        tesda_license_attached: mk(comprehensiveData.tesda_license_attached),
+        compliance_form_check: mk(comprehensiveData.compliance_form_check),
+        compliance_form_attached: mk(comprehensiveData.compliance_form_attached),
+        medical_certificate_check: mk(comprehensiveData.medical_certificate_check),
+        medical_certificate_attached: mk(comprehensiveData.medical_certificate_attached),
+        peos_certificate_check: mk(comprehensiveData.peos_certificate_check),
+        peos_certificate_attached: mk(comprehensiveData.peos_certificate_attached),
+        clearance_check: mk(comprehensiveData.clearance_check),
+        clearance_attached: mk(comprehensiveData.clearance_attached),
+        insurance_coverage_check: mk(comprehensiveData.insurance_coverage_check),
+        insurance_coverage_attached: mk(comprehensiveData.insurance_coverage_attached),
+        eregistration_check: mk(comprehensiveData.eregistration_check),
+        eregistration_attached: mk(comprehensiveData.eregistration_attached),
+        pdos_certificate_check: mk(comprehensiveData.pdos_certificate_check),
+        pdos_certificate_attached: mk(comprehensiveData.pdos_certificate_attached),
+        
+        // Visa details
+        visa_type: mk(comprehensiveData.visa_type),
+        visa_validity: mk(comprehensiveData.visa_validity),
+        visa_number: mk(comprehensiveData.visa_number),
+        
+        // Screenshot fields
+        image_screenshot1: mk(comprehensiveData.image_screenshot1),
+        image_screenshot2: mk(comprehensiveData.image_screenshot2)
       },
       // Image hooks for {%image ...%} tags
       getImage: (tagValue: any) => {

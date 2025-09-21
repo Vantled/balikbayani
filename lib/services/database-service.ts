@@ -125,6 +125,7 @@ export class DatabaseService {
     raw_salary?: number;
   }): Promise<DirectHireApplication> {
     console.log('Database service creating application with data:', data);
+    console.log('Evaluator field in database service:', data.evaluator);
     const query = `
       INSERT INTO direct_hire_applications 
       (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)

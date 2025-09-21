@@ -68,7 +68,7 @@ export async function PUT(
     if (body.jobsite) updateData.jobsite = String(body.jobsite).toUpperCase();
     if (body.position) updateData.position = String(body.position).toUpperCase();
     if (body.job_type) updateData.job_type = body.job_type as any;
-    if (body.evaluator !== undefined) updateData.evaluator = String(body.evaluator || '').toUpperCase();
+    if (body.evaluator !== undefined && body.evaluator !== null && body.evaluator !== '') updateData.evaluator = String(body.evaluator).toUpperCase();
     if (body.employer !== undefined) updateData.employer = String(body.employer || '').toUpperCase();
 
     // Merge metadata into status_checklist if provided

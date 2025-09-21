@@ -66,6 +66,68 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { meta } = body;
+
+    if (!meta || typeof meta !== 'object') {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Metadata is required and must be an object'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+
+    // Get document info from database
+    const document = await DatabaseService.getDocumentById(id);
+    
+    if (!document) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Document not found'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+
+    // Update document metadata in database
+    const { db } = await import('@/lib/database');
+    const { rows } = await db.query(
+      'UPDATE documents SET meta = $1 WHERE id = $2 RETURNING *',
+      [JSON.stringify(meta), id]
+    );
+
+    if (rows.length === 0) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Document not found'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+
+    const response: ApiResponse = {
+      success: true,
+      data: rows[0],
+      message: 'Document metadata updated successfully'
+    };
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error updating document metadata:', error);
+    
+    const response: ApiResponse = {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update document metadata'
+    };
+
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

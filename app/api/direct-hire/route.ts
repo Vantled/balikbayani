@@ -137,15 +137,15 @@ export async function POST(request: NextRequest) {
               for_interview: { checked: false, timestamp: undefined },
               // Persist metadata inside checklist for compatibility
               for_interview_meta: {
-                processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : undefined,
-                processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : undefined,
+                processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : 0,
+                processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : 0,
               },
               for_confirmation_meta: {
-                verifier_type: (verifierType || '').toUpperCase() || undefined,
-                verifier_office: verifierOffice || undefined,
-                pe_pcg_city: pePcgCity || undefined,
-                others_text: othersText || undefined,
-                verified_date: verifiedDate || undefined,
+                verifier_type: verifierType ? verifierType.toUpperCase() : '',
+                verifier_office: verifierOffice || '',
+                pe_pcg_city: pePcgCity || '',
+                others_text: othersText || '',
+                verified_date: verifiedDate || '',
               }
             }
           }
@@ -157,15 +157,15 @@ export async function POST(request: NextRequest) {
             received_from_dhad: { checked: false, timestamp: undefined },
             for_interview: { checked: false, timestamp: undefined },
             for_interview_meta: {
-              processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : undefined,
-              processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : undefined,
+              processed_workers_principal: processedWorkersPrincipal ? Number(processedWorkersPrincipal) : 0,
+              processed_workers_las: processedWorkersLas ? Number(processedWorkersLas) : 0,
             },
             for_confirmation_meta: {
-              verifier_type: (verifierType || '').toUpperCase() || undefined,
-              verifier_office: verifierOffice || undefined,
-              pe_pcg_city: pePcgCity || undefined,
-              others_text: othersText || undefined,
-              verified_date: verifiedDate || undefined,
+              verifier_type: verifierType ? verifierType.toUpperCase() : '',
+              verifier_office: verifierOffice || '',
+              pe_pcg_city: pePcgCity || '',
+              others_text: othersText || '',
+              verified_date: verifiedDate || '',
             }
           }
         })()
@@ -269,6 +269,11 @@ export async function POST(request: NextRequest) {
       // Handle JSON request (backward compatibility)
       const body = await request.json();
       
+      console.log('API received JSON data:', body);
+      console.log('Evaluator field in JSON:', body.evaluator);
+      console.log('Email field in JSON:', body.email);
+      console.log('Cellphone field in JSON:', body.cellphone);
+      
       // Validate required fields
       const requiredFields = ['name', 'sex', 'salary', 'jobsite', 'position'];
       for (const field of requiredFields) {
@@ -288,6 +293,8 @@ export async function POST(request: NextRequest) {
       const applicationData = {
         control_number: controlNumber,
         name: body.name,
+        email: body.email || '',
+        cellphone: body.cellphone || '',
         sex: body.sex as 'male' | 'female',
         salary: parseFloat(body.salary),
         status: (body.status || 'pending') as 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected',

@@ -43,6 +43,19 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     return (doc?.meta as any) || {}
   }
 
+  // Get document metadata by parsing the meta field
+  const getDocumentMeta = (documentType: string) => {
+    if (!documents || documents.length === 0) return {}
+    const doc = documents.find(d => String((d as any).document_type || '').toLowerCase() === documentType.toLowerCase()) as any
+    if (!doc || !doc.meta) return {}
+    
+    try {
+      return typeof doc.meta === 'string' ? JSON.parse(doc.meta) : doc.meta
+    } catch {
+      return {}
+    }
+  }
+
   const passportPresent = hasAny('passport', 'valid_passport', 'passport_copy')
   const visaPresent = hasAny('work_visa', 'visa', 'visa_work_permit', 'entry_permit')
   const employmentContractPresent = hasAny('employment_contract', 'offer_of_employment')
@@ -55,7 +68,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
   const insuranceCoveragePresent = hasAny('insurance_coverage')
   const eregistrationPresent = hasAny('eregistration')
   const pdosCertificatePresent = hasAny('pdos_certificate')
-  const ecMeta = getMeta('employment_contract', 'offer_of_employment')
+  const ecMeta = getDocumentMeta('employment_contract') || getMeta('employment_contract', 'offer_of_employment')
   const ecChoice: string = ecMeta.ec_verified_polo_check || ecMeta.ec_verification || ''
   const ecVerifiedPolo = ecChoice === 'POLO' || ecChoice === 'verified_polo'
   const ecVerifiedPeConsulate = ecChoice === 'PE/Consulate for countries with no POLO' || ecChoice === 'verified_pe_consulate'
@@ -103,17 +116,18 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     DATE: createdAtIso,
 
     // Passport fields
-    passport_number: evalMeta.passport_number || confirmMeta.passport_number || (application as any).passport_number || 'TO BE PROVIDED',
-    passport_expiry: evalMeta.passport_expiry || confirmMeta.passport_expiry || (application as any).passport_expiry || 'TO BE PROVIDED',
+    passport_number: getDocumentMeta('passport').passport_number || evalMeta.passport_number || confirmMeta.passport_number || (application as any).passport_number || 'TO BE PROVIDED',
+    passport_expiry: formatDateForDocx(getDocumentMeta('passport').passport_expiry || evalMeta.passport_expiry || confirmMeta.passport_expiry || (application as any).passport_expiry || 'TO BE PROVIDED'),
     passport_check: passportPresent ? CHECK : EMPTY,
     passport_attached: passportPresent ? 'ATTACHED' : EMPTY,
 
     // Visa fields
-    visa_type: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type
-      || evalMeta.visa_type || confirmMeta.visa_type || (application as any).visa_type || 'TO BE PROVIDED'),
-    visa_validity: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity
-      || evalMeta.visa_validity || confirmMeta.visa_validity || (application as any).visa_validity || 'TO BE PROVIDED'),
-    visa_number: (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_number
+    visa_category: getDocumentMeta('work_visa').visa_category || '',
+    visa_type: extractVisaCode(getDocumentMeta('work_visa').visa_type || (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type
+      || evalMeta.visa_type || confirmMeta.visa_type || (application as any).visa_type || 'TO BE PROVIDED')),
+    visa_validity: formatDateForDocx(getDocumentMeta('work_visa').visa_validity || (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity
+      || evalMeta.visa_validity || confirmMeta.visa_validity || (application as any).visa_validity || 'TO BE PROVIDED')),
+    visa_number: getDocumentMeta('work_visa').visa_number || (getMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_number
       || evalMeta.visa_number || confirmMeta.visa_number || (application as any).visa_number || 'TO BE PROVIDED'),
     work_visa_check: visaPresent ? CHECK : EMPTY,
     visa_attached: visaPresent ? 'ATTACHED' : EMPTY,
@@ -126,7 +140,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     ec_notarized_dfa_check: ecNotarizedDfa ? CHECK : EMPTY,
     ec_notice_appointment_spain_check: ecNoticeAppointmentSpain ? CHECK : EMPTY,
     ec_confirmation_sem_check: ecConfirmationSem ? CHECK : EMPTY,
-    ec_issued_date: ecMeta.ec_issued_date || '',
+    ec_issued_date: formatDateForDocx(ecMeta.ec_issued_date || ''),
     country_specific_check: countrySpecificPresent ? CHECK : EMPTY,
     country_specific_attached: countrySpecificPresent ? 'ATTACHED' : EMPTY,
 
@@ -169,6 +183,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     verifier_type: verifierType || '',
     verified_date: confirmMeta.verified_date || '',
     pe_pcg_verified_date: isPePcg ? (confirmMeta.verified_date || '') : '',
+    mwo_verified_date: isMWO ? (confirmMeta.verified_date || '') : '',
     mwo_check: check(isMWO),
     pe_pcg_check: check(isPePcg),
     others_check: check(isOthers),
@@ -177,8 +192,14 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     others_text: isOthers ? (confirmMeta.others_text || '') : '',
     
     // Screenshot fields for attachment_screenshots
-    image_screenshot1: interviewMeta.screenshot_url || interviewMeta.verification_image_url || '',
-    image_screenshot2: confirmMeta.verification_image_url || '',
+    image_screenshot1: (() => {
+      const screenshot1Doc = documents?.find(d => String((d as any).document_type || '').toLowerCase() === 'for_interview_screenshot')
+      return screenshot1Doc ? (screenshot1Doc as any).file_path : (interviewMeta.screenshot_url || interviewMeta.verification_image_url || '')
+    })(),
+    image_screenshot2: (() => {
+      const screenshot2Doc = documents?.find(d => String((d as any).document_type || '').toLowerCase() === 'confirmation_verification_image')
+      return screenshot2Doc ? (screenshot2Doc as any).file_path : (confirmMeta.verification_image_url || '')
+    })(),
   }
 
   const jsCtx = {
@@ -198,6 +219,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     passport_expiry: mk(data.passport_expiry),
     passport_check: mk(data.passport_check),
     passport_attached: mk(data.passport_attached),
+    visa_category: mk(data.visa_category),
     visa_type: mk(data.visa_type),
     visa_validity: mk(data.visa_validity),
     visa_number: mk(data.visa_number),
@@ -237,6 +259,7 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     landbased_accreditation_system: mk(data.landbased_accreditation_system),
     verified_date: mk(data.verified_date),
     pe_pcg_verified_date: mk(data.pe_pcg_verified_date),
+    mwo_verified_date: mk(data.mwo_verified_date),
     mwo_office: mk(data.mwo_office),
     pe_pcg_city: mk(data.pe_pcg_city),
     others_text: mk(data.others_text),
@@ -245,8 +268,8 @@ export function buildDirectHireDocxData(application: DirectHireApplication, docu
     others_check: mk(data.others_check),
     
     // Screenshot fields for attachment_screenshots
-    image_screenshot1: mk(interviewMeta.screenshot_url || interviewMeta.verification_image_url || ''),
-    image_screenshot2: mk(confirmMeta.verification_image_url || ''),
+    image_screenshot1: mk(data.image_screenshot1),
+    image_screenshot2: mk(data.image_screenshot2),
   }
 
   return { data, jsCtx }
@@ -259,6 +282,37 @@ function safeParse(raw: any): any {
     return raw
   } catch {
     return {}
+  }
+}
+
+// Helper function to extract visa code from full visa type
+function extractVisaCode(visaType: string): string {
+  if (!visaType || visaType === 'TO BE PROVIDED') return visaType
+  
+  // Extract the code part (e.g., "H-1B" from "H-1B – Skilled Workers / Professionals")
+  const match = visaType.match(/^([A-Z0-9-]+)/)
+  return match ? match[1] : visaType
+}
+
+// Helper function to format date as "11 SEPTEMBER 2025"
+function formatDateForDocx(dateString: string): string {
+  if (!dateString || dateString === 'TO BE PROVIDED') return dateString
+  
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return dateString
+    
+    const day = date.getDate()
+    const monthNames = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ]
+    const month = monthNames[date.getMonth()]
+    const year = date.getFullYear()
+    
+    return `${day} ${month} ${year}`
+  } catch {
+    return dateString
   }
 }
 

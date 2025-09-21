@@ -23,27 +23,27 @@ export async function POST(
       return NextResponse.json<ApiResponse>({ success: false, error: 'Application not found' }, { status: 404 })
     }
 
-    // Check if comprehensive clearance already exists
+    // Check if Direct Hire Clearance already exists
     const existingDocs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
     const existingClearance = existingDocs?.find(d => d.document_type === 'comprehensive_clearance')
 
     if (existingClearance && !override) {
       return NextResponse.json<ApiResponse>({ 
         success: false, 
-        error: 'Comprehensive clearance document already exists. Use ?override=true to replace it.' 
+        error: 'Direct Hire Clearance document already exists. Use ?override=true to replace it.' 
       }, { status: 409 })
     }
 
-    // Delete existing comprehensive clearance if override is true
+    // Delete existing Direct Hire Clearance if override is true
     if (existingClearance && override) {
       try {
         await DatabaseService.deleteDocumentById(existingClearance.id)
       } catch (error) {
-        console.warn('Failed to delete existing comprehensive clearance:', error)
+        console.warn('Failed to delete existing Direct Hire Clearance:', error)
       }
     }
 
-    // Load the comprehensive clearance template
+    // Load the Direct Hire Clearance template
     const templatePath = join(process.cwd(), 'public', 'templates', 'direct-hire', 'comprehensive-clearance.docx')
     const template = await readFile(templatePath)
 
@@ -114,7 +114,13 @@ export async function POST(
     const getDocMeta = (...types: string[]) => {
       const lower = types.map(t => t.toLowerCase())
       const doc = (allDocs || []).find(d => lower.includes(String((d as any).document_type || '').toLowerCase())) as any
-      return (doc?.meta as any) || {}
+      if (!doc || !doc.meta) return {}
+      
+      try {
+        return typeof doc.meta === 'string' ? JSON.parse(doc.meta) : doc.meta
+      } catch {
+        return {}
+      }
     }
 
     // Helper to check if document type exists
@@ -131,7 +137,24 @@ export async function POST(
       email: (application as any).email || '',
       cellphone: (application as any).cellphone || '',
       passport_number: (evaluationMeta.passport_number || confirmationMeta.passport_number || (application as any).passport_number || ''),
-      passport_expiry: (evaluationMeta.passport_expiry || confirmationMeta.passport_expiry || (application as any).passport_expiry || ''),
+      passport_expiry: (() => {
+        const passportExpiry = evaluationMeta.passport_expiry || confirmationMeta.passport_expiry || (application as any).passport_expiry || ''
+        if (!passportExpiry) return ''
+        try {
+          const date = new Date(passportExpiry)
+          if (isNaN(date.getTime())) return passportExpiry
+          const day = date.getDate()
+          const monthNames = [
+            'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+            'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+          ]
+          const month = monthNames[date.getMonth()]
+          const year = date.getFullYear()
+          return `${day} ${month} ${year}`
+        } catch {
+          return passportExpiry
+        }
+      })(),
       sex: application.sex,
       job_type: (application as any).job_type || '',
       employer: (application as any).employer || '',
@@ -163,6 +186,7 @@ export async function POST(
       verifier_type: verifierType || '',
       verified_date: formatLongDate(confirmationMeta.verified_date || ''),
       pe_pcg_verified_date: isPePcg ? formatLongDate(confirmationMeta.verified_date || '') : '',
+      mwo_verified_date: isMWO ? formatLongDate(confirmationMeta.verified_date || '') : '',
       mwo_check: check(isMWO),
       pe_pcg_check: check(isPePcg),
       others_check: check(isOthers),
@@ -214,8 +238,32 @@ export async function POST(
       pdos_certificate_attached: hasDoc('pdos_certificate') ? 'ATTACHED' : EMPTY,
 
       // Visa details
-      visa_type: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type || 'TO BE PROVIDED'),
-      visa_validity: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity || 'TO BE PROVIDED'),
+      visa_category: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_category || ''),
+      visa_type: (() => {
+        const fullVisaType = getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_type || 'TO BE PROVIDED'
+        if (!fullVisaType || fullVisaType === 'TO BE PROVIDED') return fullVisaType
+        // Extract the code part (e.g., "H-1B" from "H-1B – Skilled Workers / Professionals")
+        const match = fullVisaType.match(/^([A-Z0-9-]+)/)
+        return match ? match[1] : fullVisaType
+      })(),
+      visa_validity: (() => {
+        const visaValidity = getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_validity || 'TO BE PROVIDED'
+        if (!visaValidity || visaValidity === 'TO BE PROVIDED') return visaValidity
+        try {
+          const date = new Date(visaValidity)
+          if (isNaN(date.getTime())) return visaValidity
+          const day = date.getDate()
+          const monthNames = [
+            'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+            'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+          ]
+          const month = monthNames[date.getMonth()]
+          const year = date.getFullYear()
+          return `${day} ${month} ${year}`
+        } catch {
+          return visaValidity
+        }
+      })(),
       visa_number: (getDocMeta('work_visa', 'visa', 'visa_work_permit', 'entry_permit').visa_number || 'TO BE PROVIDED'),
 
       // Screenshot fields for attachment_screenshots
@@ -223,7 +271,7 @@ export async function POST(
       image_screenshot2: confirmationMeta.verification_image_url || ''
     }
 
-    // Generate the comprehensive clearance document
+    // Generate the Direct Hire Clearance document
     // Helper to expose values as both callable and string to avoid sandbox ReferenceError when used as command
     const mk = (value: string) => { const fn: any = () => value; fn.toString = () => value; return fn }
 
@@ -341,6 +389,7 @@ export async function POST(
         passport_expiry: mk((comprehensiveData as any).passport_expiry || ''),
         verified_date: mk(formatLongDate(confirmationMeta.verified_date || '')),
         pe_pcg_verified_date: mk(isPePcg ? formatLongDate(confirmationMeta.verified_date || '') : ''),
+        mwo_verified_date: mk(isMWO ? formatLongDate(confirmationMeta.verified_date || '') : ''),
         mwo_office: mk(isMWO ? (confirmationMeta.verifier_office || '') : ''),
         pe_pcg_city: mk(isPePcg ? (confirmationMeta.pe_pcg_city || '') : ''),
         others_text: mk(isOthers ? (confirmationMeta.others_text || '') : ''),
@@ -375,6 +424,7 @@ export async function POST(
         pdos_certificate_attached: mk(comprehensiveData.pdos_certificate_attached),
         
         // Visa details
+        visa_category: mk(comprehensiveData.visa_category),
         visa_type: mk(comprehensiveData.visa_type),
         visa_validity: mk(comprehensiveData.visa_validity),
         visa_number: mk(comprehensiveData.visa_number),
@@ -398,7 +448,7 @@ export async function POST(
       }
     })
 
-    // Save the comprehensive clearance document
+    // Save the Direct Hire Clearance document
     const upload = await FileUploadService.uploadBuffer(
       Buffer.from(report),
       `DH-${application.control_number}-Comprehensive-Clearance.docx`,
@@ -432,14 +482,14 @@ export async function POST(
     return NextResponse.json<ApiResponse>({ 
       success: true, 
       data: { document, debug }, 
-      message: 'Comprehensive clearance document generated successfully' 
+      message: 'Direct Hire Clearance document generated successfully' 
     })
   } catch (error) {
-    console.error('Error generating comprehensive clearance document:', error)
+    console.error('Error generating Direct Hire Clearance document:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json<ApiResponse>({ 
       success: false, 
-      error: `Failed to generate comprehensive clearance document: ${errorMessage}` 
+      error: `Failed to generate Direct Hire Clearance document: ${errorMessage}` 
     }, { status: 500 })
   }
 }

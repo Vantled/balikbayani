@@ -1110,16 +1110,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                         const result = await res.json()
                         if (result.success) {
                           setDocumentsRefreshTrigger(prev => prev + 1)
-                          toast({ title: 'Document generated', description: 'Comprehensive clearance document has been attached.' })
+                          toast({ title: 'Document generated', description: 'Direct Hire Clearance document has been attached.' })
                         } else if (res.status === 409) {
                           // Show confirmation modal for override
-                          const confirmOverride = window.confirm('A comprehensive clearance document already exists. Do you want to replace it?')
+                          const confirmOverride = window.confirm('A Direct Hire Clearance document already exists. Do you want to replace it?')
                           if (confirmOverride) {
                             const res2 = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance?override=true`, { method: 'POST' })
                             const result2 = await res2.json()
                             if (result2.success) {
                               setDocumentsRefreshTrigger(prev => prev + 1)
-                              toast({ title: 'Document replaced', description: 'Comprehensive clearance document has been updated.' })
+                              toast({ title: 'Document replaced', description: 'Direct Hire Clearance document has been updated.' })
                             } else {
                               throw new Error(result2.error || 'Override failed')
                             }
@@ -1128,7 +1128,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                           throw new Error(result.error || 'Generation failed')
                         }
                       } catch (err) {
-                        toast({ title: 'Generation error', description: 'Failed to generate the comprehensive clearance document.', variant: 'destructive' })
+                        toast({ title: 'Generation error', description: 'Failed to generate the Direct Hire Clearance document.', variant: 'destructive' })
                       }
                     }}
                   >
@@ -1898,7 +1898,7 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
       'tesda nc': 'TESDA NC/PRC License',
       'tesda nc/prc license': 'TESDA NC/PRC License',
       clearance: 'Clearance',
-      comprehensive_clearance: 'Comprehensive Clearance',
+      comprehensive_clearance: 'Direct Hire Clearance',
       confirmation: 'MWO/POLO/PE/PCG Confirmation',
       issuance_of_oec_memorandum: 'Memorandum Issuance of OEC',
       dmw_clearance_request: 'Clearance Request',

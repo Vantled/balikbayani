@@ -296,7 +296,12 @@ export async function POST(request: NextRequest) {
         email: body.email || '',
         cellphone: body.cellphone || '',
         sex: body.sex as 'male' | 'female',
-        salary: parseFloat(body.salary),
+        // Persist static converted salary and raw fields when provided
+        salary: typeof body.salary === 'number' ? body.salary : parseFloat(String(body.salary || '0')),
+        raw_salary: typeof body.raw_salary === 'number' ? body.raw_salary : (
+          body.raw_salary != null ? parseFloat(String(body.raw_salary)) : undefined
+        ),
+        salary_currency: body.salary_currency || undefined,
         status: (body.status || 'pending') as 'pending' | 'evaluated' | 'for_confirmation' | 'emailed_to_dhad' | 'received_from_dhad' | 'for_interview' | 'approved' | 'rejected',
         jobsite: body.jobsite,
         position: body.position,

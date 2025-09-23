@@ -801,9 +801,44 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     <td className="py-3 px-4 text-center">{application.control_number}</td>
                     <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
                     <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
-                    <td className={`py-3 px-4 text-center font-medium ${application.salary < 1000 ? 'text-red-500' : ''}`}>
-                      ${application.salary.toLocaleString()}
-                    </td>
+                    {(() => {
+                      const raw = (application as any).raw_salary ?? (application as any).rawSalary
+                      const curRaw = (
+                        (application as any).salary_currency ??
+                        (application as any).salaryCurrency ??
+                        (application as any).currency ??
+                        (application as any).currency_code ??
+                        (application as any).currencyCode
+                      ) as string | undefined
+                      const cur = curRaw ? (curRaw as string).toUpperCase() : undefined
+                      const storedSalary = (() => {
+                        const val = (application as any).salary
+                        if (typeof val === 'number') return val
+                        if (typeof val === 'string') return Number(val.replace(/,/g, '')) || 0
+                        return 0
+                      })()
+                      let usd = storedSalary
+                      let rawNum: number | null = null
+                      if (cur && raw !== undefined && raw !== null) {
+                        rawNum = typeof raw === 'string' ? Number(String(raw).replace(/,/g, '')) : Number(raw || 0)
+                        usd = convertToUSD(rawNum, cur as any)
+                      } else if (cur && (raw === undefined || raw === null)) {
+                        // Historical rows: no raw_salary, but have currency; treat stored salary as raw
+                        rawNum = storedSalary
+                        usd = convertToUSD(storedSalary, cur as any)
+                      }
+                      // Round USD to nearest hundredths for display consistency
+                      usd = Math.round((usd + Number.EPSILON) * 100) / 100
+                      const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      const cls = usd < 1000 ? 'text-red-500' : ''
+                      return (
+                        <td className={`py-3 px-4 text-center font-medium ${cls}`}>
+                          {cur && rawNum !== null
+                            ? `USD ${fmt(usd)} / ${cur} ${fmt(rawNum)}`
+                            : `$${fmt(usd)}`}
+                        </td>
+                      )
+                    })()}
                     <td className="py-3 px-4 flex justify-center items-center">{getStatusBadge(application)}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex justify-center">
@@ -1011,8 +1046,17 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
                     <div className="font-medium">{selected.position}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Salary:</div>
-                    <div className="font-medium">${selected.salary.toLocaleString()}</div>
+                    <div className="text-gray-500">Salary (per month):</div>
+                    <div className="font-medium">
+                      {(() => {
+                        const raw = (selected as any).raw_salary ?? (selected as any).rawSalary
+                        const cur = ((selected as any).salary_currency ?? (selected as any).salaryCurrency) || 'USD'
+                        const rawNum = typeof raw === 'string' ? Number(String(raw).replace(/,/g, '')) : Number(raw || 0)
+                        const usd = Number(selected.salary || 0)
+                        const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        return `USD ${fmt(usd)} / ${String(cur).toUpperCase()} ${fmt(rawNum)}`
+                      })()}
+                    </div>
                   </div>
                   <div>
                     <div className="text-gray-500">Evaluator:</div>
@@ -2041,6 +2085,38 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
     }
   }
 
+  const handleOpenInline = (doc: Document) => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const docUrl = `${origin}/api/documents/${doc.id}/file.docx`
+      const isDocx = doc.file_name.toLowerCase().endsWith('.docx') || doc.mime_type.includes('word')
+
+      if (isDocx) {
+        const protocolUrl = `ms-word:ofe|u|${encodeURI(docUrl)}`
+        const iframe = document.createElement('iframe')
+        iframe.style.display = 'none'
+        iframe.width = '0'
+        iframe.height = '0'
+        document.body.appendChild(iframe)
+        // Attempt to open via custom protocol without navigating the app
+        iframe.src = protocolUrl
+        // Cleanup after a short delay
+        setTimeout(() => {
+          try { document.body.removeChild(iframe) } catch {}
+        }, 3000)
+      } else {
+        // Non-DOCX: open inline in same tab (PDF/images)
+        window.location.href = docUrl
+      }
+    } catch {
+      toast({
+        title: 'Open Error',
+        description: 'Failed to open document',
+        variant: 'destructive'
+      })
+    }
+  }
+
   // Handle document name update
   const handleUpdateName = async (document: Document) => {
     if (!editName.trim()) {
@@ -2208,7 +2284,12 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
           <DropdownMenuContent align="end">
             {(() => {
               const isDocx = document.file_name.toLowerCase().endsWith('.docx')
-              if (isDocx) return null
+              if (isDocx) return (
+                <DropdownMenuItem onClick={() => handleOpenInline(document)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Open
+                </DropdownMenuItem>
+              )
               return (
                 <DropdownMenuItem onClick={() => handleView(document)}>
                   <Eye className="h-4 w-4 mr-2" />

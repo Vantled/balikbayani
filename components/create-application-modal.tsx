@@ -11,7 +11,7 @@ import { X, FileText, Loader2, Calculator } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useDirectHireApplications } from "@/hooks/use-direct-hire-applications"
-import { convertToUSD, getUSDEquivalent, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
+import { convertToUSD, getUSDEquivalent, getUSDEquivalentAsync, AVAILABLE_CURRENCIES, type Currency } from "@/lib/currency-converter"
 import { getUser } from "@/lib/auth"
 import React from "react"
 
@@ -132,10 +132,20 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
 
   // Get converted USD amount for display
-  const getUSDEquivalentDisplay = (): string => {
-    if (!formData.salary || isNaN(parseFloat(formData.salary)) || !formData.salaryCurrency) return "";
-    return getUSDEquivalent(parseFloat(formData.salary), formData.salaryCurrency);
-  };
+  const [usdDisplay, setUsdDisplay] = useState<string>("")
+  const getUSDEquivalentDisplay = (): string => usdDisplay
+
+  useEffect(() => {
+    const compute = async () => {
+      if (!formData.salary || isNaN(parseFloat(formData.salary)) || !formData.salaryCurrency) {
+        setUsdDisplay("");
+        return
+      }
+      const val = await getUSDEquivalentAsync(parseFloat(formData.salary), formData.salaryCurrency)
+      setUsdDisplay(val)
+    }
+    compute()
+  }, [formData.salary, formData.salaryCurrency])
 
 
   // Save draft function
@@ -281,10 +291,12 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         job_type: initialData.job_type ?? 'professional',
         jobsite: initialData.jobsite && initialData.jobsite !== 'To be filled' ? initialData.jobsite : '',
         position: initialData.position && initialData.position !== 'To be filled' ? initialData.position : '',
-        salary: (initialData as any).raw_salary && (initialData as any).raw_salary > 0 ? String((initialData as any).raw_salary) : (initialData.salary && initialData.salary > 0 ? String(initialData.salary) : ''),
-        salaryCurrency: (initialData as any).salary_currency ?? (initialData as any).salaryCurrency ?? 'USD',
+        salary: (initialData as any).raw_salary !== undefined && (initialData as any).raw_salary !== null
+          ? String((initialData as any).raw_salary)
+          : (initialData.salary !== undefined && initialData.salary !== null ? String(initialData.salary) : ''),
+        salaryCurrency: (initialData as any).salary_currency ?? (initialData as any).salaryCurrency ?? '',
         employer: (initialData as any).employer ?? '',
-        raw_salary: (initialData as any).raw_salary ?? initialData.salary
+        // raw salary is tracked server-side; do not mix converted values here
       }))
       prefilledRef.current = prefillKey
     }
@@ -308,29 +320,33 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               const confirmationMeta = statusChecklist.for_confirmation_meta || {}
               
               
-              // Update form data with both basic information and additional details
-              const updatedFormData = {
-                ...formData,
+              // Build fresh form data to avoid mixing with previous state
+              const hasRawSalary = application.raw_salary !== undefined && application.raw_salary !== null
+              const rawSalaryNumber = hasRawSalary ? Number(application.raw_salary) : Number(application.salary ?? '')
+              const salaryCurrencyCode = (application.salary_currency ?? '') as Currency
+
+              const updatedFormData: typeof formData = {
                 // Basic information
                 name: application.name ?? '',
                 email: application.email ?? '',
                 cellphone: application.cellphone ?? '',
-                sex: application.sex ?? 'male',
-                job_type: application.job_type ?? 'professional',
+                sex: (application.sex ?? 'male') as 'male' | 'female',
+                job_type: (application.job_type ?? 'professional') as 'household' | 'professional',
                 jobsite: application.jobsite && application.jobsite !== 'To be filled' ? application.jobsite : '',
                 position: application.position && application.position !== 'To be filled' ? application.position : '',
-                salary: application.raw_salary && application.raw_salary > 0 ? String(application.raw_salary) : (application.salary && application.salary > 0 ? String(application.salary) : ''),
-                salaryCurrency: application.salary_currency ?? 'USD',
+                salary: (rawSalaryNumber !== undefined && rawSalaryNumber !== null && !Number.isNaN(rawSalaryNumber)) ? String(rawSalaryNumber) : '',
+                salaryCurrency: salaryCurrencyCode,
                 employer: application.employer ?? '',
-                raw_salary: application.raw_salary ?? application.salary,
-                // Additional details - check if values exist and are not null/undefined
+                // New metadata fields
                 processed_workers_principal: (interviewMeta.processed_workers_principal !== null && interviewMeta.processed_workers_principal !== undefined) ? String(interviewMeta.processed_workers_principal) : '',
                 processed_workers_las: (interviewMeta.processed_workers_las !== null && interviewMeta.processed_workers_las !== undefined) ? String(interviewMeta.processed_workers_las) : '',
-                verifier_type: confirmationMeta.verifier_type || '',
+                verifier_type: (confirmationMeta.verifier_type || '') as 'MWO' | 'PEPCG' | 'OTHERS' | '',
                 verifier_office: confirmationMeta.verifier_office || '',
                 pe_pcg_city: confirmationMeta.pe_pcg_city || '',
                 others_text: confirmationMeta.others_text || '',
-                verified_date: confirmationMeta.verified_date || ''
+                verified_date: confirmationMeta.verified_date || '',
+                // @ts-expect-error track raw_salary internally for comparison when present
+                raw_salary: rawSalaryNumber || undefined
               }
               setFormData(updatedFormData)
               setOriginalFormData(updatedFormData)
@@ -520,8 +536,20 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     try {
       // Prepare update data with additional details
       // Note: evaluator field is intentionally excluded to preserve original value
+      const salaryNumber = formData.salary !== '' ? Number(formData.salary) : 0
+      let salaryUsd = formData.salaryCurrency && salaryNumber
+        ? (formData.salaryCurrency === 'USD' ? salaryNumber : convertToUSD(salaryNumber, formData.salaryCurrency))
+        : salaryNumber
+      // Round to nearest hundredths
+      salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+
       const updateData = {
         ...formData,
+        // Persist raw salary and currency explicitly
+        raw_salary: salaryNumber,
+        salary_currency: formData.salaryCurrency || '',
+        // Persist the static converted salary in USD
+        salary: salaryUsd,
         for_interview_meta: {
           processed_workers_principal: formData.processed_workers_principal ? Number(formData.processed_workers_principal) : 0,
           processed_workers_las: formData.processed_workers_las ? Number(formData.processed_workers_las) : 0,
@@ -747,8 +775,19 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     setLoading(true);
     try {
       // Prepare create data with additional details
+      const salaryNumber = formData.salary !== '' ? Number(formData.salary) : 0
+      let salaryUsd = formData.salaryCurrency && salaryNumber
+        ? (formData.salaryCurrency === 'USD' ? salaryNumber : convertToUSD(salaryNumber, formData.salaryCurrency))
+        : salaryNumber
+      // Round to nearest hundredths
+      salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+
       const createData = {
         ...formData,
+        // Persist both raw and converted amounts on create
+        raw_salary: salaryNumber,
+        salary_currency: formData.salaryCurrency || '',
+        salary: salaryUsd,
         evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
         for_interview_meta: {
           processed_workers_principal: formData.processed_workers_principal ? Number(formData.processed_workers_principal) : 0,
@@ -1056,7 +1095,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               <div>
                 <div className="flex gap-2 mb-1">
                   <div className="flex-1">
-                <Label className="text-sm font-medium">Salary:</Label>
+                <Label className="text-sm font-medium">Salary (per month):</Label>
                   </div>
                   <div className="w-32">
                     <Label className="text-sm font-medium">Currency:</Label>

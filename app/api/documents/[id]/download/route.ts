@@ -13,6 +13,7 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'original';
+    const dispositionQuery = searchParams.get('disposition');
     
     // Get document info from database
     const document = await DatabaseService.getDocumentById(id);
@@ -70,9 +71,11 @@ export async function GET(
     // Set appropriate headers
     const headers = new Headers();
     headers.set('Content-Type', contentType);
-    // Preview inline for PDFs and images; download for everything else
-    const isPreviewable = contentType.includes('pdf') || contentType.startsWith('image/');
-    headers.set('Content-Disposition', `${isPreviewable ? 'inline' : 'attachment'}; filename="${fileName}"`);
+    // Preview inline when explicitly requested, or for PDFs/images by default
+    const isPreviewableDefault = contentType.includes('pdf') || contentType.startsWith('image/');
+    const forceInline = dispositionQuery === 'inline';
+    const contentDisposition = `${forceInline || isPreviewableDefault ? 'inline' : 'attachment'}; filename="${fileName}"`;
+    headers.set('Content-Disposition', contentDisposition);
     headers.set('Content-Length', fileBuffer.length.toString());
     
     // Return file

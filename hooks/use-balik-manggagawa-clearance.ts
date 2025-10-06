@@ -1,5 +1,5 @@
 // hooks/use-balik-manggagawa-clearance.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BalikManggagawaClearance } from '@/lib/types';
 
 interface ClearanceFilters {
@@ -50,7 +50,7 @@ export function useBalikManggagawaClearance() {
     totalPages: 0
   });
 
-  const fetchClearances = async (filters: ClearanceFilters = { page: 1, limit: 10 }) => {
+  const fetchClearances = useCallback(async (filters: ClearanceFilters = { page: 1, limit: 10 }) => {
     setLoading(true);
     setError(null);
     
@@ -77,7 +77,7 @@ export function useBalikManggagawaClearance() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const createClearance = async (clearanceData: ClearanceData) => {
     setLoading(true);
@@ -190,7 +190,7 @@ export function useBalikManggagawaClearance() {
   // Initial fetch
   useEffect(() => {
     fetchClearances({ page: 1, limit: 10 });
-  }, []);
+  }, [fetchClearances]);
 
   return {
     clearances,

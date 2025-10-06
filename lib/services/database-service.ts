@@ -329,7 +329,9 @@ export class DatabaseService {
     employer: string;
     destination: string;
     salary: number;
-    clearanceType: string;
+    clearanceType?: string | null;
+    rawSalary?: number | null;
+    salaryCurrency?: string | null;
     position?: string | null;
     monthsYears?: string | null;
     withPrincipal?: string | null;
@@ -358,21 +360,40 @@ export class DatabaseService {
     const day = String(now.getDate()).padStart(2, '0');
 
     // counts per type within current month and within current year
-    const { rows: monthlyRows } = await db.query(
-      `SELECT COUNT(*)
-       FROM balik_manggagawa_clearance
-       WHERE clearance_type = $1
-         AND EXTRACT(YEAR FROM created_at) = $2
-         AND EXTRACT(MONTH FROM created_at) = $3`,
-      [clearanceData.clearanceType, year, parseInt(month)]
-    );
-    const { rows: yearlyRows } = await db.query(
-      `SELECT COUNT(*)
-       FROM balik_manggagawa_clearance
-       WHERE clearance_type = $1
-         AND EXTRACT(YEAR FROM created_at) = $2`,
-      [clearanceData.clearanceType, year]
-    );
+    let monthlyRows, yearlyRows;
+    if (clearanceData.clearanceType) {
+      ({ rows: monthlyRows } = await db.query(
+        `SELECT COUNT(*)
+         FROM balik_manggagawa_clearance
+         WHERE clearance_type = $1
+           AND EXTRACT(YEAR FROM created_at) = $2
+           AND EXTRACT(MONTH FROM created_at) = $3`,
+        [clearanceData.clearanceType, year, parseInt(month)]
+      ));
+      ({ rows: yearlyRows } = await db.query(
+        `SELECT COUNT(*)
+         FROM balik_manggagawa_clearance
+         WHERE clearance_type = $1
+           AND EXTRACT(YEAR FROM created_at) = $2`,
+        [clearanceData.clearanceType, year]
+      ));
+    } else {
+      ({ rows: monthlyRows } = await db.query(
+        `SELECT COUNT(*)
+         FROM balik_manggagawa_clearance
+         WHERE clearance_type IS NULL
+           AND EXTRACT(YEAR FROM created_at) = $1
+           AND EXTRACT(MONTH FROM created_at) = $2`,
+        [year, parseInt(month)]
+      ));
+      ({ rows: yearlyRows } = await db.query(
+        `SELECT COUNT(*)
+         FROM balik_manggagawa_clearance
+         WHERE clearance_type IS NULL
+           AND EXTRACT(YEAR FROM created_at) = $1`,
+        [year]
+      ));
+    }
     const monthlyCount = String(parseInt(monthlyRows[0].count) + 1).padStart(3, '0');
     const yearlyCount = String(parseInt(yearlyRows[0].count) + 1).padStart(3, '0');
 
@@ -415,28 +436,44 @@ export class DatabaseService {
 
     const controlNumber = `${prefix}${delimiter}${year}-${month}${day}-${monthlyCount}-${yearlyCount}`;
     
-    const { rows } = await db.query(
-      `INSERT INTO balik_manggagawa_clearance (
+    const insertSql = `
+      INSERT INTO balik_manggagawa_clearance (
         control_number, name_of_worker, sex, employer, destination, salary, clearance_type,
+        raw_salary, salary_currency,
         position, months_years, with_principal, new_principal_name, employment_duration,
         date_arrival, date_departure, place_date_employment, date_blacklisting,
         total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
         no_of_months_years, date_of_departure, active_email_address, active_ph_mobile_number, evaluator
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,
-        $8,$9,$10,$11,$12,
-        $13,$14,$15,$16,
-        $17,$18,$19,$20,$21,$22,
-        $23,$24,$25,$26,$27
-      ) RETURNING *`,
-      [
-        controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType,
-        clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
-        clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
-        clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
-        clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null
-      ]
-    );
+        $8,$9,
+        $10,$11,$12,$13,$14,
+        $15,$16,$17,$18,
+        $19,$20,$21,$22,$23,$24,
+        $25,$26,$27,$28,$29
+      ) RETURNING *`;
+    const insertParams = [
+      controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, (clearanceData.clearanceType ?? null),
+      (clearanceData.rawSalary ?? clearanceData.salary ?? null), (clearanceData.salaryCurrency ?? null),
+      clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
+      clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
+      clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
+      clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null
+    ];
+
+    let rows;
+    try {
+      ({ rows } = await db.query(insertSql, insertParams));
+    } catch (err: any) {
+      if (err && err.code === '42703') {
+        // Missing columns - add them and retry once
+        await db.query(`ALTER TABLE balik_manggagawa_clearance ADD COLUMN IF NOT EXISTS raw_salary DECIMAL(12,2)`);
+        await db.query(`ALTER TABLE balik_manggagawa_clearance ADD COLUMN IF NOT EXISTS salary_currency VARCHAR(10)`);
+        ({ rows } = await db.query(insertSql, insertParams));
+      } else {
+        throw err;
+      }
+    }
     return rows[0];
   }
 

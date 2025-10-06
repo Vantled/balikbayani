@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
       evaluator
     } = body;
 
-    // Validate required fields
-    if (!nameOfWorker || !sex || !employer || !destination || !salary || !clearanceType) {
+    // Validate required fields (clearanceType now optional for BM app creation)
+    if (!nameOfWorker || !sex || !employer || !destination || !salary) {
       const response: ApiResponse = {
         success: false,
         error: 'All fields are required'
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
-    // Validate clearance type
+    // If provided, validate clearance type
     const validClearanceTypes = [
       'watchlisted_employer',
       'seafarer_position', 
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       'watchlisted_similar_name'
     ];
 
-    if (!validClearanceTypes.includes(clearanceType)) {
+    if (clearanceType && !validClearanceTypes.includes(clearanceType)) {
       const response: ApiResponse = {
         success: false,
         error: 'Invalid clearance type'
@@ -151,7 +151,9 @@ export async function POST(request: NextRequest) {
       employer,
       destination,
       salary: parseFloat(salary),
-      clearanceType,
+      clearanceType: clearanceType || null,
+      rawSalary: parseFloat(salary),
+      salaryCurrency: (body.salaryCurrency as string | undefined) || null,
       position: normalize(position),
       monthsYears: normalize(monthsYears),
       withPrincipal: normalize(withPrincipal),

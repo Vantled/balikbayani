@@ -29,6 +29,8 @@ interface JobFairMonitoringFilterPanelProps {
   setTotalApplicantsMax: (value: string) => void
   dmwStaff: string
   setDmwStaff: (value: string) => void
+  showDeletedOnly?: boolean
+  setShowDeletedOnly?: (value: boolean) => void
   onClear: () => void
 }
 
@@ -54,12 +56,18 @@ export default function JobFairMonitoringFilterPanel(props: JobFairMonitoringFil
     setTotalApplicantsMax,
     dmwStaff,
     setDmwStaff,
+    showDeletedOnly,
+    setShowDeletedOnly,
     onClear
   } = props
 
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const todayStr = new Date().toISOString().slice(0,10)
+
+  // Local toggle state for showDeletedOnly; apply on Apply
+  const [localShowDeletedOnly, setLocalShowDeletedOnly] = useState<boolean>(Boolean(showDeletedOnly))
+  useEffect(() => { setLocalShowDeletedOnly(Boolean(showDeletedOnly)) }, [showDeletedOnly])
 
   // Sync from applied value (e.g., when reopening panel)
   useEffect(() => {
@@ -104,6 +112,7 @@ export default function JobFairMonitoringFilterPanel(props: JobFairMonitoringFil
     if (dmwStaff) parts.push(`dmw_staff:${dmwStaff}`)
 
     const query = parts.join(" ")
+    if (typeof setShowDeletedOnly === 'function') setShowDeletedOnly(Boolean(localShowDeletedOnly))
     onApply(query)
   }
 
@@ -222,6 +231,14 @@ export default function JobFairMonitoringFilterPanel(props: JobFairMonitoringFil
             className="mt-1"
           />
         </div>
+
+      {/* Show Deleted Only */}
+      {typeof setShowDeletedOnly === 'function' && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input type="checkbox" className="h-3 w-3" checked={Boolean(localShowDeletedOnly)} onChange={(e)=> setLocalShowDeletedOnly(e.target.checked)} />
+          Show deleted only
+        </label>
+      )}
       </div>
 
       <div className="flex gap-2 mt-6">

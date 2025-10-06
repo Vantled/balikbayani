@@ -145,31 +145,16 @@ export default function Header() {
           >
             Direct Hire
           </Link>
-          <div className="relative">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={`text-xs lg:text-sm pb-1 flex items-center gap-1 ${
-                    pathname.startsWith('/balik-manggagawa')
-                      ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
-                      : 'text-gray-600 hover:text-[#1976D2]'
-                  }`}
-                  aria-label="Balik Manggagawa menu"
-                >
-                  Balik Manggagawa
-                  <ChevronDown className="h-4 w-4 ml-1" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem asChild>
-                  <Link href="/balik-manggagawa/clearance">Clearance</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/balik-manggagawa/processing">Processing</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <Link 
+            href="/balik-manggagawa" 
+            className={`text-xs lg:text-sm pb-1 ${
+              pathname.startsWith('/balik-manggagawa') 
+                ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                : 'text-gray-600 hover:text-[#1976D2]'
+            }`}
+          >
+            Balik Manggagawa
+          </Link>
           <Link 
             href="/gov-to-gov" 
             className={`text-xs lg:text-sm pb-1 ${

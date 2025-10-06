@@ -23,11 +23,15 @@ interface JobFairFilterPanelProps {
 	setYearFilter: (value: string) => void
 	monthFilter: string
 	setMonthFilter: (value: string) => void
+	showDeletedOnly?: boolean
+	setShowDeletedOnly?: (value: boolean) => void
 	onClear: () => void
 }
 
 export default function JobFairFilterPanel(props: JobFairFilterPanelProps) {
-	const { onClose, onApply, venue, setVenue, officeHead, setOfficeHead, dateWithin, setDateWithin, isRescheduled, setIsRescheduled, yearFilter, setYearFilter, monthFilter, setMonthFilter, onClear } = props
+    const { onClose, onApply, venue, setVenue, officeHead, setOfficeHead, dateWithin, setDateWithin, isRescheduled, setIsRescheduled, yearFilter, setYearFilter, monthFilter, setMonthFilter, showDeletedOnly, setShowDeletedOnly, onClear } = props
+    const [localShowDeletedOnly, setLocalShowDeletedOnly] = useState<boolean>(Boolean(showDeletedOnly))
+    useEffect(() => { setLocalShowDeletedOnly(Boolean(showDeletedOnly)) }, [showDeletedOnly])
 
 	// Local state for native date inputs
 	const [startDate, setStartDate] = useState<string>("")
@@ -72,7 +76,8 @@ export default function JobFairFilterPanel(props: JobFairFilterPanelProps) {
 			parts.push(`date_range:${startDate}|${toDate}`)
 			setDateWithin(`${startDate}|${toDate}`)
 		}
-		onApply(parts.join(","))
+        if (typeof setShowDeletedOnly === 'function') setShowDeletedOnly(Boolean(localShowDeletedOnly))
+        onApply(parts.join(","))
 		onClose()
 	}
 
@@ -191,6 +196,14 @@ export default function JobFairFilterPanel(props: JobFairFilterPanelProps) {
 						</div>
 					</RadioGroup>
 				</div>
+
+                {/* Show deleted only */}
+                {typeof setShowDeletedOnly === 'function' && (
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input type="checkbox" className="h-3 w-3" checked={Boolean(localShowDeletedOnly)} onChange={(e)=> setLocalShowDeletedOnly(e.target.checked)} />
+                    Show deleted only
+                  </label>
+                )}
 
 				{/* Action Buttons */}
 				<div className="flex gap-2 pt-2">

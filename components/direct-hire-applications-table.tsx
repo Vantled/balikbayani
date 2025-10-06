@@ -22,6 +22,8 @@ import DocumentViewerModal from "@/components/pdf-viewer-modal"
 interface DirectHireApplicationsTableProps {
   search: string
   filterQuery?: string
+  showDeletedOnly?: boolean
+  showFinishedOnly?: boolean
 }
 
 interface ApplicantDocumentsTabProps {
@@ -33,7 +35,7 @@ interface ApplicantDocumentsTabProps {
   setPdfViewerOpen: (open: boolean) => void
 }
 
-export default function DirectHireApplicationsTable({ search, filterQuery = "" }: DirectHireApplicationsTableProps) {
+export default function DirectHireApplicationsTable({ search, filterQuery = "", showDeletedOnly: propShowDeletedOnly, showFinishedOnly: propShowFinishedOnly }: DirectHireApplicationsTableProps) {
   console.log('DirectHireApplicationsTable component rendered');
   const { toast } = useToast()
   const { 
@@ -116,6 +118,19 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
     fetchApplications(search, 1, showDeletedOnly)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDeletedOnly])
+
+  // Sync toggles from parent filter panel (apply-on-apply behavior)
+  useEffect(() => {
+    if (typeof propShowDeletedOnly === 'boolean') {
+      setShowDeletedOnly(propShowDeletedOnly)
+    }
+  }, [propShowDeletedOnly])
+
+  useEffect(() => {
+    if (typeof propShowFinishedOnly === 'boolean') {
+      setShowFinishedOnly(propShowFinishedOnly)
+    }
+  }, [propShowFinishedOnly])
 
   // Generate control number preview
   const generateControlNumberPreview = () => {
@@ -724,48 +739,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "" }
 
       <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
         {/* Superadmin controls */}
-        <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
-          <label className="flex items-center gap-2 text-xs text-gray-700">
-            <input
-              type="checkbox"
-              className="h-3 w-3"
-              checked={showFinishedOnly}
-              onChange={async (e) => {
-                const next = e.target.checked
-                if (next) {
-                  setShowDeletedOnly(false)
-                  setConfirmPurpose('finished')
-                  setConfirmPasswordOpen(true)
-                } else {
-                  setShowFinishedOnly(false)
-                  await fetchApplications(search, 1, false)
-                }
-              }}
-            />
-            Show finished only
-          </label>
-          {userIsSuperadmin && (
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                className="h-3 w-3"
-                checked={showDeletedOnly}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    // Require password confirmation before enabling
-                    setShowFinishedOnly(false)
-                    setConfirmPurpose('deleted')
-                    setConfirmPasswordOpen(true)
-                  } else {
-                    setShowDeletedOnly(false)
-                    fetchApplications(search, 1, false)
-                  }
-                }}
-              />
-              Show deleted only
-            </label>
-          )}
-        </div>
+        {/* toggles moved into filter panel */}
 
                   <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
           <table className="w-full">

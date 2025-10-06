@@ -13,6 +13,8 @@ import { toast } from "sonner"
 export default function DirectHirePage() {
   const [showFilter, setShowFilter] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showFinishedOnly, setShowFinishedOnly] = useState(false)
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
 
   return (
     <div className="min-h-screen bg-[#EEF5FD]">
@@ -106,7 +108,27 @@ export default function DirectHirePage() {
             </Button>
 
             {/* Filter Panel */}
-            {showFilter && <FilterPanel onClose={() => setShowFilter(false)} />}
+            {showFilter && (
+              <FilterPanel 
+                onClose={() => setShowFilter(false)} 
+                onApply={() => setShowFilter(false)} 
+                sex={""}
+                setSex={() => {}}
+                status={""}
+                setStatus={() => {}}
+                dateWithin={""}
+                setDateWithin={() => {}}
+                jobsite={""}
+                setJobsite={() => {}}
+                position={""}
+                setPosition={() => {}}
+                onClear={() => {}}
+                showFinishedOnly={showFinishedOnly}
+                setShowFinishedOnly={setShowFinishedOnly}
+                showDeletedOnly={showDeletedOnly}
+                setShowDeletedOnly={setShowDeletedOnly}
+              />
+            )}
           </div>
         </div>
 

@@ -295,6 +295,8 @@ export default function JobFairsListPage() {
                   setYearFilter={setYearFilter}
                   monthFilter={monthFilter}
                   setMonthFilter={setMonthFilter}
+                  showDeletedOnly={showDeletedOnly}
+                  setShowDeletedOnly={setShowDeletedOnly}
                   onClear={clearPanel}
                 />
               )}

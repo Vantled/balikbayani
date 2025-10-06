@@ -67,8 +67,8 @@ export async function PUT(
       remarks
     } = body;
 
-    // Validate required fields
-    if (!nameOfWorker || !sex || !employer || !destination || !salary || !clearanceType) {
+    // Validate required fields (allow missing clearanceType)
+    if (!nameOfWorker || !sex || !employer || !destination || !salary) {
       const response: ApiResponse = {
         success: false,
         error: 'All fields are required'
@@ -85,7 +85,7 @@ export async function PUT(
       return NextResponse.json(response, { status: 400 });
     }
 
-    // Validate clearance type
+    // If provided, validate clearance type
     const validClearanceTypes = [
       'watchlisted_employer',
       'seafarer_position', 
@@ -96,7 +96,7 @@ export async function PUT(
       'watchlisted_similar_name'
     ];
 
-    if (!validClearanceTypes.includes(clearanceType)) {
+    if (clearanceType && !validClearanceTypes.includes(clearanceType)) {
       const response: ApiResponse = {
         success: false,
         error: 'Invalid clearance type'
@@ -112,7 +112,7 @@ export async function PUT(
       employer,
       destination,
       salary: parseFloat(salary),
-      clearanceType,
+      clearanceType: clearanceType ?? null,
       position: normalize(position),
       monthsYears: normalize(monthsYears),
       withPrincipal: normalize(withPrincipal),

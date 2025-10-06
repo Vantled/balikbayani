@@ -18,6 +18,8 @@ export default function DirectHirePage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [search, setSearch] = useState("")
   const [panelQuery, setPanelQuery] = useState("")
+  const [showFinishedOnly, setShowFinishedOnly] = useState(false)
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false)
 
   // Controlled panel state
   const [typeHousehold, setTypeHousehold] = useState(false)
@@ -96,6 +98,10 @@ export default function DirectHirePage() {
                     setPanelQuery(query)
                     setShowFilter(false)
                   }}
+                  showFinishedOnly={showFinishedOnly}
+                  setShowFinishedOnly={setShowFinishedOnly}
+                  showDeletedOnly={showDeletedOnly}
+                  setShowDeletedOnly={setShowDeletedOnly}
                   typeHousehold={typeHousehold}
                   setTypeHousehold={setTypeHousehold}
                   typeProfessional={typeProfessional}
@@ -119,7 +125,12 @@ export default function DirectHirePage() {
           </div>
         </div>
 
-        <DirectHireApplicationsTable search={search} filterQuery={panelQuery} />
+        <DirectHireApplicationsTable 
+          search={search} 
+          filterQuery={panelQuery}
+          showDeletedOnly={showDeletedOnly}
+          showFinishedOnly={showFinishedOnly}
+        />
       </main>
 
       {/* Create Application Modal */}

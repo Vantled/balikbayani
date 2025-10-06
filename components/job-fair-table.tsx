@@ -294,27 +294,6 @@ export default function JobFairTable({
   return (
     <>
       <div className="bg-white rounded-md border overflow-hidden">
-        {/* Superadmin controls */}
-        {userIsSuperadmin && (
-          <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                className="h-3 w-3"
-                checked={showDeletedOnly}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    // Require password confirmation before enabling
-                    setConfirmPasswordOpen(true)
-                  } else {
-                    setShowDeletedOnly?.(false)
-                  }
-                }}
-              />
-              Show deleted only
-            </label>
-          </div>
-        )}
         <div className="overflow-x-auto max-h-[calc(100vh-280px)] overflow-y-auto">
           <table className="w-full">
             <thead>

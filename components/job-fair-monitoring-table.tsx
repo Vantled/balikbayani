@@ -175,28 +175,6 @@ export default function JobFairMonitoringTable({
   return (
     <>
       <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
-        {/* Superadmin controls */}
-        <div className="flex items-center justify-end px-4 py-2 border-b bg-gray-50 gap-6">
-          {currentUser?.role === 'superadmin' && (
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                className="h-3 w-3"
-                checked={showDeletedOnly}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    // Require password confirmation before enabling
-                    setConfirmPasswordOpen(true)
-                  } else {
-                    setShowDeletedOnly?.(false)
-                    fetchMonitoring?.(1, 10, search, filterQuery, false)
-                  }
-                }}
-              />
-              Show deleted only
-            </label>
-          )}
-        </div>
         <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
           <table className="w-full">
             <thead>

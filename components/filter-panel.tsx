@@ -29,6 +29,11 @@ interface FilterPanelProps {
 	setEvaluator?: (value: string) => void
 	category?: string
 	setCategory?: (value: string) => void
+	// Optional toggles
+	showFinishedOnly?: boolean
+	setShowFinishedOnly?: (value: boolean) => void
+	showDeletedOnly?: boolean
+	setShowDeletedOnly?: (value: boolean) => void
 	onClear: () => void
 }
 
@@ -54,12 +59,28 @@ export default function FilterPanel(props: FilterPanelProps) {
 		setEvaluator,
 		category,
 		setCategory,
+		showFinishedOnly,
+		setShowFinishedOnly,
+		showDeletedOnly,
+		setShowDeletedOnly,
 		onClear
 	} = props
 
 	const [startDate, setStartDate] = useState("")
 	const [endDate, setEndDate] = useState("")
 	const todayStr = new Date().toISOString().slice(0,10)
+
+	// Local toggles to apply on submit
+	const [localShowFinishedOnly, setLocalShowFinishedOnly] = useState<boolean>(Boolean(showFinishedOnly))
+	const [localShowDeletedOnly, setLocalShowDeletedOnly] = useState<boolean>(Boolean(showDeletedOnly))
+
+	useEffect(() => {
+		setLocalShowFinishedOnly(Boolean(showFinishedOnly))
+	}, [showFinishedOnly])
+
+	useEffect(() => {
+		setLocalShowDeletedOnly(Boolean(showDeletedOnly))
+	}, [showDeletedOnly])
 
 	// Sync from applied value (e.g., when reopening panel)
 	useEffect(() => {
@@ -102,6 +123,9 @@ export default function FilterPanel(props: FilterPanelProps) {
 			parts.push(`date_range:${startDate}|${toDate}`)
 			setDateWithin(`${startDate}|${toDate}`)
 		}
+		// Apply toggles
+		if (typeof setShowFinishedOnly === 'function') setShowFinishedOnly(Boolean(localShowFinishedOnly))
+		if (typeof setShowDeletedOnly === 'function') setShowDeletedOnly(Boolean(localShowDeletedOnly))
 		onApply(parts.join(","))
 		onClose()
 	}
@@ -234,6 +258,24 @@ export default function FilterPanel(props: FilterPanelProps) {
 					/>
 				</div>
 				)}
+
+			{/* Toggles (optional) */}
+			{(typeof setShowFinishedOnly === 'function' || typeof setShowDeletedOnly === 'function') && (
+			  <div className="space-y-2 pt-1">
+				{typeof setShowFinishedOnly === 'function' && (
+				  <label className="flex items-center gap-2 text-xs text-gray-700">
+					<input type="checkbox" className="h-3 w-3" checked={Boolean(localShowFinishedOnly)} onChange={(e)=> setLocalShowFinishedOnly(e.target.checked)} />
+					Show finished only
+				  </label>
+				)}
+				{typeof setShowDeletedOnly === 'function' && (
+				  <label className="flex items-center gap-2 text-xs text-gray-700">
+					<input type="checkbox" className="h-3 w-3" checked={Boolean(localShowDeletedOnly)} onChange={(e)=> setLocalShowDeletedOnly(e.target.checked)} />
+					Show deleted only
+				  </label>
+				)}
+			  </div>
+			)}
 
 				{/* Action Buttons */}
 				<div className="flex space-x-2 pt-2">

@@ -284,6 +284,8 @@ export default function MonitoringSummaryPage() {
                   setTotalApplicantsMax={setTotalApplicantsMax}
                   dmwStaff={dmwStaffFilter}
                   setDmwStaff={setDmwStaffFilter}
+                  showDeletedOnly={showDeletedOnly}
+                  setShowDeletedOnly={setShowDeletedOnly}
                   onClear={clearPanel}
                 />
               </div>

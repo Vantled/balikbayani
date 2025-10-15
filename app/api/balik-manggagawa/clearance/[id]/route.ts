@@ -206,6 +206,43 @@ export async function PATCH(
       const response: ApiResponse = { success: true, message: 'Clearance restored successfully' };
       return NextResponse.json(response);
     }
+    // Lightweight status + clearance type update to support inline table controls
+    if (body && body.action === 'status_update') {
+      const { status, clearanceType } = body as { status?: string; clearanceType?: string | null };
+      // Validate status if provided
+      const validStatuses = ['for_clearance', 'for_approval', 'finished', 'rejected'];
+      if (status && !validStatuses.includes(status)) {
+        const response: ApiResponse = { success: false, error: 'Invalid status' };
+        return NextResponse.json(response, { status: 400 });
+      }
+
+      // Validate clearance type if provided
+      const validClearanceTypes = [
+        'watchlisted_employer',
+        'seafarer_position',
+        'non_compliant_country',
+        'no_verified_contract',
+        'for_assessment_country',
+        'critical_skill',
+        'watchlisted_similar_name'
+      ];
+      if (clearanceType !== undefined && clearanceType !== null && clearanceType !== '' && !validClearanceTypes.includes(clearanceType)) {
+        const response: ApiResponse = { success: false, error: 'Invalid clearance type' };
+        return NextResponse.json(response, { status: 400 });
+      }
+
+      const updated = await DatabaseService.updateBalikManggagawaStatus(id, {
+        status: status ?? null,
+        clearanceType: clearanceType ?? null,
+      });
+      if (!updated) {
+        const response: ApiResponse = { success: false, error: 'Clearance not found' };
+        return NextResponse.json(response, { status: 404 });
+      }
+      const response: ApiResponse = { success: true, data: updated, message: 'Status updated successfully' };
+      return NextResponse.json(response);
+    }
+
     const response: ApiResponse = { success: false, error: 'Invalid action' };
     return NextResponse.json(response, { status: 400 });
   } catch (error) {

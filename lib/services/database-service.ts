@@ -474,6 +474,17 @@ export class DatabaseService {
         throw err;
       }
     }
+    // Default newly created BM application to For Approval
+    if (rows[0]?.id) {
+      try {
+        await db.query('UPDATE balik_manggagawa_clearance SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['for_approval', rows[0].id])
+        const { rows: updated } = await db.query('SELECT * FROM balik_manggagawa_clearance WHERE id = $1', [rows[0].id])
+        return updated[0] || rows[0]
+      } catch {
+        // Fallback to original row if update fails
+        return rows[0]
+      }
+    }
     return rows[0];
   }
 
@@ -654,6 +665,21 @@ export class DatabaseService {
       ]
     );
     return rows[0] || null;
+  }
+
+  static async updateBalikManggagawaStatus(id: string, data: { status: string | null; clearanceType: string | null }): Promise<BalikManggagawaClearance | null> {
+    // Build dynamic set parts for flexible updates
+    const setParts: string[] = []
+    const values: any[] = []
+    let idx = 1
+    if (data.status !== undefined) { setParts.push(`status = $${idx++}`); values.push(data.status) }
+    if (data.clearanceType !== undefined) { setParts.push(`clearance_type = $${idx++}`); values.push(data.clearanceType) }
+    if (setParts.length === 0) return await this.getBalikManggagawaClearanceById(id)
+    setParts.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(id)
+    const query = `UPDATE balik_manggagawa_clearance SET ${setParts.join(', ')} WHERE id = $${idx} RETURNING *`
+    const { rows } = await db.query(query, values)
+    return rows[0] || null
   }
 
   static async deleteBalikManggagawaClearance(id: string): Promise<boolean> {

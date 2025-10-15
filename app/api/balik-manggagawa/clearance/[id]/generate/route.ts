@@ -176,8 +176,8 @@ export async function POST(
 
     const document = await DatabaseService.createDocument({
       application_id: clearance.id,
-      application_type: 'balik_manggagawa_clearance',
-      document_type: docName,
+      application_type: 'balik_manggagawa',
+      document_type: 'bm_clearance',
       file_name: upload.fileName,
       file_path: upload.filePath,
       file_size: upload.fileSize,

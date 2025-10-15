@@ -6,13 +6,92 @@ import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-cleara
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText } from "lucide-react"
+import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { AVAILABLE_CURRENCIES, getUSDEquivalentAsync, type Currency } from "@/lib/currency-converter"
+import BMStatusModal from "@/components/bm-status-modal"
+import { useCallback, useRef } from "react"
+
+function BMDocumentsList({ applicationId }: { applicationId?: string }) {
+  const [docs, setDocs] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const mounted = useRef(false)
+  const load = useCallback(async () => {
+    if (!applicationId) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=balik_manggagawa`)
+      const json = await res.json()
+      if (json.success) setDocs(json.data || [])
+    } finally {
+      setLoading(false)
+    }
+  }, [applicationId])
+  useEffect(() => { load() }, [load])
+  if (!applicationId) return null
+  const important = docs.filter((d) => (d.document_type || '').toLowerCase() === 'bm_clearance')
+  const others = docs.filter((d) => (d.document_type || '').toLowerCase() !== 'bm_clearance')
+  const openDoc = async (doc: any) => {
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.file_name || 'document'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
+  const deleteDoc = async (doc: any) => {
+    try {
+      const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (json.success) {
+        setDocs((arr) => arr.filter((d) => d.id !== doc.id))
+        toast({ title: 'Deleted', description: 'Document removed' })
+      } else {
+        toast({ title: 'Delete failed', description: json.error || 'Failed to delete', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Delete failed', description: 'Network error', variant: 'destructive' })
+    }
+  }
+  const Section = ({ title, items }: { title: string; items: any[] }) => (
+    <div className="mb-3">
+      <div className="text-xs text-gray-500 mb-1">{title}</div>
+      {items.length === 0 ? (
+        <div className="text-xs text-gray-400">No documents</div>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((d) => (
+            <li key={d.id} className="flex items-center justify-between text-sm">
+              <span className="truncate pr-2">{d.document_type || d.file_name}</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => openDoc(d)}>Download</Button>
+                <Button variant="outline" size="sm" className="text-red-600" onClick={() => deleteDoc(d)}>Delete</Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+  return (
+    <div className="border rounded-md p-3 bg-gray-50">
+      {loading ? <div className="text-xs text-gray-500">Loading documents...</div> : (
+        <>
+          <Section title="Important" items={important} />
+          <Section title="Other" items={others} />
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function BalikManggagawaPage() {
   const { clearances, loading, error, pagination, fetchClearances, createClearance } = useBalikManggagawaClearance()
@@ -57,6 +136,9 @@ export default function BalikManggagawaPage() {
     salary: "",
   })
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [addClearanceOpen, setAddClearanceOpen] = useState(false)
+  const [selectedClearanceType, setSelectedClearanceType] = useState('')
 
   useEffect(() => {
     fetchClearances({ page: 1, limit: 10 })
@@ -265,6 +347,7 @@ export default function BalikManggagawaPage() {
                   <th className="py-3 px-4 font-medium">Sex</th>
                   <th className="py-3 px-4 font-medium">Destination</th>
                   <th className="py-3 px-4 font-medium">Employer</th>
+                  <th className="py-3 px-4 font-medium">Status</th>
                   <th className="py-3 px-4 font-medium text-center">Action</th>
                 </tr>
               </thead>
@@ -282,6 +365,56 @@ export default function BalikManggagawaPage() {
                     <td className="py-3 px-4 text-center">{(row.sex || '').toUpperCase()}</td>
                     <td className="py-3 px-4 text-center">{row.destination}</td>
                     <td className="py-3 px-4 text-center">{row.employer || <span className="text-gray-400">-</span>}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center">
+                        {(() => {
+                          const s = (row.status || '').toString()
+                          const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
+                          const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
+                          const progress = s === 'finished' ? '3/3' : (s === 'for_approval' ? '2/3' : (s === 'for_clearance' ? '1/3' : '0/3'))
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
+                                  <span className="font-medium">{label}</span>
+                                  <span className="text-gray-400">|</span>
+                                  <span className="text-gray-500">{progress}</span>
+                                  <Settings className="h-3.5 w-3.5 text-gray-500" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center" className="w-44">
+                                <DropdownMenuItem onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                    const json = await res.json()
+                                    if (json.success) {
+                                      setSelected(json.data)
+                                      setAddClearanceOpen(true)
+                                    } else {
+                                      toast({ title: 'Load failed', description: json.error || 'Not found', variant: 'destructive' })
+                                    }
+                                  } catch {}
+                                }}>For Compliance</DropdownMenuItem>
+                                <DropdownMenuItem className="text-red-600" onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'rejected', clearanceType: null }) })
+                                    const json = await res.json()
+                                    if (json.success) {
+                                      toast({ title: 'Updated', description: 'Marked as Rejected/Denied' })
+                                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                    } else {
+                                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                    }
+                                  } catch {
+                                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                  }
+                                }}>Reject / Deny</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        })()}
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -544,6 +677,63 @@ export default function BalikManggagawaPage() {
               <div className="font-medium">{selected?.salary != null ? `$${Number(selected.salary).toLocaleString()}` : '-'}</div>
             </div>
           </div>
+          {/* Documents Section */}
+          <div className="px-6 pb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700">Documents</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!selected?.id) return
+                    try {
+                      const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const json = await res.json()
+                      if (json.success) {
+                        toast({ title: 'Generated', description: 'BM clearance document created' })
+                      } else {
+                        toast({ title: 'Generation failed', description: json.error || 'Failed to generate', variant: 'destructive' })
+                      }
+                    } catch {
+                      toast({ title: 'Generation failed', description: 'Network error', variant: 'destructive' })
+                    }
+                  }}
+                >Generate Clearance</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    // Trigger hidden input for upload
+                    const input = document.createElement('input')
+                    input.type = 'file'
+                    input.accept = '.pdf,.docx,.png,.jpg,.jpeg'
+                    input.onchange = async () => {
+                      if (!input.files || !input.files[0] || !selected?.id) return
+                      const fd = new FormData()
+                      fd.append('file', input.files[0])
+                      fd.append('applicationId', selected.id)
+                      fd.append('applicationType', 'balik_manggagawa')
+                      fd.append('documentType', 'other')
+                      try {
+                        const res = await fetch('/api/documents', { method: 'POST', body: fd })
+                        const json = await res.json()
+                        if (json.success) {
+                          toast({ title: 'Uploaded', description: 'Document added' })
+                        } else {
+                          toast({ title: 'Upload failed', description: json.error || 'Failed to upload', variant: 'destructive' })
+                        }
+                      } catch {
+                        toast({ title: 'Upload failed', description: 'Network error', variant: 'destructive' })
+                      }
+                    }
+                    input.click()
+                  }}
+                >+ New</Button>
+              </div>
+            </div>
+            <BMDocumentsList applicationId={selected?.id} />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -662,6 +852,65 @@ export default function BalikManggagawaPage() {
                 toast({ title: 'Delete failed', description: 'Network error', variant: 'destructive' })
               }
             }}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Status Modal */}
+      <BMStatusModal
+        open={statusModalOpen}
+        onOpenChange={(o)=> { setStatusModalOpen(o); if (!o) setSelected(null) }}
+        application={selected || { id: '', status: '', clearance_type: '' }}
+        onSaved={() => fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })}
+      />
+
+      {/* Add Clearance Modal */}
+      <Dialog open={addClearanceOpen} onOpenChange={(o)=> { setAddClearanceOpen(o); if (!o) { setSelected(null); setSelectedClearanceType('') } }}>
+        <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Add Clearance</DialogTitle>
+          <div className="bg-[#1976D2] text-white px-6 py-4">
+            <h2 className="text-lg font-semibold">Add Clearance</h2>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <Label>Clearance Type</Label>
+              <select
+                className="w-full border rounded px-3 py-2 text-sm h-10 mt-1"
+                value={selectedClearanceType}
+                onChange={(e)=> setSelectedClearanceType(e.target.value)}
+              >
+                <option value="">Select type</option>
+                <option value="critical_skill">Critical Skill</option>
+                <option value="for_assessment_country">For Assessment Country</option>
+                <option value="non_compliant_country">Non Compliant Country</option>
+                <option value="seafarer_position">Seafarer Position</option>
+                <option value="watchlisted_employer">Watchlisted Employer</option>
+                <option value="watchlisted_similar_name">Watchlisted OFW</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={()=> setAddClearanceOpen(false)}>Cancel</Button>
+              <Button className="bg-[#1976D2] text-white" disabled={!selected?.id || !selectedClearanceType} onClick={async () => {
+                if (!selected?.id || !selectedClearanceType) return
+                try {
+                  // Update status and type first
+                  const upd = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: selectedClearanceType }) })
+                  const uj = await upd.json()
+                  if (!uj.success) throw new Error(uj.error || 'Failed to update')
+                  // Generate document
+                  const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                  const gj = await gen.json()
+                  if (!gj.success) {
+                    toast({ title: 'Generation failed', description: gj.error || 'Failed to generate clearance', variant: 'destructive' })
+                  } else {
+                    toast({ title: 'Clearance added', description: 'Status set to For Clearance and document generated' })
+                  }
+                  setAddClearanceOpen(false)
+                  fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                } catch (e: any) {
+                  toast({ title: 'Failed', description: e?.message || 'Could not add clearance', variant: 'destructive' })
+                }
+              }}>Add</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

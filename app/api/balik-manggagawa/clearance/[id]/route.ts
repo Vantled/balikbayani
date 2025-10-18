@@ -51,6 +51,9 @@ export async function PUT(
       employer,
       destination,
       salary,
+      rawSalary,
+      salaryCurrency,
+      jobType,
       clearanceType,
       position,
       monthsYears,
@@ -112,6 +115,9 @@ export async function PUT(
       employer,
       destination,
       salary: parseFloat(salary),
+      rawSalary: rawSalary ? parseFloat(rawSalary) : parseFloat(salary),
+      salaryCurrency: salaryCurrency || null,
+      jobType: jobType || null,
       clearanceType: clearanceType ?? null,
       position: normalize(position),
       monthsYears: normalize(monthsYears),
@@ -210,7 +216,7 @@ export async function PATCH(
     if (body && body.action === 'status_update') {
       const { status, clearanceType } = body as { status?: string; clearanceType?: string | null };
       // Validate status if provided
-      const validStatuses = ['for_clearance', 'for_approval', 'finished', 'rejected'];
+      const validStatuses = ['for_clearance', 'for_approval', 'finished', 'rejected', 'approved'];
       if (status && !validStatuses.includes(status)) {
         const response: ApiResponse = { success: false, error: 'Invalid status' };
         return NextResponse.json(response, { status: 400 });

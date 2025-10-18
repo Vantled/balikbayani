@@ -950,7 +950,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
-            <DialogTitle className="text-lg font-bold">Applicant Details</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{selected?.name}'s Application</DialogTitle>
             <DialogClose asChild>
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
             </DialogClose>
@@ -1116,48 +1116,50 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <hr className="my-4" />
               {/* Documents */}
               <div>
-                <div className="font-semibold text-gray-700 mb-2">Documents</div>
-                <div className="flex gap-2 mb-2">
-                  <Button
-                    variant="outline"
-                    className="text-xs"
-                    onClick={async () => {
-                      if (!selected) return
-                      try {
-                        const res = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance`, { method: 'POST' })
-                        const result = await res.json()
-                        if (result.success) {
-                          setDocumentsRefreshTrigger(prev => prev + 1)
-                          toast({ title: 'Document generated', description: 'Direct Hire Clearance document has been attached.' })
-                        } else if (res.status === 409) {
-                          // Show confirmation modal for override
-                          const confirmOverride = window.confirm('A Direct Hire Clearance document already exists. Do you want to replace it?')
-                          if (confirmOverride) {
-                            const res2 = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance?override=true`, { method: 'POST' })
-                            const result2 = await res2.json()
-                            if (result2.success) {
-                              setDocumentsRefreshTrigger(prev => prev + 1)
-                              toast({ title: 'Document replaced', description: 'Direct Hire Clearance document has been updated.' })
-                            } else {
-                              throw new Error(result2.error || 'Override failed')
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-semibold text-gray-700">Documents</div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="text-xs"
+                      onClick={async () => {
+                        if (!selected) return
+                        try {
+                          const res = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance`, { method: 'POST' })
+                          const result = await res.json()
+                          if (result.success) {
+                            setDocumentsRefreshTrigger(prev => prev + 1)
+                            toast({ title: 'Document generated', description: 'Direct Hire Clearance document has been attached.' })
+                          } else if (res.status === 409) {
+                            // Show confirmation modal for override
+                            const confirmOverride = window.confirm('A Direct Hire Clearance document already exists. Do you want to replace it?')
+                            if (confirmOverride) {
+                              const res2 = await fetch(`/api/direct-hire/${selected.id}/comprehensive-clearance?override=true`, { method: 'POST' })
+                              const result2 = await res2.json()
+                              if (result2.success) {
+                                setDocumentsRefreshTrigger(prev => prev + 1)
+                                toast({ title: 'Document replaced', description: 'Direct Hire Clearance document has been updated.' })
+                              } else {
+                                throw new Error(result2.error || 'Override failed')
+                              }
                             }
+                          } else {
+                            throw new Error(result.error || 'Generation failed')
                           }
-                        } else {
-                          throw new Error(result.error || 'Generation failed')
+                        } catch (err) {
+                          toast({ title: 'Generation error', description: 'Failed to generate the Direct Hire Clearance document.', variant: 'destructive' })
                         }
-                      } catch (err) {
-                        toast({ title: 'Generation error', description: 'Failed to generate the Direct Hire Clearance document.', variant: 'destructive' })
-                      }
-                    }}
-                  >
-                    Generate Clearance
-                  </Button>
-                  <Button 
-                    className="bg-[#1976D2] text-white text-xs"
-                    onClick={() => setUploadModalOpen(true)}
-                  >
-                    + New
-                  </Button>
+                      }}
+                    >
+                      Generate Clearance
+                    </Button>
+                    <Button 
+                      className="bg-[#1976D2] text-white text-xs"
+                      onClick={() => setUploadModalOpen(true)}
+                    >
+                      + New
+                    </Button>
+                  </div>
                 </div>
                 <ApplicantDocumentsList 
                   applicationId={selected.id} 

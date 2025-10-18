@@ -634,6 +634,9 @@ export class DatabaseService {
     employer: string;
     destination: string;
     salary: number;
+    rawSalary?: number | null;
+    salaryCurrency?: string | null;
+    jobType?: string | null;
     clearanceType: string;
     position?: string | null;
     monthsYears?: string | null;
@@ -649,22 +652,72 @@ export class DatabaseService {
     yearsWithPrincipal?: number | null;
     remarks?: string | null;
   }): Promise<BalikManggagawaClearance | null> {
-    const { rows } = await db.query(
-      `UPDATE balik_manggagawa_clearance SET
-        name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, clearance_type = $6,
-        position = $7, months_years = $8, with_principal = $9, new_principal_name = $10, employment_duration = $11,
-        date_arrival = $12, date_departure = $13, place_date_employment = $14, date_blacklisting = $15,
-        total_deployed_ofws = $16, reason_blacklisting = $17, years_with_principal = $18, remarks = $19
-       WHERE id = $20 RETURNING *`,
-      [
-        clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.clearanceType,
-        clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
-        clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
-        clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.remarks ?? null,
-        id
-      ]
-    );
-    return rows[0] || null;
+    try {
+      const { rows } = await db.query(
+        `UPDATE balik_manggagawa_clearance SET
+          name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, raw_salary = $6, salary_currency = $7, job_type = $8, clearance_type = $9,
+          position = $10, months_years = $11, with_principal = $12, new_principal_name = $13, employment_duration = $14,
+          date_arrival = $15, date_departure = $16, place_date_employment = $17, date_blacklisting = $18,
+          total_deployed_ofws = $19, reason_blacklisting = $20, years_with_principal = $21, remarks = $22
+         WHERE id = $23 RETURNING *`,
+        [
+          clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.rawSalary ?? null, clearanceData.salaryCurrency ?? null, clearanceData.jobType ?? null, clearanceData.clearanceType,
+          clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
+          clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
+          clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.remarks ?? null,
+          id
+        ]
+      );
+      return rows[0] || null;
+    } catch (error: any) {
+      // If job_type column doesn't exist, try without it
+      if (error.code === '42703' && error.message.includes('job_type')) {
+        console.log('job_type column not found, adding it dynamically...');
+        try {
+          // Add the column
+          await db.query(`
+            ALTER TABLE balik_manggagawa_clearance
+            ADD COLUMN IF NOT EXISTS job_type VARCHAR(20)
+          `);
+          
+          // Add constraint (check if it exists first)
+          try {
+            await db.query(`
+              ALTER TABLE balik_manggagawa_clearance
+              ADD CONSTRAINT balik_manggagawa_clearance_job_type_check
+              CHECK (job_type IN ('professional', 'household') OR job_type IS NULL)
+            `);
+          } catch (constraintError: any) {
+            // Constraint might already exist, ignore the error
+            if (!constraintError.message.includes('already exists')) {
+              throw constraintError;
+            }
+          }
+          
+          // Retry the original query
+          const { rows } = await db.query(
+            `UPDATE balik_manggagawa_clearance SET
+              name_of_worker = $1, sex = $2, employer = $3, destination = $4, salary = $5, raw_salary = $6, salary_currency = $7, job_type = $8, clearance_type = $9,
+              position = $10, months_years = $11, with_principal = $12, new_principal_name = $13, employment_duration = $14,
+              date_arrival = $15, date_departure = $16, place_date_employment = $17, date_blacklisting = $18,
+              total_deployed_ofws = $19, reason_blacklisting = $20, years_with_principal = $21, remarks = $22
+             WHERE id = $23 RETURNING *`,
+            [
+              clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, clearanceData.rawSalary ?? null, clearanceData.salaryCurrency ?? null, clearanceData.jobType ?? null, clearanceData.clearanceType,
+              clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
+              clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
+              clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.remarks ?? null,
+              id
+            ]
+          );
+          return rows[0] || null;
+        } catch (retryError) {
+          console.error('Failed to add job_type column:', retryError);
+          throw retryError;
+        }
+      }
+      throw error;
+    }
   }
 
   static async updateBalikManggagawaStatus(id: string, data: { status: string | null; clearanceType: string | null }): Promise<BalikManggagawaClearance | null> {

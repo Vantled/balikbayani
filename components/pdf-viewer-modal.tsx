@@ -39,34 +39,38 @@ export default function DocumentViewerModal({ isOpen, onClose, documentId, docum
       setLoading(true)
       setError(null)
       
-      let blob: Blob
-      
       if (fileBlob) {
         // Use the provided file blob (for new uploads)
-        blob = fileBlob
-      } else if (documentId) {
-        // Fetch from database (for existing documents)
-        const response = await fetch(`/api/documents/${documentId}/download`)
-        if (!response.ok) {
-          throw new Error('Failed to load document')
+        const url = URL.createObjectURL(fileBlob)
+        setDocumentUrl(url)
+        
+        // Determine file type from blob
+        if (fileBlob.type.includes('pdf')) {
+          setFileType('pdf')
+        } else if (fileBlob.type.includes('image')) {
+          setFileType('image')
+        } else {
+          setError('This file type is not supported for preview. Please download the document to view it.')
+          return
         }
-        blob = await response.blob()
+      } else if (documentId) {
+        // Use the view endpoint for existing documents (same as Balik Manggagawa)
+        const viewUrl = `/api/documents/${documentId}/view`
+        setDocumentUrl(viewUrl)
+        
+        // Determine file type from document name
+        const fileName = documentName.toLowerCase()
+        if (fileName.endsWith('.pdf')) {
+          setFileType('pdf')
+        } else if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
+          setFileType('image')
+        } else {
+          setError('This file type is not supported for preview. Please download the document to view it.')
+          return
+        }
       } else {
         throw new Error('No document source provided')
       }
-      
-      // Determine file type
-      if (blob.type.includes('pdf')) {
-        setFileType('pdf')
-      } else if (blob.type.includes('image')) {
-        setFileType('image')
-      } else {
-        setError('This file type is not supported for preview. Please download the document to view it.')
-        return
-      }
-      
-      const url = URL.createObjectURL(blob)
-      setDocumentUrl(url)
     } catch (err) {
       setError('Failed to load document')
       console.error('Error loading document:', err)

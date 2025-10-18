@@ -6,20 +6,92 @@ import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-cleara
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2 } from "lucide-react"
+import DocumentViewerModal from "@/components/pdf-viewer-modal"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogTitle, DialogClose, DialogHeader } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { AVAILABLE_CURRENCIES, getUSDEquivalentAsync, type Currency } from "@/lib/currency-converter"
-import BMStatusModal from "@/components/bm-status-modal"
 import { useCallback, useRef } from "react"
 
-function BMDocumentsList({ applicationId }: { applicationId?: string }) {
+function BMDocumentsSection({ 
+  applicationId, 
+  refreshTrigger
+}: { 
+  applicationId?: string
+  refreshTrigger?: number
+}) {
   const [docs, setDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [editingDocument, setEditingDocument] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [selectedDocument, setSelectedDocument] = useState<{ id: string; name: string } | null>(null)
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [documentToDelete, setDocumentToDelete] = useState<any>(null)
   const mounted = useRef(false)
+
+  const getFileIcon = (fileName: string, mimeType: string) => {
+    const ext = (fileName.split('.').pop() || '').toLowerCase()
+    if (ext === 'pdf' || mimeType.includes('pdf')) {
+      return <FileText className="h-4 w-4 text-red-600" />
+    }
+    if (['doc', 'docx', 'rtf'].includes(ext) || mimeType.includes('word')) {
+      return <FileText className="h-4 w-4 text-blue-600" />
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext) || mimeType.includes('spreadsheet')) {
+      return <FileText className="h-4 w-4 text-green-600" />
+    }
+    if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext) || mimeType.startsWith('image/')) {
+      return <FileText className="h-4 w-4 text-teal-600" />
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+      return <FileText className="h-4 w-4 text-yellow-600" />
+    }
+    return <FileText className="h-4 w-4 text-gray-500" />
+  }
+
+  const formatDocumentType = (documentType: string, fileName: string): string => {
+    if (!documentType) return 'Unknown Document'
+    
+    // Get file extension from the actual file name
+    const fileExtension = fileName.split('.').pop()?.toLowerCase() || ''
+    
+    const key = documentType.toLowerCase().trim()
+    const map: Record<string, string> = {
+      bm_clearance: 'BM Clearance',
+      clearance: 'Clearance',
+      passport: 'Passport',
+      visa: 'Visa/Work Permit',
+      'visa/work permit': 'Visa/Work Permit',
+      'visa work permit': 'Visa/Work Permit',
+      tesda: 'TESDA NC/PRC License',
+      'tesda nc': 'TESDA NC/PRC License',
+      'tesda nc/prc license': 'TESDA NC/PRC License',
+      confirmation: 'MWO/POLO/PE/PCG Confirmation',
+      issuance_of_oec_memorandum: 'Memorandum Issuance of OEC',
+      dmw_clearance_request: 'Clearance Request',
+    }
+    
+    let formattedName = ''
+    if (map[key]) {
+      formattedName = map[key]
+    } else {
+      formattedName = documentType
+        .replace(/[_-]/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+    }
+    
+    // Append file extension if it exists
+    return fileExtension ? `${formattedName}.${fileExtension}` : formattedName
+  }
+
   const load = useCallback(async () => {
     if (!applicationId) return
     setLoading(true)
@@ -31,64 +103,439 @@ function BMDocumentsList({ applicationId }: { applicationId?: string }) {
       setLoading(false)
     }
   }, [applicationId])
-  useEffect(() => { load() }, [load])
+
+  useEffect(() => { load() }, [load, refreshTrigger])
+
   if (!applicationId) return null
-  const important = docs.filter((d) => (d.document_type || '').toLowerCase() === 'bm_clearance')
-  const others = docs.filter((d) => (d.document_type || '').toLowerCase() !== 'bm_clearance')
-  const openDoc = async (doc: any) => {
-    try {
-      const res = await fetch(`/api/documents/${doc.id}/download`)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = doc.file_name || 'document'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {}
+
+  const isImportantDocument = (doc: any) => {
+    return (doc.document_type || '').toLowerCase() === 'bm_clearance'
   }
-  const deleteDoc = async (doc: any) => {
+
+  const handleView = async (document: any) => {
     try {
-      const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+      console.log('Attempting to view document:', {
+        id: document.id,
+        fileName: document.file_name,
+        documentType: document.document_type,
+        mimeType: document.mime_type,
+        filePath: document.file_path
+      })
+      
+      // Use document ID approach instead of fetching blob
+      setSelectedDocument({
+        id: document.id,
+        name: document.file_name
+      })
+      setPdfViewerOpen(true)
+    } catch (error) {
+      console.error('View error:', error)
+      toast({
+        title: 'View Error',
+        description: `Failed to view document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleDownload = async (doc: any, format: 'pdf' | 'docx' | 'original' = 'original') => {
+    try {
+      const response = await fetch(`/api/documents/${doc.id}/download?format=${format}`)
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        
+        // Generate appropriate filename based on format and original file type
+        let filename: string
+        if (format === 'original') {
+          // Use the original file name and extension
+          filename = doc.file_name
+        } else {
+          // For format conversion requests, use the requested format
+          const baseName = doc.file_name.split('.')[0]
+          const extension = format === 'pdf' ? 'pdf' : 'docx'
+          filename = `${baseName}.${extension}`
+        }
+        
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        
+        const formatText = format === 'original' ? 'original format' : format.toUpperCase()
+        toast({
+          title: 'Download Started',
+          description: `${doc.document_type} has been downloaded in ${formatText}`,
+        })
+      } else {
+        // Handle conversion error responses
+        const errorData = await response.json()
+        if (errorData.error && errorData.originalFormat && errorData.requestedFormat) {
+          toast({
+            title: 'Conversion Not Supported',
+            description: errorData.error,
+            variant: 'destructive'
+          })
+        } else {
+          throw new Error('Download failed')
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Download Error',
+        description: `Failed to download document`,
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleOpenInline = (doc: any) => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const docUrl = `${origin}/api/documents/${doc.id}/file.docx`
+      const isDocx = doc.file_name.toLowerCase().endsWith('.docx') || doc.mime_type.includes('word')
+
+      if (isDocx) {
+        const protocolUrl = `ms-word:ofe|u|${encodeURI(docUrl)}`
+        const iframe = document.createElement('iframe')
+        iframe.style.display = 'none'
+        iframe.width = '0'
+        iframe.height = '0'
+        document.body.appendChild(iframe)
+        // Attempt to open via custom protocol without navigating the app
+        iframe.src = protocolUrl
+        // Cleanup after a short delay
+        setTimeout(() => {
+          try { document.body.removeChild(iframe) } catch {}
+        }, 3000)
+      } else {
+        window.open(docUrl, '_blank')
+      }
+    } catch (error) {
+      toast({
+        title: 'Open Error',
+        description: 'Failed to open document inline',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleEdit = (document: any) => {
+    setEditingDocument(document.id)
+    setEditName(document.document_type)
+  }
+
+  const handleSaveEdit = async (documentId: string) => {
+    if (!editName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Document name cannot be empty',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentName: editName.trim() })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+
+      if (result.success) {
+        setDocs(docs => docs.map(doc => 
+          doc.id === documentId 
+            ? { ...doc, document_type: editName.trim() }
+            : doc
+        ))
+        setEditingDocument(null)
+        setEditName('')
+        toast({
+          title: 'Document updated',
+          description: 'Document name has been updated',
+        })
+      } else {
+        throw new Error(result.error || 'Update failed')
+      }
+    } catch (error) {
+      toast({
+        title: 'Update failed',
+        description: error instanceof Error ? error.message : 'Network error',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleDelete = (document: any) => {
+    setDocumentToDelete(document)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!documentToDelete) return
+    
+    try {
+      const res = await fetch(`/api/documents/${documentToDelete.id}`, { method: 'DELETE' })
       const json = await res.json()
       if (json.success) {
-        setDocs((arr) => arr.filter((d) => d.id !== doc.id))
         toast({ title: 'Deleted', description: 'Document removed' })
+        load()
       } else {
         toast({ title: 'Delete failed', description: json.error || 'Failed to delete', variant: 'destructive' })
       }
     } catch {
       toast({ title: 'Delete failed', description: 'Network error', variant: 'destructive' })
+    } finally {
+      setDeleteConfirmOpen(false)
+      setDocumentToDelete(null)
     }
   }
-  const Section = ({ title, items }: { title: string; items: any[] }) => (
-    <div className="mb-3">
-      <div className="text-xs text-gray-500 mb-1">{title}</div>
-      {items.length === 0 ? (
-        <div className="text-xs text-gray-400">No documents</div>
-      ) : (
-        <ul className="space-y-1">
-          {items.map((d) => (
-            <li key={d.id} className="flex items-center justify-between text-sm">
-              <span className="truncate pr-2">{d.document_type || d.file_name}</span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => openDoc(d)}>Download</Button>
-                <Button variant="outline" size="sm" className="text-red-600" onClick={() => deleteDoc(d)}>Delete</Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+
+  const renderDocumentRow = (doc: any) => (
+    <div key={doc.id} className="flex items-center justify-between p-2 bg-green-50 rounded border">
+      <div className="flex items-center gap-2 flex-1">
+        {getFileIcon(doc.file_name, doc.mime_type)}
+        {editingDocument === doc.id ? (
+          <div className="flex items-center gap-2 flex-1">
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="text-sm h-8"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveEdit(doc.id)
+                if (e.key === 'Escape') setEditingDocument(null)
+              }}
+              autoFocus
+            />
+            <Button size="sm" onClick={() => handleSaveEdit(doc.id)}>Save</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditingDocument(null)}>Cancel</Button>
+          </div>
+        ) : (
+          <span className="text-sm">{formatDocumentType(doc.document_type, doc.file_name)}</span>
+        )}
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {(() => {
+            const isDocx = doc.file_name.toLowerCase().endsWith('.docx')
+            if (isDocx) return (
+              <DropdownMenuItem onClick={() => handleOpenInline(doc)}>
+                <Eye className="h-4 w-4 mr-2" />
+                Open
+              </DropdownMenuItem>
+            )
+            return (
+              <DropdownMenuItem onClick={() => handleView(doc)}>
+                <Eye className="h-4 w-4 mr-2" />
+                View
+              </DropdownMenuItem>
+            )
+          })()}
+          {(() => {
+            const fileExtension = doc.file_name.split('.').pop()?.toLowerCase() || ''
+            let downloadText = 'Download'
+            if (doc.mime_type.includes('word') || doc.file_name.toLowerCase().endsWith('.docx')) {
+              downloadText = 'Download DOCX'
+            } else if (doc.mime_type.includes('pdf') || doc.file_name.toLowerCase().endsWith('.pdf')) {
+              downloadText = 'Download PDF'
+            } else if (doc.mime_type.includes('image') || doc.file_name.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+              downloadText = `Download ${fileExtension.toUpperCase()}`
+            } else {
+              downloadText = `Download ${fileExtension.toUpperCase()}`
+            }
+            return (
+              <DropdownMenuItem onClick={() => handleDownload(doc, 'original')}>
+                <Download className="h-4 w-4 mr-2" />
+                {downloadText}
+              </DropdownMenuItem>
+            )
+          })()}
+          <DropdownMenuItem onClick={() => handleEdit(doc)}>
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Name
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDelete(doc)} className="text-red-600">
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
+
+  const importantDocs = docs.filter(d => isImportantDocument(d))
+  const otherDocs = docs.filter(d => !isImportantDocument(d))
+
   return (
-    <div className="border rounded-md p-3 bg-gray-50">
-      {loading ? <div className="text-xs text-gray-500">Loading documents...</div> : (
-        <>
-          <Section title="Important" items={important} />
-          <Section title="Other" items={others} />
-        </>
+    <>
+      <div className="space-y-4">
+        {importantDocs.length > 0 && (
+          <div>
+            <div className="text-sm font-semibold text-gray-700 mb-2">Important Documents</div>
+            <div className="space-y-2">
+              {importantDocs.map(renderDocumentRow)}
+            </div>
+          </div>
+        )}
+        {otherDocs.length > 0 && (
+          <div>
+            <div className="text-sm font-semibold text-gray-700 mb-2">Other Documents</div>
+            <div className="space-y-2">
+              {otherDocs.map(renderDocumentRow)}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Document Viewer Modal */}
+      {selectedDocument && (
+        <DocumentViewerModal
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false)
+            setSelectedDocument(null)
+          }}
+          documentId={selectedDocument.id}
+          documentName={selectedDocument.name}
+        />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{documentToDelete?.file_name || 'this document'}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+// Document Upload Form Component
+interface DocumentUploadFormProps {
+  applicationId: string
+  applicationType: string
+  onSuccess: () => void
+  onError: (error: string) => void
+  onCancel: () => void
+}
+
+function DocumentUploadForm({ applicationId, applicationType, onSuccess, onError, onCancel }: DocumentUploadFormProps) {
+  const [uploading, setUploading] = useState(false)
+  const [documentName, setDocumentName] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
+  const handleUpload = async () => {
+    if (!selectedFile || !documentName.trim()) {
+      onError('Please select a file and enter a document name')
+      return
+    }
+
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('applicationId', applicationId)
+      formData.append('applicationType', applicationType)
+      formData.append('documentName', documentName.trim())
+
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        onSuccess()
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-sm font-medium">Document Name</label>
+        <input
+          type="text"
+          value={documentName}
+          onChange={(e) => setDocumentName(e.target.value)}
+          placeholder="Enter document name (e.g., Passport, Visa, Employment Contract)"
+          className="w-full border rounded px-3 py-2 mt-1"
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">File</label>
+        <input
+          type="file"
+          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          accept=".jpg,.jpeg,.png,.pdf"
+          className="w-full border rounded px-3 py-2 mt-1"
+        />
+        <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or PDF (Max 5MB)</p>
+      </div>
+
+      <div className="flex justify-end space-x-2">
+        <Button
+          variant="outline"
+          onClick={onCancel}
+          disabled={uploading}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleUpload}
+          disabled={uploading || !selectedFile || !documentName.trim()}
+          className="bg-[#1976D2] hover:bg-[#1565C0]"
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            'Upload'
+          )}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -134,11 +581,13 @@ export default function BalikManggagawaPage() {
     destination: "",
     position: "",
     salary: "",
+    job_type: "" as 'household' | 'professional' | '',
+    salaryCurrency: "" as Currency | '',
   })
+  const [editUsdDisplay, setEditUsdDisplay] = useState<string>("")
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const [addClearanceOpen, setAddClearanceOpen] = useState(false)
-  const [selectedClearanceType, setSelectedClearanceType] = useState('')
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
 
   useEffect(() => {
     fetchClearances({ page: 1, limit: 10 })
@@ -171,6 +620,18 @@ export default function BalikManggagawaPage() {
     }
     compute()
   }, [formData.salary, formData.salaryCurrency])
+
+  useEffect(() => {
+    const compute = async () => {
+      if (!editData.salary || isNaN(parseFloat(editData.salary)) || !editData.salaryCurrency) {
+        setEditUsdDisplay("")
+        return
+      }
+      const val = await getUSDEquivalentAsync(parseFloat(editData.salary), editData.salaryCurrency)
+      setEditUsdDisplay(val)
+    }
+    compute()
+  }, [editData.salary, editData.salaryCurrency])
 
   const resetFilters = () => {
     setFilters({ clearanceType: "", sex: "", dateFrom: "", dateTo: "", jobsite: "", position: "", showDeletedOnly: false })
@@ -369,32 +830,162 @@ export default function BalikManggagawaPage() {
                       <div className="flex items-center justify-center">
                         {(() => {
                           const s = (row.status || '').toString()
-                          const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
-                          const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
-                          const progress = s === 'finished' ? '3/3' : (s === 'for_approval' ? '2/3' : (s === 'for_clearance' ? '1/3' : '0/3'))
+                          const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : s === 'approved' ? 'Approved' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
+                          const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : s === 'approved' ? 'bg-green-100 text-green-800 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
                           return (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <button className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
                                   <span className="font-medium">{label}</span>
-                                  <span className="text-gray-400">|</span>
-                                  <span className="text-gray-500">{progress}</span>
                                   <Settings className="h-3.5 w-3.5 text-gray-500" />
                                 </button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="center" className="w-44">
-                                <DropdownMenuItem onClick={async () => {
+                              <DropdownMenuContent align="start" className="w-fit min-w-48 max-w-64">
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>For Compliance</DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'critical_skill' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>Critical Skills</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'for_assessment_country' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>For Assessment Country</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'non_compliant_country' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>Non Compliant Country</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'seafarer_position' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>Seafarer Position</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_employer' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>Watchlisted Employer</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_similar_name' }) })
+                                        const json = await res.json()
+                                        if (json.success) {
+                                          // Generate document
+                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
+                                          const gj = await gen.json()
+                                          if (gj.success) {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW and document generated' })
+                                          } else {
+                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW (document generation failed)', variant: 'destructive' })
+                                          }
+                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                                        } else {
+                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                                        }
+                                      } catch {
+                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                      }
+                                    }}>Watchlisted OFW</DropdownMenuItem>
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuItem className="text-green-600" onClick={async () => {
                                   try {
-                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'approved', clearanceType: null }) })
                                     const json = await res.json()
                                     if (json.success) {
-                                      setSelected(json.data)
-                                      setAddClearanceOpen(true)
+                                      toast({ title: 'Updated', description: 'Marked as Approved' })
+                                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
                                     } else {
-                                      toast({ title: 'Load failed', description: json.error || 'Not found', variant: 'destructive' })
+                                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
                                     }
-                                  } catch {}
-                                }}>For Compliance</DropdownMenuItem>
+                                  } catch {
+                                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                                  }
+                                }}>Approved</DropdownMenuItem>
                                 <DropdownMenuItem className="text-red-600" onClick={async () => {
                                   try {
                                     const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'rejected', clearanceType: null }) })
@@ -450,7 +1041,9 @@ export default function BalikManggagawaPage() {
                                   employer: d.employer || '',
                                   destination: d.destination || '',
                                   position: d.position || '',
-                                  salary: d.salary != null ? String(d.salary) : '',
+                                  salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
+                                  job_type: d.job_type || '',
+                                  salaryCurrency: d.salary_currency || '',
                                 })
                                 setEditOpen(true)
                               } else {
@@ -462,9 +1055,6 @@ export default function BalikManggagawaPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setSelected(row); setDeleteConfirmOpen(true) }} className="text-red-600 focus:text-red-700">
                             <Trash2 className="h-4 w-4 mr-2" /> Delete
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast({ title: 'Clearance', description: 'Generate/View Clearance' })}>
-                            <FileText className="h-4 w-4 mr-2" /> Clearance
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -618,6 +1208,7 @@ export default function BalikManggagawaPage() {
                   employer: formData.employer,
                   destination: formData.destination,
                   salary: salaryUsd,
+                  rawSalary: numericSalary,
                   position: formData.position || undefined,
                   // Optionally send additional context for future support
                   jobType: formData.job_type || undefined,
@@ -647,7 +1238,10 @@ export default function BalikManggagawaPage() {
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
             </DialogClose>
           </div>
-          <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+          <div className="px-6 pt-3 pb-1">
+            <h3 className="text-base font-semibold text-gray-700">Personal Information</h3>
+          </div>
+          <div className="px-6 pb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
             <div>
               <div className="text-gray-500">Control No.:</div>
               <div className="font-medium">{selected?.control_number || '-'}</div>
@@ -673,18 +1267,25 @@ export default function BalikManggagawaPage() {
               <div className="font-medium">{selected?.position || '-'}</div>
             </div>
             <div>
-              <div className="text-gray-500">Salary (USD):</div>
-              <div className="font-medium">{selected?.salary != null ? `$${Number(selected.salary).toLocaleString()}` : '-'}</div>
+              <div className="text-gray-500">Salary (per month):</div>
+              <div className="font-medium">
+                {selected?.salary != null && selected?.raw_salary != null && selected?.salary_currency ? 
+                  `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${selected.salary_currency} ${Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                  : selected?.salary != null ? 
+                    `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                    : '-'
+                }
+              </div>
             </div>
           </div>
           {/* Documents Section */}
           <div className="px-6 pb-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700">Documents</h3>
+              <h3 className="text-base font-semibold text-gray-700">Documents</h3>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="text-xs"
                   onClick={async () => {
                     if (!selected?.id) return
                     try {
@@ -701,51 +1302,25 @@ export default function BalikManggagawaPage() {
                   }}
                 >Generate Clearance</Button>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    // Trigger hidden input for upload
-                    const input = document.createElement('input')
-                    input.type = 'file'
-                    input.accept = '.pdf,.docx,.png,.jpg,.jpeg'
-                    input.onchange = async () => {
-                      if (!input.files || !input.files[0] || !selected?.id) return
-                      const fd = new FormData()
-                      fd.append('file', input.files[0])
-                      fd.append('applicationId', selected.id)
-                      fd.append('applicationType', 'balik_manggagawa')
-                      fd.append('documentType', 'other')
-                      try {
-                        const res = await fetch('/api/documents', { method: 'POST', body: fd })
-                        const json = await res.json()
-                        if (json.success) {
-                          toast({ title: 'Uploaded', description: 'Document added' })
-                        } else {
-                          toast({ title: 'Upload failed', description: json.error || 'Failed to upload', variant: 'destructive' })
-                        }
-                      } catch {
-                        toast({ title: 'Upload failed', description: 'Network error', variant: 'destructive' })
-                      }
-                    }
-                    input.click()
-                  }}
+                  className="bg-[#1976D2] text-white text-xs"
+                  onClick={() => setUploadModalOpen(true)}
                 >+ New</Button>
               </div>
             </div>
-            <BMDocumentsList applicationId={selected?.id} />
+            <BMDocumentsSection 
+              applicationId={selected?.id} 
+              refreshTrigger={documentsRefreshTrigger}
+            />
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Edit Modal */}
       <Dialog open={editOpen} onOpenChange={(o)=> { setEditOpen(o); if (!o) { setSelected(null); setEditSaving(false) } }}>
-        <DialogContent className="max-w-2xl w-[95vw] p-0 overflow-hidden">
+        <DialogContent className="p-0 overflow-hidden max-w-2xl w-[95vw]">
           <DialogTitle className="sr-only">Edit BM Application</DialogTitle>
-          <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
+          <div className="bg-[#1976D2] text-white px-6 py-4">
             <h2 className="text-lg font-semibold">{(editData.nameOfWorker || selected?.name_of_worker) ? `${(editData.nameOfWorker || selected?.name_of_worker)}'s BM Application` : 'Edit BM Application'}</h2>
-            <DialogClose asChild>
-              <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
-            </DialogClose>
           </div>
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 gap-4">
@@ -770,27 +1345,73 @@ export default function BalikManggagawaPage() {
               </div>
               <div>
                 <div className="flex gap-2 mb-1">
-                  <div className="flex-1"><Label>Position</Label></div>
-                  <div className="w-40"><Label>Employer</Label></div>
+                  <div className="flex-1">
+                    <Label>Position</Label>
+                  </div>
+                  <div className="w-40">
+                    <Label>Job Type</Label>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Input value={editData.position} onChange={(e)=> setEditData(d=>({ ...d, position: e.target.value.toUpperCase() }))} className="mt-1" placeholder="Enter Position" />
                   </div>
                   <div className="w-40">
-                    <Input value={editData.employer} onChange={(e)=> setEditData(d=>({ ...d, employer: e.target.value.toUpperCase() }))} className="mt-1" placeholder="Enter Employer" />
+                    <select 
+                      className="w-full border rounded px-3 py-2.5 text-sm h-10 mt-1"
+                      value={editData.job_type}
+                      onChange={(e)=> setEditData(d=>({ ...d, job_type: e.target.value as 'household' | 'professional' }))}
+                    >
+                      <option value="">----</option>
+                      <option value="professional">Professional</option>
+                      <option value="household">Household</option>
+                    </select>
                   </div>
                 </div>
               </div>
               <div>
-                <Label>Salary (USD)</Label>
-                <Input type="number" value={editData.salary} onChange={(e)=> setEditData(d=>({ ...d, salary: e.target.value }))} className="mt-1" placeholder="Enter Salary (USD)" />
+                <div className="flex gap-2 mb-1">
+                  <div className="flex-1">
+                    <Label>Salary (per month)</Label>
+                  </div>
+                  <div className="w-40">
+                    <Label>Currency</Label>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input type="number" value={editData.salary} onChange={(e)=> setEditData(d=>({ ...d, salary: e.target.value }))} className="mt-1" placeholder="Enter Salary" />
+                  </div>
+                  <div className="w-40">
+                    <select 
+                      className="w-full border rounded px-3 py-2.5 text-sm h-10 mt-1"
+                      value={editData.salaryCurrency}
+                      onChange={(e)=> setEditData(d=>({ ...d, salaryCurrency: e.target.value as Currency }))}
+                    >
+                      <option value="">----</option>
+                      {AVAILABLE_CURRENCIES.map((currency) => (
+                        <option key={currency.value} value={currency.value}>
+                          {currency.value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {editData.salary && editData.salaryCurrency !== "USD" && (
+                  <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded-md">
+                    <span className="text-sm text-blue-700">
+                      USD Equivalent: {editUsdDisplay}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button variant="outline" onClick={()=> setEditOpen(false)}>Cancel</Button>
-              <Button className="bg-[#1976D2] text-white" disabled={editSaving} onClick={async ()=>{
+              <Button 
+                disabled={editSaving}
+                onClick={async () => {
                 if (!selected?.id) return
                 if (!editData.nameOfWorker || !editData.sex || !editData.destination || !editData.position || !editData.employer) {
                   toast({ title: 'Missing fields', description: 'Please complete required fields.', variant: 'destructive' });
@@ -798,6 +1419,12 @@ export default function BalikManggagawaPage() {
                 }
                 setEditSaving(true)
                 try {
+                  // Calculate USD equivalent for salary
+                  const numericSalary = editData.salary !== '' ? Number(editData.salary) : 0
+                  const salaryUsd = editData.salaryCurrency && numericSalary
+                    ? (editData.salaryCurrency === 'USD' ? numericSalary : Number((await getUSDEquivalentAsync(numericSalary, editData.salaryCurrency)).replace(/[^0-9.]/g, '')))
+                    : numericSalary
+
                   const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -806,22 +1433,29 @@ export default function BalikManggagawaPage() {
                       sex: editData.sex,
                       employer: editData.employer,
                       destination: editData.destination,
-                      salary: Number(editData.salary || 0),
+                      salary: salaryUsd,
+                      rawSalary: numericSalary,
                       position: editData.position,
+                      jobType: editData.job_type || undefined,
+                      salaryCurrency: editData.salaryCurrency || undefined,
                     })
                   })
                   const json = await res.json()
                   if (json.success) {
                     toast({ title: 'Updated', description: 'BM application updated.' })
                     setEditOpen(false)
-                    fetchClearances({ page: pagination.page, limit: pagination.limit })
+                    fetchClearances({ page: pagination.page, limit: pagination.limit, search })
                   } else {
-                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    toast({ title: 'Error', description: json.error || 'Update failed', variant: 'destructive' })
                   }
+                } catch (err) {
+                  toast({ title: 'Error', description: 'Update failed', variant: 'destructive' })
                 } finally {
                   setEditSaving(false)
                 }
-              }}>Save</Button>
+              }} className="bg-[#1976D2] hover:bg-[#1565C0]">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -855,63 +1489,36 @@ export default function BalikManggagawaPage() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* Status Modal */}
-      <BMStatusModal
-        open={statusModalOpen}
-        onOpenChange={(o)=> { setStatusModalOpen(o); if (!o) setSelected(null) }}
-        application={selected || { id: '', status: '', clearance_type: '' }}
-        onSaved={() => fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })}
-      />
 
-      {/* Add Clearance Modal */}
-      <Dialog open={addClearanceOpen} onOpenChange={(o)=> { setAddClearanceOpen(o); if (!o) { setSelected(null); setSelectedClearanceType('') } }}>
-        <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden">
-          <DialogTitle className="sr-only">Add Clearance</DialogTitle>
-          <div className="bg-[#1976D2] text-white px-6 py-4">
-            <h2 className="text-lg font-semibold">Add Clearance</h2>
-          </div>
-          <div className="p-6 space-y-4">
-            <div>
-              <Label>Clearance Type</Label>
-              <select
-                className="w-full border rounded px-3 py-2 text-sm h-10 mt-1"
-                value={selectedClearanceType}
-                onChange={(e)=> setSelectedClearanceType(e.target.value)}
-              >
-                <option value="">Select type</option>
-                <option value="critical_skill">Critical Skill</option>
-                <option value="for_assessment_country">For Assessment Country</option>
-                <option value="non_compliant_country">Non Compliant Country</option>
-                <option value="seafarer_position">Seafarer Position</option>
-                <option value="watchlisted_employer">Watchlisted Employer</option>
-                <option value="watchlisted_similar_name">Watchlisted OFW</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={()=> setAddClearanceOpen(false)}>Cancel</Button>
-              <Button className="bg-[#1976D2] text-white" disabled={!selected?.id || !selectedClearanceType} onClick={async () => {
-                if (!selected?.id || !selectedClearanceType) return
-                try {
-                  // Update status and type first
-                  const upd = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: selectedClearanceType }) })
-                  const uj = await upd.json()
-                  if (!uj.success) throw new Error(uj.error || 'Failed to update')
-                  // Generate document
-                  const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                  const gj = await gen.json()
-                  if (!gj.success) {
-                    toast({ title: 'Generation failed', description: gj.error || 'Failed to generate clearance', variant: 'destructive' })
-                  } else {
-                    toast({ title: 'Clearance added', description: 'Status set to For Clearance and document generated' })
-                  }
-                  setAddClearanceOpen(false)
-                  fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                } catch (e: any) {
-                  toast({ title: 'Failed', description: e?.message || 'Could not add clearance', variant: 'destructive' })
-                }
-              }}>Add</Button>
-            </div>
-          </div>
+      {/* Upload Document Modal */}
+      <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload New Document</DialogTitle>
+          </DialogHeader>
+          <DocumentUploadForm 
+            applicationId={selected?.id || ''}
+            applicationType="balik_manggagawa"
+            onSuccess={() => {
+              setUploadModalOpen(false)
+              // Refresh the documents list
+              setDocumentsRefreshTrigger(prev => prev + 1)
+              toast({
+                title: 'Document uploaded',
+                description: 'Document has been uploaded successfully',
+              })
+            }}
+            onError={(error) => {
+              toast({
+                title: 'Upload Error',
+                description: error,
+                variant: 'destructive'
+              })
+            }}
+            onCancel={() => {
+              setUploadModalOpen(false)
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

@@ -124,8 +124,7 @@ export class DatabaseService {
     salary_currency?: string;
     raw_salary?: number;
   }): Promise<DirectHireApplication> {
-    console.log('Database service creating application with data:', data);
-    console.log('Evaluator field in database service:', data.evaluator);
+    // debug logs removed
     const query = `
       INSERT INTO direct_hire_applications 
       (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)
@@ -151,27 +150,91 @@ export class DatabaseService {
       data.raw_salary || data.salary
     ];
     
-    console.log('Database query values:', values);
+    // debug logs removed
     
     const { rows } = await db.query(query, values);
-    console.log('Database query result:', rows);
     const result = rows[0];
     
     // Parse status_checklist JSONB field
     result.status_checklist = result.status_checklist ? JSON.parse(JSON.stringify(result.status_checklist)) : null;
     
-    console.log('Database service returning result:', result);
+    // debug logs removed
     return result;
   }
 
   static async getDirectHireApplications(filters: FilterOptions = {}, pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<DirectHireApplication>> {
+    // debug logs removed
     let query = 'SELECT * FROM direct_hire_applications WHERE 1=1';
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Exclude deleted by default
-    if (!filters.include_deleted) {
-      query += ' AND deleted_at IS NULL';
+    // Deleted filtering is now handled in the comprehensive filter logic below
+
+    // Handle finished/processing filters
+    const showFinished = filters.include_finished === true;
+    const showProcessing = filters.include_processing === true;
+    const showDeleted = filters.include_deleted === true;
+    
+    // If status filters are active, skip the main toggle logic
+    if (!filters.status || filters.status.length === 0) {
+      // If only one filter is active, show only that type
+      if (showDeleted && !showFinished && !showProcessing) {
+        // Show only deleted applications
+        query += ' AND deleted_at IS NOT NULL';
+      } else if (showFinished && !showDeleted && !showProcessing) {
+        // Show only finished applications - check status checklist for completed items
+        query += ` AND deleted_at IS NULL 
+          AND status_checklist IS NOT NULL 
+          AND (status_checklist->'evaluated'->>'checked') = 'true'
+          AND (status_checklist->'for_confirmation'->>'checked') = 'true'
+          AND (status_checklist->'emailed_to_dhad'->>'checked') = 'true'
+          AND (status_checklist->'received_from_dhad'->>'checked') = 'true'
+          AND (status_checklist->'for_interview'->>'checked') = 'true'`;
+      } else if (showProcessing && !showDeleted && !showFinished) {
+        // Show only processing applications - not all checklist items are checked
+        query += ` AND deleted_at IS NULL 
+          AND (status_checklist IS NULL 
+          OR (status_checklist->'evaluated'->>'checked') = 'false'
+          OR (status_checklist->'for_confirmation'->>'checked') = 'false'
+          OR (status_checklist->'emailed_to_dhad'->>'checked') = 'false'
+          OR (status_checklist->'received_from_dhad'->>'checked') = 'false'
+          OR (status_checklist->'for_interview'->>'checked') = 'false')`;
+      } else if (showDeleted && showFinished && !showProcessing) {
+        // Show both deleted and finished
+        query += ` AND (deleted_at IS NOT NULL 
+          OR (deleted_at IS NULL 
+          AND status_checklist IS NOT NULL 
+          AND (status_checklist->'evaluated'->>'checked') = 'true'
+          AND (status_checklist->'for_confirmation'->>'checked') = 'true'
+          AND (status_checklist->'emailed_to_dhad'->>'checked') = 'true'
+          AND (status_checklist->'received_from_dhad'->>'checked') = 'true'
+          AND (status_checklist->'for_interview'->>'checked') = 'true'))`;
+      } else if (showDeleted && showProcessing && !showFinished) {
+        // Show both deleted and processing
+        query += ` AND (deleted_at IS NOT NULL 
+          OR (deleted_at IS NULL 
+          AND (status_checklist IS NULL 
+          OR (status_checklist->'evaluated'->>'checked') = 'false'
+          OR (status_checklist->'for_confirmation'->>'checked') = 'false'
+          OR (status_checklist->'emailed_to_dhad'->>'checked') = 'false'
+          OR (status_checklist->'received_from_dhad'->>'checked') = 'false'
+          OR (status_checklist->'for_interview'->>'checked') = 'false')))`;
+      } else if (showFinished && showProcessing && !showDeleted) {
+        // Show both finished and processing (but not deleted)
+        query += ` AND deleted_at IS NULL`;
+      } else if (showDeleted && showFinished && showProcessing) {
+        // Show all types
+        // No additional filter needed
+      } else {
+        // Default case: show only processing applications (not deleted, not finished)
+        query += ` AND deleted_at IS NULL 
+          AND (status_checklist IS NULL 
+          OR (status_checklist->'evaluated'->>'checked')::boolean = false
+          OR (status_checklist->'for_confirmation'->>'checked')::boolean = false
+          OR (status_checklist->'emailed_to_dhad'->>'checked')::boolean = false
+          OR (status_checklist->'received_from_dhad'->>'checked')::boolean = false
+          OR (status_checklist->'for_interview'->>'checked')::boolean = false)`;
+      }
     }
 
     if (filters.search) {
@@ -180,27 +243,101 @@ export class DatabaseService {
       paramIndex++;
     }
 
-    if (filters.status) {
-      query += ` AND status = $${paramIndex}`;
-      params.push(filters.status);
+    // Additional key:value filters parsed from search bar
+    if ((filters as any).jobsite) {
+      query += ` AND jobsite ILIKE $${paramIndex}`;
+      params.push(`%${(filters as any).jobsite}%`);
       paramIndex++;
+    }
+    if ((filters as any).position) {
+      query += ` AND position ILIKE $${paramIndex}`;
+      params.push(`%${(filters as any).position}%`);
+      paramIndex++;
+    }
+    if ((filters as any).evaluator) {
+      query += ` AND evaluator ILIKE $${paramIndex}`;
+      params.push(`%${(filters as any).evaluator}%`);
+      paramIndex++;
+    }
+    if ((filters as any).control_number) {
+      query += ` AND control_number ILIKE $${paramIndex}`;
+      params.push(`%${(filters as any).control_number}%`);
+      paramIndex++;
+    }
+
+    // Handle status filters - explicit selections take precedence over main toggles
+    if (filters.status && filters.status.length > 0) {
+      const statusConditions: string[] = []
+      const selectedStatuses = new Set(filters.status)
+      const selectedFinished = selectedStatuses.has('finished')
+      const selectedDeleted = selectedStatuses.has('deleted')
+
+      for (const status of filters.status) {
+        if (status === 'deleted') {
+          statusConditions.push('deleted_at IS NOT NULL')
+        } else if (status === 'finished') {
+          // Finished = all checklist items completed (moved to finished table)
+          statusConditions.push(`(status_checklist IS NOT NULL 
+            AND (status_checklist->'evaluated'->>'checked') = 'true'
+            AND (status_checklist->'for_confirmation'->>'checked') = 'true'
+            AND (status_checklist->'emailed_to_dhad'->>'checked') = 'true'
+            AND (status_checklist->'received_from_dhad'->>'checked') = 'true'
+            AND (status_checklist->'for_interview'->>'checked') = 'true')`)
+        } else if (status === 'draft') {
+          // Draft as direct status
+          statusConditions.push(`status = 'draft'`)
+        } else if (status === 'pending') {
+          // Pending = status pending and not yet evaluated
+          statusConditions.push(`(status = 'pending' AND (status_checklist IS NULL OR (status_checklist->'evaluated'->>'checked') = 'false'))`)
+        } else if (['approved', 'rejected'].includes(status)) {
+          // Direct status values
+          statusConditions.push(`status = '${status}'`)
+        } else {
+          // Checklist status values
+          statusConditions.push(`(status_checklist->'${status}'->>'checked') = 'true'`)
+        }
+      }
+      
+      if (statusConditions.length > 0) {
+        query += ` AND (${statusConditions.join(' OR ')})`;
+        // Exclude deleted rows unless 'deleted' explicitly selected
+        if (!selectedDeleted) {
+          query += ` AND deleted_at IS NULL`;
+        }
+        // Exclude finished rows unless 'finished' explicitly selected
+        if (!selectedFinished) {
+          query += ` AND NOT (status_checklist IS NOT NULL 
+            AND (status_checklist->'evaluated'->>'checked') = 'true'
+            AND (status_checklist->'for_confirmation'->>'checked') = 'true'
+            AND (status_checklist->'emailed_to_dhad'->>'checked') = 'true'
+            AND (status_checklist->'received_from_dhad'->>'checked') = 'true'
+            AND (status_checklist->'for_interview'->>'checked') = 'true')`;
+        }
+      }
+    } else {
+      // Default behavior when no status filter is applied
+      if (!showDeleted) {
+        query += ` AND deleted_at IS NULL`;
+      }
     }
 
     if (filters.sex) {
       query += ` AND sex = $${paramIndex}`;
       params.push(filters.sex);
+      // debug logs removed
       paramIndex++;
     }
 
-    if (filters.date_from) {
+    if ((filters as any).date_from) {
       query += ` AND created_at >= $${paramIndex}`;
-      params.push(filters.date_from);
+      params.push((filters as any).date_from);
       paramIndex++;
     }
 
-    if (filters.date_to) {
-      query += ` AND created_at <= $${paramIndex}`;
-      params.push(filters.date_to);
+    if ((filters as any).date_to) {
+      // Make end date inclusive (end of day)
+      query += ` AND created_at <= ($${paramIndex}::date + INTERVAL '1 day' - INTERVAL '1 millisecond')`;
+      params.push((filters as any).date_to);
       paramIndex++;
     }
 
@@ -213,6 +350,8 @@ export class DatabaseService {
     query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
 
+    // debug logs removed
+    
     const { rows } = await db.query(query, params);
 
     // Parse status_checklist JSONB field for each row

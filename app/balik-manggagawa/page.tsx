@@ -6,7 +6,7 @@ import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-cleara
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2 } from "lucide-react"
+import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2, ChevronUp, FileCheck, CheckCircle, XCircle } from "lucide-react"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogClose, DialogHeader } from "@/components/ui/dialog"
@@ -820,7 +820,15 @@ export default function BalikManggagawaPage() {
                 ) : clearances.length === 0 ? (
                   <tr><td colSpan={6} className="py-8 text-center text-gray-500">No records found</td></tr>
                 ) : clearances.map((row: any, i: number) => (
-                  <tr key={row.id ?? i} className="hover:bg-gray-150 transition-colors duration-75">
+                  <tr 
+                    key={row.id ?? i} 
+                    className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
+                    onDoubleClick={(e) => {
+                      e.preventDefault()
+                      setSelected(row)
+                      setViewOpen(true)
+                    }}
+                  >
                     <td className="py-3 px-4 text-center">{row.control_number || <span className="text-gray-400">-</span>}</td>
                     <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
                     <td className="py-3 px-4 text-center">{(row.sex || '').toUpperCase()}</td>
@@ -833,175 +841,9 @@ export default function BalikManggagawaPage() {
                           const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : s === 'approved' ? 'Approved' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
                           const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : s === 'approved' ? 'bg-green-100 text-green-800 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
                           return (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
-                                  <span className="font-medium">{label}</span>
-                                  <Settings className="h-3.5 w-3.5 text-gray-500" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-fit min-w-48 max-w-64">
-                                <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger>For Compliance</DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'critical_skill' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>Critical Skills</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'for_assessment_country' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>For Assessment Country</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'non_compliant_country' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>Non Compliant Country</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'seafarer_position' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>Seafarer Position</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_employer' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>Watchlisted Employer</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_similar_name' }) })
-                                        const json = await res.json()
-                                        if (json.success) {
-                                          // Generate document
-                                          const gen = await fetch(`/api/balik-manggagawa/clearance/${row.id}/generate`, { method: 'POST' })
-                                          const gj = await gen.json()
-                                          if (gj.success) {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW and document generated' })
-                                          } else {
-                                            toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW (document generation failed)', variant: 'destructive' })
-                                          }
-                                          fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                        } else {
-                                          toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                        }
-                                      } catch {
-                                        toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                      }
-                                    }}>Watchlisted OFW</DropdownMenuItem>
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                                <DropdownMenuItem className="text-green-600" onClick={async () => {
-                                  try {
-                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'approved', clearanceType: null }) })
-                                    const json = await res.json()
-                                    if (json.success) {
-                                      toast({ title: 'Updated', description: 'Marked as Approved' })
-                                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                    } else {
-                                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                    }
-                                  } catch {
-                                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                  }
-                                }}>Approved</DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600" onClick={async () => {
-                                  try {
-                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'rejected', clearanceType: null }) })
-                                    const json = await res.json()
-                                    if (json.success) {
-                                      toast({ title: 'Updated', description: 'Marked as Rejected/Denied' })
-                                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                                    } else {
-                                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                                    }
-                                  } catch {
-                                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                                  }
-                                }}>Reject / Deny</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <span className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
+                              <span className="font-medium">{label}</span>
+                            </span>
                           )
                         })()}
                       </div>
@@ -1230,7 +1072,7 @@ export default function BalikManggagawaPage() {
 
       {/* View Modal */}
       <Dialog open={viewOpen} onOpenChange={(o)=> { setViewOpen(o); if (!o) setSelected(null) }}>
-        <DialogContent className="max-w-2xl w-[95vw] p-0 overflow-hidden">
+        <DialogContent className="max-w-2xl w-[95vw] p-0 overflow-hidden flex flex-col max-h-[90vh]">
           <DialogTitle className="sr-only">View BM Application</DialogTitle>
           <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">{selected?.name_of_worker ? `${selected.name_of_worker}'s BM Application` : 'View BM Application'}</h2>
@@ -1238,79 +1080,270 @@ export default function BalikManggagawaPage() {
               <button aria-label="Close" className="text-white text-2xl font-bold">×</button>
             </DialogClose>
           </div>
-          <div className="px-6 pt-3 pb-1">
-            <h3 className="text-base font-semibold text-gray-700">Personal Information</h3>
-          </div>
-          <div className="px-6 pb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-            <div>
-              <div className="text-gray-500">Control No.:</div>
-              <div className="font-medium">{selected?.control_number || '-'}</div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 pt-3 pb-1">
+              <h3 className="text-base font-semibold text-gray-700">Applicant Information</h3>
             </div>
-            <div>
-              <div className="text-gray-500">Name of Worker:</div>
-              <div className="font-medium">{selected?.name_of_worker || '-'}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Sex:</div>
-              <div className="font-medium capitalize">{selected?.sex || '-'}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Employer:</div>
-              <div className="font-medium">{selected?.employer || '-'}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Destination:</div>
-              <div className="font-medium">{selected?.destination || '-'}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Position:</div>
-              <div className="font-medium">{selected?.position || '-'}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Salary (per month):</div>
-              <div className="font-medium">
-                {selected?.salary != null && selected?.raw_salary != null && selected?.salary_currency ? 
-                  `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${selected.salary_currency} ${Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                  : selected?.salary != null ? 
-                    `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                    : '-'
-                }
+            <div className="px-6 pb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <div className="text-gray-500">Control No.:</div>
+                <div className="font-medium">{selected?.control_number || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Name of Worker:</div>
+                <div className="font-medium">{selected?.name_of_worker || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Sex:</div>
+                <div className="font-medium capitalize">{selected?.sex || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Employer:</div>
+                <div className="font-medium">{selected?.employer || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Destination:</div>
+                <div className="font-medium">{selected?.destination || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Position:</div>
+                <div className="font-medium">{selected?.position || '-'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Salary (per month):</div>
+                <div className="font-medium">
+                  {selected?.salary != null && selected?.raw_salary != null && selected?.salary_currency ? 
+                    `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${selected.salary_currency} ${Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                    : selected?.salary != null ? 
+                      `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                      : '-'
+                  }
+                </div>
               </div>
             </div>
-          </div>
-          {/* Documents Section */}
-          <div className="px-6 pb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold text-gray-700">Documents</h3>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="text-xs"
-                  onClick={async () => {
-                    if (!selected?.id) return
-                    try {
-                      const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const json = await res.json()
-                      if (json.success) {
-                        toast({ title: 'Generated', description: 'BM clearance document created' })
-                      } else {
-                        toast({ title: 'Generation failed', description: json.error || 'Failed to generate', variant: 'destructive' })
+            {/* Documents Section */}
+            <div className="px-6 pb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-gray-700">Documents</h3>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-xs"
+                    onClick={async () => {
+                      if (!selected?.id) return
+                      try {
+                        const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                        const json = await res.json()
+                        if (json.success) {
+                          toast({ title: 'Generated', description: 'BM clearance document created' })
+                        } else {
+                          toast({ title: 'Generation failed', description: json.error || 'Failed to generate', variant: 'destructive' })
+                        }
+                      } catch {
+                        toast({ title: 'Generation failed', description: 'Network error', variant: 'destructive' })
                       }
-                    } catch {
-                      toast({ title: 'Generation failed', description: 'Network error', variant: 'destructive' })
-                    }
-                  }}
-                >Generate Clearance</Button>
-                <Button
-                  className="bg-[#1976D2] text-white text-xs"
-                  onClick={() => setUploadModalOpen(true)}
-                >+ New</Button>
+                    }}
+                  >Generate Clearance</Button>
+                  <Button
+                    className="bg-[#1976D2] text-white text-xs"
+                    onClick={() => setUploadModalOpen(true)}
+                  >+ New</Button>
+                </div>
               </div>
+              <BMDocumentsSection 
+                applicationId={selected?.id} 
+                refreshTrigger={documentsRefreshTrigger}
+              />
             </div>
-            <BMDocumentsSection 
-              applicationId={selected?.id} 
-              refreshTrigger={documentsRefreshTrigger}
-            />
+          </div>
+          {/* Status Action Buttons - Sticky Footer */}
+          <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-end gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300">
+                  <FileCheck className="h-4 w-4" />
+                  For Compliance
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-56">
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'critical_skill' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>Critical Skills</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'for_assessment_country' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>For Assessment Country</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'non_compliant_country' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>Non Compliant Country</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'seafarer_position' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>Seafarer Position</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_employer' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>Watchlisted Employer</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!selected?.id) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_similar_name' }) })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW and document generated' })
+                      } else {
+                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW (document generation failed)', variant: 'destructive' })
+                      }
+                      setViewOpen(false)
+                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}>Watchlisted OFW</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button 
+              className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
+              onClick={async () => {
+                if (!selected?.id) return
+                try {
+                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'rejected', clearanceType: null }) })
+                  const json = await res.json()
+                  if (json.success) {
+                    toast({ title: 'Updated', description: 'Marked as Rejected/Denied' })
+                    setViewOpen(false)
+                    fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                  } else {
+                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                  }
+                } catch {
+                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                }
+              }}
+            >
+              <XCircle className="h-4 w-4" />
+              Reject/Deny
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+              onClick={async () => {
+                if (!selected?.id) return
+                try {
+                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'approved', clearanceType: null }) })
+                  const json = await res.json()
+                  if (json.success) {
+                    toast({ title: 'Updated', description: 'Marked as Approved' })
+                    setViewOpen(false)
+                    fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
+                  } else {
+                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                  }
+                } catch {
+                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                }
+              }}
+            >
+              <CheckCircle className="h-4 w-4" />
+              Approve
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

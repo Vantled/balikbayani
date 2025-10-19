@@ -10,19 +10,71 @@ import { join } from 'path';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || undefined;
-    const status = searchParams.get('status') || undefined;
+    const rawSearch = searchParams.get('search') || '';
+    const statusParam = searchParams.get('status');
+    const status = statusParam ? statusParam.split(',') : undefined;
     const sex = searchParams.get('sex') || undefined;
     const includeDeleted = searchParams.get('include_deleted') === 'true';
+    const includeFinished = searchParams.get('include_finished') === 'true';
+    const includeProcessing = searchParams.get('include_processing') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
 
-    const filters = {
+    // Parse key:value terms from search bar (e.g., sex:male evaluator:john position:nurse jobsite:hk control:ABC)
+    const parsed: any = {};
+    const freeTextParts: string[] = [];
+    if (rawSearch) {
+      const tokens = rawSearch.split(/\s+/).filter(Boolean);
+      for (const token of tokens) {
+        const [k, ...rest] = token.split(':');
+        if (!rest.length) { freeTextParts.push(token); continue; }
+        const v = rest.join(':');
+        switch (k.toLowerCase()) {
+          case 'sex':
+            if (v.toLowerCase() === 'male' || v.toLowerCase() === 'female') parsed.sex = v.toLowerCase();
+            break;
+          case 'jobsite':
+            parsed.jobsite = v;
+            break;
+          case 'position':
+            parsed.position = v;
+            break;
+          case 'evaluator':
+            parsed.evaluator = v;
+            break;
+          case 'control':
+          case 'control_number':
+            parsed.control_number = v;
+            break;
+          case 'date':
+          case 'date_range': {
+            const [from, to] = v.split('|');
+            if (from) parsed.date_from = from;
+            if (to) parsed.date_to = to;
+            break;
+          }
+          default:
+            freeTextParts.push(token);
+        }
+      }
+    }
+    const search = freeTextParts.length ? freeTextParts.join(' ') : undefined;
+
+    const filters: any = {
       search,
       status,
-      sex: sex as 'male' | 'female' | undefined,
-      include_deleted: includeDeleted
+      sex: (parsed.sex || sex) as 'male' | 'female' | undefined,
+      include_deleted: includeDeleted,
+      include_finished: includeFinished,
+      include_processing: includeProcessing
     };
+    // Pass parsed key filters if present
+    if (parsed.jobsite) filters.jobsite = parsed.jobsite;
+    if (parsed.position) filters.position = parsed.position;
+    if (parsed.evaluator) filters.evaluator = parsed.evaluator;
+    if (parsed.control_number) filters.control_number = parsed.control_number;
+    if (parsed.date_from) filters.date_from = parsed.date_from;
+    if (parsed.date_to) filters.date_to = parsed.date_to;
 
     const pagination = {
       page,
@@ -70,10 +122,7 @@ export async function POST(request: NextRequest) {
       const employer = formData.get('employer') as string | null;
       const salaryCurrency = formData.get('salaryCurrency') as string | null;
       
-      console.log('API received data:', {
-        name, sex, salary, status, jobsite, position, job_type, evaluator, employer, salaryCurrency,
-        email: formData.get('email'), cellphone: formData.get('cellphone')
-      });
+      // debug logs removed
       
       // Validate required fields based on status
       if (status === 'draft') {

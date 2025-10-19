@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import DirectHireApplicationsTable from "@/components/direct-hire-applications-table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import FilterPanel from "@/components/filter-panel"
 import CreateApplicationModal from "@/components/create-application-modal"
 import Header from "@/components/shared/header"
@@ -20,27 +20,41 @@ export default function DirectHirePage() {
   const [panelQuery, setPanelQuery] = useState("")
   const [showFinishedOnly, setShowFinishedOnly] = useState(false)
   const [showDeletedOnly, setShowDeletedOnly] = useState(false)
+  const [showProcessingOnly, setShowProcessingOnly] = useState(true)
 
   // Controlled panel state
   const [typeHousehold, setTypeHousehold] = useState(false)
   const [typeProfessional, setTypeProfessional] = useState(false)
   const [sexFilter, setSexFilter] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string[]>([
+    'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'
+  ])
   const [dateWithin, setDateWithin] = useState("")
   const [jobsiteFilter, setJobsiteFilter] = useState("")
   const [positionFilter, setPositionFilter] = useState("")
   const [evaluatorFilter, setEvaluatorFilter] = useState("")
 
+  // Live search: refresh results whenever search text changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('refresh:direct_hire' as any))
+    }
+  }, [search])
+
   const clearPanel = () => {
     setTypeHousehold(false)
     setTypeProfessional(false)
     setSexFilter("")
-    setStatusFilter("")
+    setStatusFilter(['evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'])
     setDateWithin("")
     setJobsiteFilter("")
     setPositionFilter("")
     setEvaluatorFilter("")
     setPanelQuery("")
+    // Reset filter toggles
+    setShowFinishedOnly(false)
+    setShowDeletedOnly(false)
+    setShowProcessingOnly(true) // Default to processing
   }
 
   return (
@@ -60,6 +74,13 @@ export default function DirectHirePage() {
                 placeholder="Search or key:value" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new Event('refresh:direct_hire' as any))
+                    }
+                  }
+                }}
               />
               <Button
                 variant="ghost"
@@ -97,11 +118,17 @@ export default function DirectHirePage() {
                   onApply={(query) => {
                     setPanelQuery(query)
                     setShowFilter(false)
+                    // Force the table to re-fetch with the newly applied filters
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new Event('refresh:direct_hire' as any))
+                    }
                   }}
                   showFinishedOnly={showFinishedOnly}
                   setShowFinishedOnly={setShowFinishedOnly}
                   showDeletedOnly={showDeletedOnly}
                   setShowDeletedOnly={setShowDeletedOnly}
+                  showProcessingOnly={showProcessingOnly}
+                  setShowProcessingOnly={setShowProcessingOnly}
                   typeHousehold={typeHousehold}
                   setTypeHousehold={setTypeHousehold}
                   typeProfessional={typeProfessional}
@@ -125,11 +152,13 @@ export default function DirectHirePage() {
           </div>
         </div>
 
-        <DirectHireApplicationsTable 
-          search={search} 
+        <DirectHireApplicationsTable
+          search={search}
           filterQuery={panelQuery}
           showDeletedOnly={showDeletedOnly}
           showFinishedOnly={showFinishedOnly}
+          showProcessingOnly={showProcessingOnly}
+          statusFilter={statusFilter}
         />
       </main>
 

@@ -308,7 +308,15 @@ export default function JobFairTable({
             </thead>
                          <tbody className="divide-y divide-gray-200">
                {filteredData.map((record) => (
-                <tr key={record.id} className={`hover:bg-gray-150 transition-colors duration-75 ${record.deleted_at ? 'bg-red-50' : ''}`}>
+                <tr 
+                  key={record.id} 
+                  className={`hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none ${record.deleted_at ? 'bg-red-50' : ''}`}
+                  onDoubleClick={(e) => {
+                    e.preventDefault()
+                    setSelected(record)
+                    setViewOpen(true)
+                  }}
+                >
                                      <td className="py-3 px-4 text-center">
                      <div className="flex flex-col items-center">
                        <span>{formatDate(record.date)}</span>

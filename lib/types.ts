@@ -390,7 +390,7 @@ export interface PaginatedResponse<T> {
 // Filter and search types
 export interface FilterOptions {
   search?: string;
-  status?: string;
+  status?: string[];
   date_from?: Date;
   date_to?: Date;
   sex?: 'male' | 'female';
@@ -398,6 +398,8 @@ export interface FilterOptions {
   purpose?: string;
   worker_category?: string;
   include_deleted?: boolean;
+  include_finished?: boolean;
+  include_processing?: boolean;
 }
 
 export interface PaginationOptions {

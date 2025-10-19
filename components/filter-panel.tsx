@@ -17,8 +17,8 @@ interface FilterPanelProps {
 	setTypeProfessional?: (value: boolean) => void
 	sex: string
 	setSex: (value: string) => void
-	status: string
-	setStatus: (value: string) => void
+	status: string[]
+	setStatus: (value: string[]) => void
 	dateWithin: string // kept to persist applied value
 	setDateWithin: (value: string) => void // kept for clear/reset
 	jobsite: string
@@ -34,6 +34,8 @@ interface FilterPanelProps {
 	setShowFinishedOnly?: (value: boolean) => void
 	showDeletedOnly?: boolean
 	setShowDeletedOnly?: (value: boolean) => void
+	showProcessingOnly?: boolean
+	setShowProcessingOnly?: (value: boolean) => void
 	onClear: () => void
 }
 
@@ -63,6 +65,8 @@ export default function FilterPanel(props: FilterPanelProps) {
 		setShowFinishedOnly,
 		showDeletedOnly,
 		setShowDeletedOnly,
+		showProcessingOnly,
+		setShowProcessingOnly,
 		onClear
 	} = props
 
@@ -73,6 +77,7 @@ export default function FilterPanel(props: FilterPanelProps) {
 	// Local toggles to apply on submit
 	const [localShowFinishedOnly, setLocalShowFinishedOnly] = useState<boolean>(Boolean(showFinishedOnly))
 	const [localShowDeletedOnly, setLocalShowDeletedOnly] = useState<boolean>(Boolean(showDeletedOnly))
+	const [localShowProcessingOnly, setLocalShowProcessingOnly] = useState<boolean>(Boolean(showProcessingOnly) || true)
 
 	useEffect(() => {
 		setLocalShowFinishedOnly(Boolean(showFinishedOnly))
@@ -81,6 +86,10 @@ export default function FilterPanel(props: FilterPanelProps) {
 	useEffect(() => {
 		setLocalShowDeletedOnly(Boolean(showDeletedOnly))
 	}, [showDeletedOnly])
+
+	useEffect(() => {
+		setLocalShowProcessingOnly(Boolean(showProcessingOnly))
+	}, [showProcessingOnly])
 
 	// Sync from applied value (e.g., when reopening panel)
 	useEffect(() => {
@@ -98,6 +107,13 @@ export default function FilterPanel(props: FilterPanelProps) {
 		onClear()
 		setStartDate("")
 		setEndDate("")
+		// Reset all toggles
+		setLocalShowFinishedOnly(false)
+		setLocalShowDeletedOnly(false)
+		setLocalShowProcessingOnly(true) // Default to processing
+		
+		// Reset status to default processing statuses
+		setStatus(['draft', 'pending', 'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'])
 		onApply("")
 		onClose()
 	}
@@ -126,6 +142,31 @@ export default function FilterPanel(props: FilterPanelProps) {
 		// Apply toggles
 		if (typeof setShowFinishedOnly === 'function') setShowFinishedOnly(Boolean(localShowFinishedOnly))
 		if (typeof setShowDeletedOnly === 'function') setShowDeletedOnly(Boolean(localShowDeletedOnly))
+		if (typeof setShowProcessingOnly === 'function') setShowProcessingOnly(Boolean(localShowProcessingOnly))
+		
+		// Default statuses when none are selected
+		const processingStatuses = ['draft', 'pending', 'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview']
+		const effectiveStatus = status.length > 0 ? status : processingStatuses
+		if (status.length === 0 && typeof setStatus === 'function') {
+			setStatus(effectiveStatus)
+		}
+
+		// Map finished/deleted to toggles
+		if (effectiveStatus.includes('finished')) {
+			if (typeof setShowFinishedOnly === 'function') setShowFinishedOnly(true)
+		}
+		if (effectiveStatus.includes('deleted')) {
+			if (typeof setShowDeletedOnly === 'function') setShowDeletedOnly(true)
+		}
+		// If processing statuses are selected, set processing toggle
+		const hasProcessingStatus = processingStatuses.some(s => effectiveStatus.includes(s))
+		if (hasProcessingStatus && typeof setShowProcessingOnly === 'function') {
+			setShowProcessingOnly(true)
+		}
+		
+		// Add status filter to the query
+		parts.push(`status:${effectiveStatus.join(',')}`)
+		
 		onApply(parts.join(","))
 		onClose()
 	}
@@ -160,7 +201,7 @@ export default function FilterPanel(props: FilterPanelProps) {
 					<RadioGroup value={sex} onValueChange={setSex} className="flex space-x-4">
 						<div className="flex items-center space-x-2">
 							<RadioGroupItem value="" id="none" />
-							<Label htmlFor="none" className="text-sm">None</Label>
+							<Label htmlFor="none" className="text-sm">All</Label>
 						</div>
 						<div className="flex items-center space-x-2">
 							<RadioGroupItem value="female" id="female" />
@@ -176,19 +217,39 @@ export default function FilterPanel(props: FilterPanelProps) {
 				{/* Status */}
 				<div>
 					<Label className="text-sm font-medium mb-2 block">Status</Label>
-					<Select onValueChange={setStatus} value={status}>
+					<Select onValueChange={() => {}} value="">
 						<SelectTrigger className="w-full h-8">
-							<SelectValue placeholder="Select status" />
+							<SelectValue placeholder={status.length > 0 ? `${status.length} status(es) selected` : "Select statuses"} />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="approved">Approved</SelectItem>
-							<SelectItem value="pending">Pending</SelectItem>
-							<SelectItem value="rejected">Rejected</SelectItem>
-							<SelectItem value="evaluated">Evaluated</SelectItem>
-							<SelectItem value="for_confirmation">For Confirmation</SelectItem>
-							<SelectItem value="emailed_to_dhad">Emailed to DHAD</SelectItem>
-							<SelectItem value="received_from_dhad">Received from DHAD</SelectItem>
-							<SelectItem value="for_interview">For Interview</SelectItem>
+							{[
+								{ value: 'draft', label: 'Draft' },
+								{ value: 'pending', label: 'Pending' },
+								{ value: 'evaluated', label: 'Evaluated' },
+								{ value: 'for_confirmation', label: 'For Confirmation' },
+								{ value: 'emailed_to_dhad', label: 'Emailed to DHAD' },
+								{ value: 'received_from_dhad', label: 'Received from DHAD' },
+								{ value: 'for_interview', label: 'For Interview' },
+								{ value: 'finished', label: 'Finished' },
+								{ value: 'deleted', label: 'Deleted' }
+							].map((option) => (
+								<div key={option.value} className="flex items-center space-x-2 px-2 py-1.5 hover:bg-gray-50">
+									<input
+										type="checkbox"
+										id={`status-${option.value}`}
+										checked={status.includes(option.value)}
+										onChange={(e) => {
+											if (e.target.checked) {
+												setStatus([...status, option.value])
+											} else {
+												setStatus(status.filter(s => s !== option.value))
+											}
+										}}
+										className="h-3 w-3"
+									/>
+									<Label htmlFor={`status-${option.value}`} className="text-sm cursor-pointer">{option.label}</Label>
+								</div>
+							))}
 						</SelectContent>
 					</Select>
 				</div>
@@ -259,23 +320,6 @@ export default function FilterPanel(props: FilterPanelProps) {
 				</div>
 				)}
 
-			{/* Toggles (optional) */}
-			{(typeof setShowFinishedOnly === 'function' || typeof setShowDeletedOnly === 'function') && (
-			  <div className="space-y-2 pt-1">
-				{typeof setShowFinishedOnly === 'function' && (
-				  <label className="flex items-center gap-2 text-xs text-gray-700">
-					<input type="checkbox" className="h-3 w-3" checked={Boolean(localShowFinishedOnly)} onChange={(e)=> setLocalShowFinishedOnly(e.target.checked)} />
-					Show finished only
-				  </label>
-				)}
-				{typeof setShowDeletedOnly === 'function' && (
-				  <label className="flex items-center gap-2 text-xs text-gray-700">
-					<input type="checkbox" className="h-3 w-3" checked={Boolean(localShowDeletedOnly)} onChange={(e)=> setLocalShowDeletedOnly(e.target.checked)} />
-					Show deleted only
-				  </label>
-				)}
-			  </div>
-			)}
 
 				{/* Action Buttons */}
 				<div className="flex space-x-2 pt-2">

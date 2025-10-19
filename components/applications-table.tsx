@@ -180,7 +180,15 @@ export default function ApplicationsTable({ applications, search = "", filterQue
           </thead>
           <tbody className="divide-y divide-gray-200">
             {applications.map((application: Application) => (
-              <tr key={application.id} className="hover:bg-gray-150 transition-colors duration-75">
+              <tr 
+                key={application.id} 
+                className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
+                onDoubleClick={(e) => {
+                  e.preventDefault()
+                  setSelected(application)
+                  setViewOpen(true)
+                }}
+              >
                 <td className="py-3 px-4 text-center">{application.controlNumber}</td>
                 <td className="py-3 px-4 text-center">{application.name}</td>
                 <td className="py-3 px-4 text-center">

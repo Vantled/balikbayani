@@ -24,6 +24,8 @@ interface DirectHireApplicationsTableProps {
   filterQuery?: string
   showDeletedOnly?: boolean
   showFinishedOnly?: boolean
+  showProcessingOnly?: boolean
+  statusFilter?: string[]
 }
 
 interface ApplicantDocumentsTabProps {
@@ -35,7 +37,7 @@ interface ApplicantDocumentsTabProps {
   setPdfViewerOpen: (open: boolean) => void
 }
 
-export default function DirectHireApplicationsTable({ search, filterQuery = "", showDeletedOnly: propShowDeletedOnly, showFinishedOnly: propShowFinishedOnly }: DirectHireApplicationsTableProps) {
+export default function DirectHireApplicationsTable({ search, filterQuery = "", showDeletedOnly: propShowDeletedOnly, showFinishedOnly: propShowFinishedOnly, showProcessingOnly: propShowProcessingOnly, statusFilter: propStatusFilter }: DirectHireApplicationsTableProps) {
   console.log('DirectHireApplicationsTable component rendered');
   const { toast } = useToast()
   const { 
@@ -74,6 +76,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [showDeletedOnly, setShowDeletedOnly] = useState(false)
   const [showFinishedOnly, setShowFinishedOnly] = useState(false)
+  const [showProcessingOnly, setShowProcessingOnly] = useState(false)
   const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState("")
   const [confirmingPassword, setConfirmingPassword] = useState(false)
@@ -98,6 +101,48 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   // Delete confirmation state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [applicationToDelete, setApplicationToDelete] = useState<DirectHireApplication | null>(null)
+  
+  // Status change confirmation state
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false)
+  const [statusToChange, setStatusToChange] = useState<{key: string, label: string} | null>(null)
+
+  // Extract sex filter from parsed filters (moved to top to avoid initialization error)
+  const normalizedSearch = search.trim().toLowerCase()
+  const normalizedFilterQuery = (filterQuery || '').trim().toLowerCase()
+  
+  const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
+    const tokens = input.split(/[\s,]+/).filter(Boolean)
+    const filters: Record<string, string> = {}
+    const terms: string[] = []
+    for (const token of tokens) {
+      const match = token.match(/^([a-z_]+):(.*)$/i)
+      if (match && match[2] !== '') {
+        filters[match[1].toLowerCase()] = match[2].toLowerCase()
+      } else {
+        terms.push(token.toLowerCase())
+      }
+    }
+    return { filters, terms }
+  }
+
+  const { filters: searchFilters } = parseSearch(normalizedSearch)
+  const { filters: panelFilters } = parseSearch(normalizedFilterQuery)
+  const combinedFilters = { ...searchFilters, ...panelFilters }
+  const sexFilter = combinedFilters.sex
+  const statusFilter = propStatusFilter || (combinedFilters.status ? combinedFilters.status.split(',') : undefined)
+  const evaluatorFilter = combinedFilters.evaluator
+  const jobsiteFilter = combinedFilters.jobsite
+  const positionFilter = combinedFilters.position
+  const dateRangeFilter = combinedFilters.date_range || combinedFilters.date
+  const effectiveSearch = [
+    normalizedSearch,
+    evaluatorFilter ? `evaluator:${evaluatorFilter}` : '',
+    jobsiteFilter ? `jobsite:${jobsiteFilter}` : '',
+    positionFilter ? `position:${positionFilter}` : '',
+    dateRangeFilter ? `date:${dateRangeFilter}` : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   // Resolve superadmin on client after mount to keep SSR markup stable
   useEffect(() => {
@@ -113,11 +158,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     return () => { mounted = false }
   }, [])
 
-  // Initial load and whenever showDeletedOnly toggles
+  // Initial load and whenever filter toggles change
   useEffect(() => {
-    fetchApplications(search, 1, showDeletedOnly)
+    fetchApplications(effectiveSearch, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDeletedOnly])
+  }, [showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, evaluatorFilter, jobsiteFilter, positionFilter, dateRangeFilter])
 
   // Sync toggles from parent filter panel (apply-on-apply behavior)
   useEffect(() => {
@@ -131,6 +176,12 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
       setShowFinishedOnly(propShowFinishedOnly)
     }
   }, [propShowFinishedOnly])
+
+  useEffect(() => {
+    if (typeof propShowProcessingOnly === 'boolean') {
+      setShowProcessingOnly(propShowProcessingOnly)
+    }
+  }, [propShowProcessingOnly])
 
   // Generate control number preview
   const generateControlNumberPreview = () => {
@@ -155,39 +206,25 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
 
   useEffect(() => {
     setControlNumberPreview(generateControlNumberPreview());
-    fetchApplications(search, 1, showDeletedOnly)
+    fetchApplications(effectiveSearch, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Only fetch on initial load and when explicitly triggered
 
   // Listen for global refresh events (e.g., from page-level Create modal)
   useEffect(() => {
     const handler = () => {
-      fetchApplications(search, 1, showDeletedOnly)
+      fetchApplications(effectiveSearch, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
     }
     window.addEventListener('refresh:direct_hire' as any, handler as any)
     return () => window.removeEventListener('refresh:direct_hire' as any, handler as any)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, showDeletedOnly])
+  }, [search, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter, evaluatorFilter, jobsiteFilter, positionFilter, dateRangeFilter])
 
-  // Filter applications based on search
-  const normalizedSearch = search.trim().toLowerCase()
-  const normalizedFilterQuery = (filterQuery || '').trim().toLowerCase()
-
-  // Parse key:value filters and free-text terms
-  const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
-    const tokens = input.split(/[\s,]+/).filter(Boolean)
-    const filters: Record<string, string> = {}
-    const terms: string[] = []
-    for (const token of tokens) {
-      const match = token.match(/^([a-z_]+):(.*)$/i)
-      if (match && match[2] !== '') {
-        filters[match[1].toLowerCase()] = match[2].toLowerCase()
-      } else {
-        terms.push(token.toLowerCase())
-      }
-    }
-    return { filters, terms }
-  }
+  // Filter applications based on search (parseSearch and sexFilter already defined above)
+  
+  // Debug logs removed
 
   const getDerivedStatusKey = (application: DirectHireApplication): string | null => {
     if (application.status === 'draft') return 'draft'
@@ -243,7 +280,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
         // Soft deletion for active items
         const success = await deleteApplication(applicationToDelete.id)
         if (success) {
-          await fetchApplications(search, 1, showDeletedOnly)
+          await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
           toast({ 
             title: "Application deleted successfully", 
             description: `${applicationToDelete.name}'s application has been moved to deleted items` 
@@ -300,7 +337,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
       const result = await response.json()
       
       if (result.success) {
-        await fetchApplications(search, 1, showDeletedOnly)
+        await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
         toast({ 
           title: "Application permanently deleted", 
           description: `${applicationToPermanentDelete.name}'s application has been permanently removed` 
@@ -327,7 +364,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     try {
       const success = await deleteApplication(applicationToCancelDraft.id)
       if (success) {
-        await fetchApplications(search, 1, showDeletedOnly)
+        await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
         toast({ title: 'Draft cancelled', description: `${applicationToCancelDraft.name}'s draft has been cancelled.` })
       } else {
         throw new Error('Failed to cancel draft')
@@ -412,50 +449,9 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     }
   }
 
-  const filteredApplications = (() => {
-    const { filters: searchFilters, terms } = parseSearch(normalizedSearch)
-    const { filters: panelFilters } = parseSearch(normalizedFilterQuery)
-    const combinedFilters = { ...searchFilters, ...panelFilters }
-
-    // Start with server list; apply deleted/finished visibility first
-    const base = applications.filter(app => {
-      const deleted = Boolean((app as any).deleted_at)
-      const finished = isFinished(app)
-      if (showDeletedOnly) return deleted
-      if (showFinishedOnly) return !deleted && finished
-      // default monitoring view: exclude deleted and finished
-      return !deleted && !finished
-    })
-
-    if (!normalizedSearch && !normalizedFilterQuery) return base
-
-    return base
-      .filter((application) => {
-        // All key:value filters must match
-        const allFiltersMatch = Object.entries(combinedFilters).every(([k, v]) => matchesFilter(application, k, v))
-        if (!allFiltersMatch) return false
-
-        if (terms.length === 0) return true
-
-        // Free-text terms: require every term to appear somewhere in the haystack
-        const fields: string[] = []
-        fields.push(application.control_number)
-        fields.push(application.name)
-        fields.push(application.sex)
-        fields.push(application.jobsite)
-        fields.push(application.position)
-        fields.push(((application as any).job_type || ''))
-        if (application.evaluator) fields.push(application.evaluator)
-        fields.push(String(application.salary))
-        const statusKey = getDerivedStatusKey(application)
-        if (statusKey) {
-          fields.push(statusKey)
-          fields.push(statusKeyToLabel[statusKey] || statusKey.replace(/_/g, ' '))
-        }
-        const haystack = fields.join(' | ').toLowerCase()
-        return terms.every(term => haystack.includes(term))
-      })
-  })()
+  // Server-side filtering handles search, status, sex, and toggles.
+  // To avoid hiding valid rows (e.g., "finished"), use the API result as-is.
+  const filteredApplications = applications
 
   // Show error toast if there's an error
   useEffect(() => {
@@ -586,29 +582,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     return (
       <div className="flex flex-col gap-2">
         <div 
-          className={`${statusColor} text-sm px-3 py-1.5 rounded-full w-fit font-medium cursor-pointer hover:opacity-80 transition-opacity flex justify-center items-center`}
-          onClick={() => {
-            // Don't open status checklist for draft applications
-            if (application.status === 'draft') {
-              toast({
-                title: "Draft Application",
-                description: "This is a draft application. Complete the form to proceed with status updates.",
-                variant: "default"
-              });
-              return;
-            }
-            // Don't open for deleted applications
-            if ((application as any).deleted_at) {
-              toast({
-                title: "Deleted Application",
-                description: "This application is deleted. Restore it to update statuses.",
-                variant: "destructive"
-              })
-              return;
-            }
-            setSelectedApplicationForStatus(application)
-            setStatusChecklistOpen(true)
-          }}
+          className={`${statusColor} text-sm px-3 py-1.5 rounded-full w-fit font-medium flex justify-center items-center border`}
         >
           <span>{currentStatus}</span>
           {status_checklist && (
@@ -616,9 +590,6 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <span className="opacity-60">|</span>
               <span className="text-xs opacity-80">{completedCount}/{totalCount}</span>
             </span>
-          )}
-          {application.status !== 'draft' && (
-            <Settings className="h-3 w-3 ml-1" />
           )}
         </div>
         
@@ -652,7 +623,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       key={i}
                       variant={i === currentPage ? "default" : "outline"}
                       size="sm"
-                      onClick={() => fetchApplications(search, i, showDeletedOnly)}
+                      onClick={() => fetchApplications(search, i, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)}
                       className="min-w-[40px] h-8"
                     >
                       {i}
@@ -676,7 +647,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       key={1}
                       variant={1 === currentPage ? "default" : "outline"}
                       size="sm"
-                      onClick={() => fetchApplications(search, 1, showDeletedOnly)}
+                      onClick={() => fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly)}
                       className="min-w-[40px] h-8"
                     >
                       1
@@ -699,7 +670,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       key={i}
                       variant={i === currentPage ? "default" : "outline"}
                       size="sm"
-                      onClick={() => fetchApplications(search, i, showDeletedOnly)}
+                      onClick={() => fetchApplications(search, i, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)}
                       className="min-w-[40px] h-8"
                     >
                       {i}
@@ -722,7 +693,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       key={totalPages}
                       variant={totalPages === currentPage ? "default" : "outline"}
                       size="sm"
-                      onClick={() => fetchApplications(search, totalPages, showDeletedOnly)}
+                      onClick={() => fetchApplications(search, totalPages, showDeletedOnly, showFinishedOnly, showProcessingOnly)}
                       className="min-w-[40px] h-8"
                     >
                       {totalPages}
@@ -771,7 +742,15 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 </tr>
               ) : (
                 filteredApplications.map((application) => (
-                  <tr key={application.id} className="hover:bg-gray-150 transition-colors duration-75">
+                  <tr 
+                    key={application.id} 
+                    className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
+                    onDoubleClick={(e) => {
+                      e.preventDefault()
+                      setSelected(application)
+                      setOpen(true)
+                    }}
+                  >
                     <td className="py-3 px-4 text-center">{application.control_number}</td>
                     <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
                     <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
@@ -948,7 +927,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
         </div>
       {/* Applicant Details Modal */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
+        <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">{selected?.name}'s Application</DialogTitle>
             <DialogClose asChild>
@@ -956,10 +935,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
             </DialogClose>
           </div>
           {selected && (
-            <div className="px-8 py-6 max-h-[80vh] overflow-y-auto">
+            <>
+            <div className="px-8 py-6 overflow-y-auto flex-1">
               {/* Personal Information */}
               <div className="mb-6">
-                <div className="font-semibold text-gray-700 mb-2">Personal Information</div>
+                <div className="font-semibold text-gray-700 mb-2">Applicant Information</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <div>
                     <div className="text-gray-500">Control No.:</div>
@@ -1041,7 +1021,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <hr className="my-4" />
               {/* Application Status */}
               <div className="mb-6">
-                <div className="font-semibold text-gray-700 mb-2">Application Status</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-semibold text-gray-700">Application Status</div>
+                  <div className="text-xs text-gray-500 italic">Click on unchecked status to mark as completed</div>
+                </div>
                 <ul className="text-sm">
                   {(() => {
                     const { status_checklist } = selected
@@ -1065,7 +1048,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       ]
                       
                       return oldStatuses.map(status => (
-                        <li key={status.key} className="flex items-center gap-2 mb-1">
+                        <li 
+                          key={status.key} 
+                          className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-2 rounded transition-colors ${selected.status === status.key ? 'bg-green-50' : ''}`}
+                          onClick={() => {
+                            if (selected.status === status.key) return // Don't allow clicking on current status
+                            
+                            setStatusToChange({ key: status.key, label: status.label })
+                            setStatusConfirmOpen(true)
+                          }}
+                        >
                           <span className={`text-lg ${selected.status === status.key ? status.color : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
                             {status.label}
@@ -1095,7 +1087,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       const isCurrent = currentStatusKey === status.key
                       
                       return (
-                        <li key={status.key} className="flex items-center gap-2 mb-1">
+                        <li 
+                          key={status.key} 
+                          className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-2 rounded transition-colors ${isChecked ? 'bg-green-50' : ''}`}
+                          onClick={() => {
+                            if (isChecked) return // Don't allow clicking on already checked status
+                            
+                            setStatusToChange({ key: status.key, label: status.label })
+                            setStatusConfirmOpen(true)
+                          }}
+                        >
                           <span className={`text-lg ${isChecked ? (status as any).dot : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${isChecked ? (status as any).text : 'text-gray-700'}`}>
                             {status.label}
@@ -1174,6 +1175,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 />
               </div>
             </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -1212,7 +1214,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       if (confirmPurpose === 'finished') setShowFinishedOnly(true)
                       setConfirmPasswordOpen(false)
                       setConfirmPassword("")
-                      await fetchApplications(search, 1, confirmPurpose === 'deleted')
+                      await fetchApplications(search, 1, confirmPurpose === 'deleted', showFinishedOnly, showProcessingOnly)
                     } else {
                       toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' })
                     }
@@ -1242,7 +1244,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       if (confirmPurpose === 'finished') setShowFinishedOnly(true)
                       setConfirmPasswordOpen(false)
                       setConfirmPassword("")
-                      await fetchApplications(search, 1, confirmPurpose === 'deleted')
+                      await fetchApplications(search, 1, confirmPurpose === 'deleted', showFinishedOnly, showProcessingOnly)
                     } else {
                       toast({ title: 'Authentication failed', description: 'Incorrect password', variant: 'destructive' })
                     }
@@ -1537,7 +1539,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                         
                         if (result.success) {
                           setCreateOpen(false);
-                          await fetchApplications(search, 1, showDeletedOnly);
+                          await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter);
                           // Reset form
                           setFormData({
                             name: "",
@@ -1609,12 +1611,12 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                           // Close modal first so the list is visible
                           setCreateOpen(false);
                           // Refresh the table to include the newly created applicant
-                          await fetchApplications(search, 1, showDeletedOnly)
+                          await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
                           // Allow render to commit
                           await new Promise(requestAnimationFrame)
                           // Small delay and a second refresh to avoid race conditions (e.g., doc generation)
                           await new Promise(resolve => setTimeout(resolve, 100))
-                          await fetchApplications(search, 1, showDeletedOnly)
+                          await fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
                           await new Promise(requestAnimationFrame)
                           // Reset form after refresh
                           setFormData({
@@ -1679,7 +1681,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               status_checklist: appData.status_checklist
             }}
             applicationId={appData.id}
-            onSuccess={() => fetchApplications(search, 1, showDeletedOnly)}
+            onSuccess={() => fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)}
           />
         )
       })()}
@@ -1697,6 +1699,47 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
           fileBlob={selectedDocument.fileBlob}
         />
       )}
+
+      {/* Status Change Confirmation Dialog */}
+      <AlertDialog open={statusConfirmOpen} onOpenChange={setStatusConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Application Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to change the status to <strong>{statusToChange?.label}</strong> for <strong>{selected?.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!selected || !statusToChange) return
+                
+                try {
+                  const res = await fetch(`/api/direct-hire/${selected.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: statusToChange.key })
+                  })
+                  const json = await res.json()
+                  if (json.success) {
+                    toast({ title: 'Status updated', description: `Set to ${statusToChange.label}` })
+                    setStatusConfirmOpen(false)
+                    setOpen(false)
+                    fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
+                  } else {
+                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                  }
+                } catch {
+                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                }
+              }}
+            >
+              Change Status
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

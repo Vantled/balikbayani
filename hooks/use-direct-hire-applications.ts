@@ -12,7 +12,7 @@ interface UseDirectHireApplicationsReturn {
     total: number;
     totalPages: number;
   };
-  fetchApplications: (search?: string, page?: number, includeDeleted?: boolean) => Promise<void>;
+  fetchApplications: (search?: string, page?: number, includeDeleted?: boolean, includeFinished?: boolean, includeProcessing?: boolean, sexFilter?: string, statusFilter?: string[]) => Promise<void>;
   createApplication: (data: any) => Promise<DirectHireApplication | null>;
   updateApplication: (id: string, data: any) => Promise<DirectHireApplication | null>;
   deleteApplication: (id: string) => Promise<boolean>;
@@ -30,7 +30,7 @@ export function useDirectHireApplications(): UseDirectHireApplicationsReturn {
     totalPages: 0
   });
 
-  const fetchApplications = useCallback(async (search?: string, page: number = 1, includeDeleted?: boolean) => {
+  const fetchApplications = useCallback(async (search?: string, page: number = 1, includeDeleted?: boolean, includeFinished?: boolean, includeProcessing?: boolean, sexFilter?: string, statusFilter?: string[]) => {
     setLoading(true);
     setError(null);
 
@@ -47,6 +47,33 @@ export function useDirectHireApplications(): UseDirectHireApplicationsReturn {
       if (includeDeleted) {
         params.append('include_deleted', 'true');
       }
+
+      if (includeFinished) {
+        params.append('include_finished', 'true');
+      }
+
+      if (includeProcessing) {
+        params.append('include_processing', 'true');
+      }
+
+      if (sexFilter) {
+        params.append('sex', sexFilter);
+      }
+
+      if (statusFilter && statusFilter.length > 0) {
+        params.append('status', statusFilter.join(','));
+      }
+
+      console.log('Hook sending parameters:', {
+        search,
+        page,
+        includeDeleted,
+        includeFinished,
+        includeProcessing,
+        sexFilter,
+        statusFilter,
+        url: `/api/direct-hire?${params}`
+      });
 
       const response = await fetch(`/api/direct-hire?${params}`);
       const result: ApiResponse<PaginatedResponse<DirectHireApplication>> = await response.json();

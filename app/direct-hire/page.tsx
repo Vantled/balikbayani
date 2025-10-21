@@ -27,7 +27,7 @@ export default function DirectHirePage() {
   const [typeProfessional, setTypeProfessional] = useState(false)
   const [sexFilter, setSexFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState<string[]>([
-    'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'
+    'pending', 'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'
   ])
   const [dateWithin, setDateWithin] = useState("")
   const [jobsiteFilter, setJobsiteFilter] = useState("")
@@ -70,8 +70,8 @@ export default function DirectHirePage() {
             <div className="relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
-                className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                placeholder="Search or key:value" 
+                className="pl-8 pr-10 h-9 w-[20rem] bg-white" 
+                placeholder="Search or key:value (e.g. name:John)" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {

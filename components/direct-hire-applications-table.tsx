@@ -741,16 +741,22 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                   </td>
                 </tr>
               ) : (
-                filteredApplications.map((application) => (
-                  <tr 
-                    key={application.id} 
-                    className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
-                    onDoubleClick={(e) => {
-                      e.preventDefault()
-                      setSelected(application)
-                      setOpen(true)
-                    }}
-                  >
+                filteredApplications.map((application) => {
+                  const isDeleted = (application as any).deleted_at
+                  return (
+                    <tr 
+                      key={application.id} 
+                      className={`transition-colors duration-75 select-none ${
+                        isDeleted 
+                          ? 'bg-gray-100 opacity-75 cursor-not-allowed' 
+                          : 'hover:bg-gray-150 cursor-pointer'
+                      }`}
+                      onDoubleClick={isDeleted ? undefined : (e) => {
+                        e.preventDefault()
+                        setSelected(application)
+                        setOpen(true)
+                      }}
+                    >
                     <td className="py-3 px-4 text-center">{application.control_number}</td>
                     <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
                     <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
@@ -797,7 +803,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       <div className="flex justify-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={`h-8 w-8 ${isDeleted ? 'hover:bg-gray-200' : 'hover:bg-gray-150'}`}
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                               <span className="sr-only">Open menu</span>
                             </Button>
@@ -812,7 +822,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                                       <DropdownMenuItem onClick={() => {
                                         setApplicationToRestore(application)
                                         setRestoreConfirmOpen(true)
-                                      }}>
+                                      }} className="text-green-600 focus:text-green-700">
                                         <RefreshCcw className="h-4 w-4 mr-2" />
                                         Restore
                                       </DropdownMenuItem>
@@ -857,16 +867,12 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                                 {/* For non-draft applications */}
                                 {(application as any).deleted_at ? (
                                   <>
-                                    {/* For deleted non-draft applications, show View, Restore, and Delete */}
-                                    <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      View
-                                    </DropdownMenuItem>
+                                    {/* For deleted non-draft applications, show only Restore and Permanently Delete */}
                                     {userIsSuperadmin && (
                                       <DropdownMenuItem onClick={() => {
                                         setApplicationToRestore(application)
                                         setRestoreConfirmOpen(true)
-                                      }}>
+                                      }} className="text-green-600 focus:text-green-700">
                                         <RefreshCcw className="h-4 w-4 mr-2" />
                                         Restore
                                       </DropdownMenuItem>
@@ -920,7 +926,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       </div>
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -1789,10 +1796,24 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Restore Application</AlertDialogTitle>
+            <AlertDialogTitle className="text-green-600">Restore Application</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to restore the application for <strong>{applicationToRestore?.name}</strong>?
-              <br /><br />
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 text-green-800 font-semibold mb-2">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Restore Application
+                </div>
+                <p className="text-green-700">
+                  You are about to restore the application for <strong>{applicationToRestore?.name}</strong>.
+                </p>
+                <p className="text-green-700 mt-2">
+                  This will move the application back to the active applications list and make it available for editing and processing.
+                </p>
+              </div>
+              <p className="font-semibold">Are you sure you want to restore this application?</p>
+              <br />
               To confirm, please type <strong>RESTORE</strong> in the field below:
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1821,7 +1842,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
             <AlertDialogAction 
               onClick={handleRestoreConfirm}
               disabled={restoreConfirmText !== "RESTORE"}
-              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Restore
             </AlertDialogAction>
@@ -1839,11 +1860,24 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanently Delete Application</AlertDialogTitle>
+            <AlertDialogTitle className="text-red-600">Permanently Delete Application</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to <strong>permanently delete</strong> the application for <strong>{applicationToPermanentDelete?.name}</strong>?
-              This action will permanently remove all data and cannot be undone.
-              <br /><br />
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Warning: This action cannot be undone
+                </div>
+                <p className="text-red-700">
+                  You are about to permanently delete the application for <strong>{applicationToPermanentDelete?.name}</strong>.
+                </p>
+                <p className="text-red-700 mt-2">
+                  This will permanently remove all data including documents, status checklist, and cannot be recovered.
+                </p>
+              </div>
+              <p className="font-semibold">Are you absolutely sure you want to proceed?</p>
+              <br />
               To confirm, please type <strong>DELETE</strong> in the field below:
             </AlertDialogDescription>
           </AlertDialogHeader>

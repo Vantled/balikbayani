@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const clearanceType = searchParams.get('clearanceType') || '';
     const sex = searchParams.get('sex') || '';
+    const status = searchParams.get('status') || '';
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
     const jobsite = searchParams.get('jobsite') || '';
@@ -19,12 +20,14 @@ export async function GET(request: NextRequest) {
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
     const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
 
+
     const clearances = await DatabaseService.getBalikManggagawaClearances({
       page,
       limit,
       search,
       clearanceType,
       sex,
+      status,
       dateFrom,
       dateTo,
       jobsite,

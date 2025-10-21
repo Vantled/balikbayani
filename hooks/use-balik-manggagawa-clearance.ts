@@ -8,6 +8,7 @@ interface ClearanceFilters {
   search?: string;
   clearanceType?: string; // comma-separated list for multi-select
   sex?: string; // comma-separated list for multi-select
+  status?: string;
   dateFrom?: string;
   dateTo?: string;
   jobsite?: string;

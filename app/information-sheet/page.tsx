@@ -248,8 +248,8 @@ export default function InformationSheetPage() {
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                                   <Input 
-                className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                placeholder="Search or key:value" 
+                className="pl-8 pr-10 h-9 w-[20rem] bg-white" 
+                placeholder="Search or key:value (e.g. name:John)" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

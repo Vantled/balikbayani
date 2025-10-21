@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "@/hooks/use-toast"
 
 type BmStatus = '' | 'for_clearance' | 'for_approval' | 'finished' | 'rejected'
-type BmType = '' | 'critical_skill' | 'for_assessment_country' | 'non_compliant_country' | 'seafarer_position' | 'watchlisted_employer' | 'watchlisted_similar_name'
+type BmType = '' | 'critical_skill' | 'for_assessment_country' | 'non_compliant_country' | 'no_verified_contract' | 'seafarer_position' | 'watchlisted_employer' | 'watchlisted_similar_name'
 
 interface BMStatusModalProps {
   open: boolean
@@ -97,7 +97,8 @@ export default function BMStatusModal({ open, onOpenChange, application, onSaved
                 <option value="critical_skill">Critical Skill</option>
                 <option value="for_assessment_country">For Assessment Country</option>
                 <option value="non_compliant_country">Non Compliant Country</option>
-                <option value="seafarer_position">Seafarer Position</option>
+                <option value="no_verified_contract">No Verified Contract</option>
+                <option value="seafarer_position">Seaferer's Position</option>
                 <option value="watchlisted_employer">Watchlisted Employer</option>
                 <option value="watchlisted_similar_name">Watchlisted OFW</option>
               </select>

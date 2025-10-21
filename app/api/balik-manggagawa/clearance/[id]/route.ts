@@ -214,7 +214,7 @@ export async function PATCH(
     }
     // Lightweight status + clearance type update to support inline table controls
     if (body && body.action === 'status_update') {
-      const { status, clearanceType } = body as { status?: string; clearanceType?: string | null };
+      const { status, clearanceType, metadata } = body as { status?: string; clearanceType?: string | null; metadata?: Record<string, any> };
       // Validate status if provided
       const validStatuses = ['for_clearance', 'for_approval', 'finished', 'rejected', 'approved'];
       if (status && !validStatuses.includes(status)) {
@@ -237,9 +237,25 @@ export async function PATCH(
         return NextResponse.json(response, { status: 400 });
       }
 
+      // If metadata for template fields was provided, persist relevant fields on the clearance record
       const updated = await DatabaseService.updateBalikManggagawaStatus(id, {
         status: status ?? null,
         clearanceType: clearanceType ?? null,
+        newPrincipalName: (metadata as any)?.new_principal_name ?? undefined,
+        employmentDuration: (metadata as any)?.employment_duration ?? undefined,
+        dateArrival: (metadata as any)?.date_arrival ?? undefined,
+        dateDeparture: (metadata as any)?.date_departure ?? undefined,
+        remarks: (metadata as any)?.remarks ?? undefined,
+        monthsYears: (metadata as any)?.months_years ?? undefined,
+        employmentStartDate: (metadata as any)?.employment_start_date ?? undefined,
+        processingDate: (metadata as any)?.processing_date ?? undefined,
+        placeDateEmployment: (metadata as any)?.place_date_employment ?? undefined,
+        totalDeployedOfws: (metadata as any)?.total_deployed_ofws ?? undefined,
+        dateBlacklisting: (metadata as any)?.date_blacklisting ?? undefined,
+        reasonBlacklisting: (metadata as any)?.reason_blacklisting ?? undefined,
+        yearsWithPrincipal: (metadata as any)?.years_with_principal ?? undefined,
+        activeEmailAddress: (metadata as any)?.active_email_address ?? undefined,
+        activePhMobileNumber: (metadata as any)?.active_ph_mobile_number ?? undefined,
       });
       if (!updated) {
         const response: ApiResponse = { success: false, error: 'Clearance not found' };

@@ -342,6 +342,7 @@ export interface JobFairMonitoring {
 export interface Document {
   id: string;
   application_id: string;
+  application_type: string;
   document_type: string;
   file_name: string;
   file_path: string;

@@ -16,13 +16,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast"
 import { AVAILABLE_CURRENCIES, getUSDEquivalentAsync, type Currency } from "@/lib/currency-converter"
 import { useCallback, useRef } from "react"
+import BMFilterPanel from "@/components/bm-filter-panel"
 
 function BMDocumentsSection({ 
   applicationId, 
-  refreshTrigger
+  refreshTrigger,
+  applicationStatus
 }: { 
   applicationId?: string
   refreshTrigger?: number
+  applicationStatus?: string
 }) {
   const [docs, setDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -60,6 +63,11 @@ function BMDocumentsSection({
     // Get file extension from the actual file name
     const fileExtension = fileName.split('.').pop()?.toLowerCase() || ''
     
+    // For BM clearance documents, prefer the actual file name so it reflects the clearance type
+    if (documentType.toLowerCase().trim() === 'bm_clearance' && fileName) {
+      return fileName
+    }
+
     const key = documentType.toLowerCase().trim()
     const map: Record<string, string> = {
       bm_clearance: 'BM Clearance',
@@ -368,14 +376,25 @@ function BMDocumentsSection({
               </DropdownMenuItem>
             )
           })()}
-          <DropdownMenuItem onClick={() => handleEdit(doc)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Name
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleDelete(doc)} className="text-red-600">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </DropdownMenuItem>
+          {(() => {
+            const status = (applicationStatus || '').toString()
+            const isLocked = status === 'approved' || status === 'rejected'
+            
+            if (isLocked) return null
+            
+            return (
+              <>
+                <DropdownMenuItem onClick={() => handleEdit(doc)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Name
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDelete(doc)} className="text-red-600">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )
+          })()}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -545,6 +564,8 @@ export default function BalikManggagawaPage() {
 
   const [search, setSearch] = useState("")
   const [showFilter, setShowFilter] = useState(false)
+  const [panelQuery, setPanelQuery] = useState("")
+  
   const [filters, setFilters] = useState({
     clearanceType: "",
     sex: "",
@@ -554,6 +575,68 @@ export default function BalikManggagawaPage() {
     position: "",
     showDeletedOnly: false,
   })
+
+  // Parse search input for key:value filters and free-text terms
+  const parseSearch = (input: string): { filters: Record<string, string>; terms: string[] } => {
+    const tokens = input.split(/[\s,]+/).filter(Boolean)
+    const filters: Record<string, string> = {}
+    const terms: string[] = []
+    for (const token of tokens) {
+      const match = token.match(/^([a-z_]+):(.*)$/i)
+      if (match && match[2] !== '') {
+        filters[match[1].toLowerCase()] = match[2].toLowerCase()
+      } else {
+        terms.push(token.toLowerCase())
+      }
+    }
+    return { filters, terms }
+  }
+
+  // Parse filter query string from panel
+  const parseFilterQuery = (query: string) => {
+    const filters: any = {}
+    if (!query) return filters
+    
+    const parts = query.split(' ')
+    parts.forEach(part => {
+      const [key, value] = part.split(':')
+      if (key && value) {
+        if (key === 'showDeletedOnly' && value === 'true') {
+          filters[key] = true
+        } else {
+          filters[key] = value
+        }
+      }
+    })
+    return filters
+  }
+
+  // Helper function to get current filter parameters
+  const getCurrentFilters = useCallback((page?: number, limit?: number) => {
+    const queryFilters = parseFilterQuery(panelQuery)
+    const { filters: searchFilters, terms } = parseSearch(search)
+    
+    // Combine search filters with panel filters (search filters take precedence)
+    const combinedFilters = {
+      clearanceType: searchFilters.clearanceType || searchFilters.clearance_type || queryFilters.clearanceType || filters.clearanceType,
+      sex: searchFilters.sex || queryFilters.sex || filters.sex,
+      dateFrom: searchFilters.dateFrom || searchFilters.date_from || queryFilters.dateFrom || filters.dateFrom,
+      dateTo: searchFilters.dateTo || searchFilters.date_to || queryFilters.dateTo || filters.dateTo,
+      jobsite: searchFilters.jobsite || searchFilters.destination || queryFilters.jobsite || filters.jobsite,
+      position: searchFilters.position || queryFilters.position || filters.position,
+      showDeletedOnly: searchFilters.showDeletedOnly || queryFilters.showDeletedOnly || filters.showDeletedOnly,
+    }
+    
+    // Create the final search string from remaining terms (non-key:value parts)
+    const finalSearch = terms.join(' ')
+    
+    return {
+      page: page || pagination.page,
+      limit: limit || pagination.limit,
+      search: finalSearch, // Only send the free-text terms, not the key:value pairs
+      ...combinedFilters,
+    }
+  }, [panelQuery, pagination.page, pagination.limit, search, filters])
 
   // create form minimal, matching hook schema
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -586,28 +669,148 @@ export default function BalikManggagawaPage() {
   })
   const [editUsdDisplay, setEditUsdDisplay] = useState<string>("")
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [permanentDeleteConfirmOpen, setPermanentDeleteConfirmOpen] = useState(false)
+  const [permanentDeleteConfirmText, setPermanentDeleteConfirmText] = useState("")
+  const [applicationToPermanentDelete, setApplicationToPermanentDelete] = useState<any>(null)
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
+  const [restoreConfirmText, setRestoreConfirmText] = useState("")
+  const [applicationToRestore, setApplicationToRestore] = useState<any>(null)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
+  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false)
+  const [rejectReasonOpen, setRejectReasonOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState("")
+  const [complianceDialogOpen, setComplianceDialogOpen] = useState(false)
+  const [selectedComplianceType, setSelectedComplianceType] = useState<string>("")
+  const [complianceSubmitting, setComplianceSubmitting] = useState(false)
+  const [complianceFields, setComplianceFields] = useState<Record<string, string>>({})
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  const getComplianceTitle = (type: string) => {
+    switch (type) {
+      case 'critical_skill': return 'Critical Skills'
+      case 'for_assessment_country': return 'For Assessment Country'
+      case 'non_compliant_country': return 'Non Compliant Country'
+      case 'no_verified_contract': return 'No Verified Contract'
+      case 'seafarer_position': return 'Seaferer\'s Position'
+      case 'watchlisted_employer': return 'Watchlisted Employer'
+      case 'watchlisted_similar_name': return 'Watchlisted OFW'
+      default: return 'For Compliance'
+    }
+  }
+
+  const getComplianceFieldDefs = (type: string) => {
+    // Define per-type required fields for document generation
+    if (type === 'critical_skill') {
+      return [
+        { key: 'principalName', label: 'Name of the new principal', required: true, toUpper: true },
+        { key: 'employmentDurationFrom', label: 'Employment duration (from)', required: true, inputType: 'date' },
+        { key: 'employmentDurationUntil', label: 'Employment duration (until)', required: true, inputType: 'date' },
+        { key: 'dateArrival', label: 'Date of arrival', required: true, inputType: 'date' },
+        { key: 'dateDeparture', label: 'Date of departure', required: true, inputType: 'date' },
+        { key: 'remarks', label: 'Remarks', required: false, toUpper: true },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'seafarer_position') {
+      return [
+        { key: 'principalName', label: 'Name of the new principal', required: true, toUpper: true },
+        { key: 'employmentDurationFrom', label: 'Employment duration (from)', required: true, inputType: 'date' },
+        { key: 'employmentDurationUntil', label: 'Employment duration (until)', required: true, inputType: 'date' },
+        { key: 'dateArrival', label: 'Date of arrival', required: true, inputType: 'date' },
+        { key: 'dateDeparture', label: 'Date of departure', required: true, inputType: 'date' },
+        { key: 'remarks', label: 'Remarks', required: false, toUpper: true },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'watchlisted_employer') {
+      return [
+        { key: 'placeEmployment', label: 'Place of Employment', required: true, toUpper: true },
+        { key: 'dateEmployment', label: 'Year of Employment', required: true, inputType: 'year' },
+        { key: 'totalDeployedOfws', label: 'Total Deployed OFWs', required: true, inputType: 'number' },
+        { key: 'dateBlacklisting', label: 'Date of Blacklisting', required: true, inputType: 'date' },
+        { key: 'reasonBlacklisting', label: 'Reason for Blacklisting', required: true, toUpper: true },
+        { key: 'yearsWithPrincipal', label: 'No. of Years with the Principal', required: true, inputType: 'number' },
+        { key: 'dateArrival', label: 'Date of Arrival', required: true, inputType: 'date' },
+        { key: 'dateDeparture', label: 'Date of Departure', required: true, inputType: 'date' },
+        { key: 'remarks', label: 'Remarks', required: false, toUpper: true },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'watchlisted_similar_name') {
+      return [
+        { key: 'activeEmailAddress', label: 'Active E-Mail Address', required: true, inputType: 'email' },
+        { key: 'activePhMobileNumber', label: 'Active PH Mobile Number', required: true, inputType: 'number' },
+        { key: 'dateDeparture', label: 'Date of Departure (PH to Job Site)', required: true, inputType: 'date' },
+        { key: 'remarks', label: 'Remarks', required: false, toUpper: true },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'no_verified_contract') {
+      return [
+        { key: 'principalName', label: 'Name of the new principal', required: true, toUpper: true },
+        { key: 'employmentDurationFrom', label: 'Employment duration (from)', required: true, inputType: 'date' },
+        { key: 'employmentDurationUntil', label: 'Employment duration (until)', required: true, inputType: 'date' },
+        { key: 'dateArrival', label: 'Date of arrival', required: true, inputType: 'date' },
+        { key: 'dateDeparture', label: 'Date of departure', required: true, inputType: 'date' },
+        { key: 'remarks', label: 'Remarks', required: false, toUpper: true },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'for_assessment_country') {
+      return [
+        { key: 'monthsYearsYears', label: 'Year(s)', required: true, inputType: 'number' },
+        { key: 'monthsYearsMonths', label: 'Month(s)', required: true, inputType: 'number' },
+        { key: 'employmentStartDate', label: 'Employment start date', required: true, inputType: 'date' },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    if (type === 'non_compliant_country') {
+      return [
+        { key: 'monthsYearsYears', label: 'Year(s)', required: true, inputType: 'number' },
+        { key: 'monthsYearsMonths', label: 'Month(s)', required: true, inputType: 'number' },
+        { key: 'employmentStartDate', label: 'Employment Start Date (as per Employment Certificate)', required: true, inputType: 'date' },
+        { key: 'dateProcessed', label: 'Date Processed by the Employer', required: true, inputType: 'date' },
+        { key: 'dateArrival', label: 'Date of Arrival', required: true, inputType: 'date' },
+        { key: 'dateDeparture', label: 'Date of Departure', required: true, inputType: 'date' },
+      ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+    }
+    // Default: request remarks; can be extended per your spec later
+    return [
+      { key: 'remarks', label: 'Remarks', required: false },
+    ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
+  }
+
+  const openComplianceDialog = (type: string) => {
+    setSelectedComplianceType(type)
+    const defs = getComplianceFieldDefs(type)
+    const initial: Record<string, string> = {}
+    defs.forEach(d => { 
+      if (d.key === 'activePhMobileNumber') {
+        initial[d.key] = '09'
+      } else {
+        initial[d.key] = ''
+      }
+    })
+    setComplianceFields(initial)
+    setComplianceDialogOpen(true)
+  }
 
   useEffect(() => {
     fetchClearances({ page: 1, limit: 10 })
   }, [fetchClearances])
 
-  const applyFilters = () => {
-    fetchClearances({
-      page: 1,
-      limit: pagination.limit,
-      search,
-      clearanceType: filters.clearanceType,
-      sex: filters.sex,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      jobsite: filters.jobsite,
-      position: filters.position,
-      showDeletedOnly: filters.showDeletedOnly,
-    })
-    setShowFilter(false)
-  }
+  // Live search: refresh results whenever search text changes
+  useEffect(() => {
+    // Only trigger on search text changes, not filter changes
+    if (search !== '') {
+      fetchClearances(getCurrentFilters())
+    }
+  }, [search, fetchClearances])
+
+  // Listen for global refresh events (e.g., from filters, etc.)
+  useEffect(() => {
+    const handler = () => {
+      fetchClearances(getCurrentFilters())
+    }
+    window.addEventListener('refresh:balik_manggagawa' as any, handler as any)
+    return () => window.removeEventListener('refresh:balik_manggagawa' as any, handler as any)
+  }, [fetchClearances, getCurrentFilters])
+
   
   useEffect(() => {
     const compute = async () => {
@@ -633,12 +836,6 @@ export default function BalikManggagawaPage() {
     compute()
   }, [editData.salary, editData.salaryCurrency])
 
-  const resetFilters = () => {
-    setFilters({ clearanceType: "", sex: "", dateFrom: "", dateTo: "", jobsite: "", position: "", showDeletedOnly: false })
-    fetchClearances({ page: 1, limit: pagination.limit, search: "" })
-    setSearch("")
-    setShowFilter(false)
-  }
 
   return (
     <div className="bg-[#eaf3fc] flex flex-col">
@@ -654,10 +851,16 @@ export default function BalikManggagawaPage() {
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
                 className="pl-8 pr-10 h-9 w-[240px] bg-white" 
-                placeholder="Search or key:value" 
+                placeholder="Search or key:value (e.g., name:John, sex:male)" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e)=> { if (e.key === 'Enter') applyFilters() }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new Event('refresh:balik_manggagawa' as any))
+                    }
+                  }
+                }}
               />
               <Button
                 variant="ghost"
@@ -679,68 +882,65 @@ export default function BalikManggagawaPage() {
               }).catch(()=> setControlPreview(""))
             }}><Plus className="h-4 w-4" /> Create</Button>
 
+            {/* Filter Panel */}
             {showFilter && (
-              <div className="absolute right-0 top-12 z-40 w-[380px] bg-white border rounded-xl shadow-xl p-6 text-xs flex flex-col gap-3">
-                <div className="font-semibold mb-1">Type of Clearance</div>
-                <Select value={filters.clearanceType || 'all'} onValueChange={(v)=> setFilters(f=>({ ...f, clearanceType: v === 'all' ? '' : v }))}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="for_assessment_country">For Assessment Country</SelectItem>
-                    <SelectItem value="non_compliant_country">Non Compliant Country</SelectItem>
-                    <SelectItem value="watchlisted_similar_name">Watchlisted OFW</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="font-semibold mb-1">Sex</div>
-                <div className="flex items-center gap-6">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="bm_sex_filter"
-                      value="female"
-                      checked={filters.sex === 'female'}
-                      onChange={() => setFilters(f=>({ ...f, sex: 'female' }))}
-                    />
-                    Female
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="bm_sex_filter"
-                      value="male"
-                      checked={filters.sex === 'male'}
-                      onChange={() => setFilters(f=>({ ...f, sex: 'male' }))}
-                    />
-                    Male
-                  </label>
-                  <Button variant="ghost" size="sm" onClick={()=> setFilters(f=>({ ...f, sex: '' }))}>Clear</Button>
-                </div>
-
-                <div className="font-semibold mb-1">Date Within</div>
-                <Input type="date" className="mb-2" value={filters.dateFrom} onChange={(e)=> setFilters(f=>({ ...f, dateFrom: e.target.value }))} />
-                <Input type="date" className="mb-2" value={filters.dateTo} onChange={(e)=> setFilters(f=>({ ...f, dateTo: e.target.value }))} />
-                <div className="font-semibold mb-1">Destination</div>
-                <Input type="text" className="mb-2" value={filters.jobsite} onChange={(e)=> setFilters(f=>({ ...f, jobsite: e.target.value }))} />
-                <div className="font-semibold mb-1">Position</div>
-                <Input type="text" className="mb-2" value={filters.position} onChange={(e)=> setFilters(f=>({ ...f, position: e.target.value }))} />
-
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  id="bm_show_deleted_only"
-                  type="checkbox"
-                  checked={filters.showDeletedOnly}
-                  onChange={(e)=> setFilters(f=>({ ...f, showDeletedOnly: e.target.checked }))}
+              <div className="absolute right-0 top-12 z-50">
+                <BMFilterPanel 
+                  onClose={() => setShowFilter(false)} 
+                  onApply={(query) => {
+                    setPanelQuery(query)
+                    setShowFilter(false)
+                    // Force the table to re-fetch with the newly applied filters
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new Event('refresh:balik_manggagawa' as any))
+                    }
+                  }}
+                  clearanceType={filters.clearanceType}
+                  setClearanceType={(value) => setFilters(f => ({ ...f, clearanceType: value === 'all' ? '' : value }))}
+                  sex={filters.sex}
+                  setSex={(value) => setFilters(f => ({ ...f, sex: value }))}
+                  status={filters.status}
+                  setStatus={(value) => setFilters(f => ({ ...f, status: value === 'all' ? '' : value }))}
+                  dateFrom={filters.dateFrom}
+                  setDateFrom={(value) => setFilters(f => ({ ...f, dateFrom: value }))}
+                  dateTo={filters.dateTo}
+                  setDateTo={(value) => setFilters(f => ({ ...f, dateTo: value }))}
+                  jobsite={filters.jobsite}
+                  setJobsite={(value) => setFilters(f => ({ ...f, jobsite: value }))}
+                  position={filters.position}
+                  setPosition={(value) => setFilters(f => ({ ...f, position: value }))}
+                  showDeletedOnly={filters.showDeletedOnly}
+                  setShowDeletedOnly={(value) => setFilters(f => ({ ...f, showDeletedOnly: value }))}
+                  onClear={() => {
+                    setFilters({
+                      clearanceType: "",
+                      sex: "",
+                      status: "",
+                      dateFrom: "",
+                      dateTo: "",
+                      jobsite: "",
+                      position: "",
+                      showDeletedOnly: false
+                    })
+                    setPanelQuery("")
+                    // Trigger refresh with cleared filters
+                    fetchClearances({
+                      page: 1,
+                      limit: 10,
+                      search: search,
+                      clearanceType: "",
+                      sex: "",
+                      status: "",
+                      dateFrom: "",
+                      dateTo: "",
+                      jobsite: "",
+                      position: "",
+                      showDeletedOnly: false
+                    })
+                    // Close the filter panel
+                    setShowFilter(false)
+                  }}
                 />
-                <label htmlFor="bm_show_deleted_only" className="text-xs">Show deleted only</label>
-              </div>
-
-                <div className="flex justify-between gap-2 mt-2">
-                  <Button variant="outline" className="w-1/2" onClick={resetFilters}>Clear</Button>
-                  <Button className="w-1/2 bg-[#1976D2] text-white" onClick={applyFilters}>Apply</Button>
-                </div>
               </div>
             )}
           </div>
@@ -756,18 +956,7 @@ export default function BalikManggagawaPage() {
                 const pages: any[] = []
                 const totalPages = pagination.totalPages
                 const currentPage = pagination.page
-                const go = (p: number) => fetchClearances({
-                  page: p,
-                  limit: pagination.limit,
-                  search,
-                  clearanceType: filters.clearanceType,
-                  sex: filters.sex,
-                  dateFrom: filters.dateFrom,
-                  dateTo: filters.dateTo,
-                  jobsite: filters.jobsite,
-                  position: filters.position,
-                  showDeletedOnly: filters.showDeletedOnly,
-                })
+                const go = (p: number) => fetchClearances(getCurrentFilters(p))
 
                 if (totalPages <= 7) {
                   for (let i = 1; i <= totalPages; i++) {
@@ -822,9 +1011,13 @@ export default function BalikManggagawaPage() {
                 ) : clearances.map((row: any, i: number) => (
                   <tr 
                     key={row.id ?? i} 
-                    className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
+                    className={`hover:bg-gray-150 transition-colors duration-75 select-none ${row.deleted_at ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                     onDoubleClick={(e) => {
                       e.preventDefault()
+                      // Prevent viewing deleted records
+                      if (row.deleted_at) {
+                        return
+                      }
                       setSelected(row)
                       setViewOpen(true)
                     }}
@@ -837,6 +1030,15 @@ export default function BalikManggagawaPage() {
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center">
                         {(() => {
+                          // Check if record is soft deleted
+                          if (row.deleted_at) {
+                            return (
+                              <span className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 bg-red-50 text-red-700 ring-red-200 font-medium">
+                                <span className="font-medium">Deleted</span>
+                              </span>
+                            )
+                          }
+                          
                           const s = (row.status || '').toString()
                           const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : s === 'approved' ? 'Approved' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
                           const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : s === 'approved' ? 'bg-green-100 text-green-800 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
@@ -856,48 +1058,87 @@ export default function BalikManggagawaPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onClick={async () => {
-                            try {
-                              const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
-                              const json = await res.json()
-                              if (json.success) {
-                                setSelected(json.data)
-                                setViewOpen(true)
-                              } else {
-                                toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
-                              }
-                            } catch {}
-                          }}>
-                            <Eye className="h-4 w-4 mr-2" /> View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={async () => {
-                            try {
-                              const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
-                              const json = await res.json()
-                              if (json.success) {
-                                const d = json.data
-                                setSelected(d)
-                                setEditData({
-                                  nameOfWorker: d.name_of_worker || '',
-                                  sex: d.sex || '',
-                                  employer: d.employer || '',
-                                  destination: d.destination || '',
-                                  position: d.position || '',
-                                  salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
-                                  job_type: d.job_type || '',
-                                  salaryCurrency: d.salary_currency || '',
-                                })
-                                setEditOpen(true)
-                              } else {
-                                toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
-                              }
-                            } catch {}
-                          }}>
-                            <Edit className="h-4 w-4 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setSelected(row); setDeleteConfirmOpen(true) }} className="text-red-600 focus:text-red-700">
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                          </DropdownMenuItem>
+                          {!row.deleted_at && (
+                            <DropdownMenuItem onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                const json = await res.json()
+                                if (json.success) {
+                                  setSelected(json.data)
+                                  setViewOpen(true)
+                                } else {
+                                  toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
+                                }
+                              } catch {}
+                            }}>
+                              <Eye className="h-4 w-4 mr-2" /> View
+                            </DropdownMenuItem>
+                          )}
+                          {(() => {
+                            // Show different options for deleted records
+                            if (row.deleted_at) {
+                              return (
+                                <>
+                                  <DropdownMenuItem onClick={() => {
+                                    setApplicationToRestore(row)
+                                    setRestoreConfirmOpen(true)
+                                  }} className="text-green-600 focus:text-green-700">
+                                    <CheckCircle className="h-4 w-4 mr-2" /> Restore
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => {
+                                    setApplicationToPermanentDelete(row)
+                                    setPermanentDeleteConfirmOpen(true)
+                                  }} className="text-red-600 focus:text-red-700">
+                                    <Trash2 className="h-4 w-4 mr-2" /> Permanently Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )
+                            }
+                            
+                            const s = (row.status || '').toString()
+                            const isLocked = s === 'approved' || s === 'rejected'
+                            if (isLocked) return null
+                            return (
+                              <>
+                                <DropdownMenuItem onClick={async () => {
+                                  try {
+                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                    const json = await res.json()
+                                    if (json.success) {
+                                      const d = json.data
+                                      setSelected(d)
+                                      setEditData({
+                                        nameOfWorker: d.name_of_worker || '',
+                                        sex: d.sex || '',
+                                        employer: d.employer || '',
+                                        destination: d.destination || '',
+                                        position: d.position || '',
+                                        salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
+                                        job_type: d.job_type || '',
+                                        salaryCurrency: d.salary_currency || '',
+                                      })
+                                      setEditOpen(true)
+                                    } else {
+                                      toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
+                                    }
+                                  } catch {}
+                                }}>
+                                  <Edit className="h-4 w-4 mr-2" /> Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { 
+                                  const status = (row.status || '').toString()
+                                  if (status === 'approved' || status === 'rejected') {
+                                    toast({ title: 'Action not allowed', description: 'Approved/Rejected applications cannot be deleted', variant: 'destructive' })
+                                    return
+                                  }
+                                  setSelected(row); 
+                                  setDeleteConfirmOpen(true) 
+                                }} className="text-red-600 focus:text-red-700">
+                                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                </DropdownMenuItem>
+                              </>
+                            )
+                          })()}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -1125,226 +1366,94 @@ export default function BalikManggagawaPage() {
             <div className="px-6 pb-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-semibold text-gray-700">Documents</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className="text-xs"
-                    onClick={async () => {
-                      if (!selected?.id) return
-                      try {
-                        const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                        const json = await res.json()
-                        if (json.success) {
-                          toast({ title: 'Generated', description: 'BM clearance document created' })
-                        } else {
-                          toast({ title: 'Generation failed', description: json.error || 'Failed to generate', variant: 'destructive' })
-                        }
-                      } catch {
-                        toast({ title: 'Generation failed', description: 'Network error', variant: 'destructive' })
-                      }
-                    }}
-                  >Generate Clearance</Button>
-                  <Button
-                    className="bg-[#1976D2] text-white text-xs"
-                    onClick={() => setUploadModalOpen(true)}
-                  >+ New</Button>
-                </div>
+                {(() => {
+                  const status = (selected?.status || '').toString()
+                  const isLocked = status === 'approved' || status === 'rejected'
+                  
+                  if (isLocked) return null
+                  
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        className="bg-[#1976D2] text-white text-xs"
+                        onClick={() => setUploadModalOpen(true)}
+                      >+ New</Button>
+                    </div>
+                  )
+                })()}
               </div>
               <BMDocumentsSection 
                 applicationId={selected?.id} 
                 refreshTrigger={documentsRefreshTrigger}
+                applicationStatus={selected?.status}
               />
             </div>
           </div>
           {/* Status Action Buttons - Sticky Footer */}
-          <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-end gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300">
-                  <FileCheck className="h-4 w-4" />
-                  For Compliance
+          {(() => {
+            if (!selected) return null
+            
+            const status = (selected.status || '').toString()
+            const isLocked = status === 'approved' || status === 'rejected'
+            
+            if (isLocked) {
+              return (
+                <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-center">
+                  <span className="text-gray-500 text-sm">
+                    {status === 'approved' ? 'This application has been approved and cannot be modified.' : 'This application has been rejected and cannot be modified.'}
+                  </span>
+                </div>
+              )
+            }
+            
+            return (
+              <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-end gap-3">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300">
+                      <FileCheck className="h-4 w-4" />
+                      For Compliance
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-56">
+                    <DropdownMenuItem onClick={() => openComplianceDialog('critical_skill')}>Critical Skills</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('for_assessment_country')
+                    }}>For Assessment Country</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('non_compliant_country')
+                    }}>Non Compliant Country</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('no_verified_contract')
+                    }}>No Verified Contract</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('seafarer_position')
+                    }}>Seaferer's Position</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('watchlisted_employer')
+                    }}>Watchlisted Employer</DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      openComplianceDialog('watchlisted_similar_name')
+                    }}>Watchlisted OFW</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button 
+                  className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
+                  onClick={() => setRejectReasonOpen(true)}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject/Deny
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-56">
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'critical_skill' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Critical Skills (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>Critical Skills</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'for_assessment_country' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - For Assessment Country (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>For Assessment Country</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'non_compliant_country' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Non Compliant Country (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>Non Compliant Country</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'seafarer_position' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Seafarer Position (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>Seafarer Position</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_employer' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted Employer (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>Watchlisted Employer</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
-                  if (!selected?.id) return
-                  try {
-                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'for_clearance', clearanceType: 'watchlisted_similar_name' }) })
-                    const json = await res.json()
-                    if (json.success) {
-                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { method: 'POST' })
-                      const gj = await gen.json()
-                      if (gj.success) {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW and document generated' })
-                      } else {
-                        toast({ title: 'Updated', description: 'Set to For Compliance - Watchlisted OFW (document generation failed)', variant: 'destructive' })
-                      }
-                      setViewOpen(false)
-                      fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                    } else {
-                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                    }
-                  } catch {
-                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                  }
-                }}>Watchlisted OFW</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button 
-              className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
-              onClick={async () => {
-                if (!selected?.id) return
-                try {
-                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'rejected', clearanceType: null }) })
-                  const json = await res.json()
-                  if (json.success) {
-                    toast({ title: 'Updated', description: 'Marked as Rejected/Denied' })
-                    setViewOpen(false)
-                    fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                  } else {
-                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                  }
-                } catch {
-                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                }
-              }}
-            >
-              <XCircle className="h-4 w-4" />
-              Reject/Deny
-            </Button>
-            <Button 
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
-              onClick={async () => {
-                if (!selected?.id) return
-                try {
-                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'approved', clearanceType: null }) })
-                  const json = await res.json()
-                  if (json.success) {
-                    toast({ title: 'Updated', description: 'Marked as Approved' })
-                    setViewOpen(false)
-                    fetchClearances({ page: pagination.page, limit: pagination.limit, search, clearanceType: filters.clearanceType, sex: filters.sex, dateFrom: filters.dateFrom, dateTo: filters.dateTo, jobsite: filters.jobsite, position: filters.position, showDeletedOnly: filters.showDeletedOnly })
-                  } else {
-                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
-                  }
-                } catch {
-                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
-                }
-              }}
-            >
-              <CheckCircle className="h-4 w-4" />
-              Approve
-            </Button>
-          </div>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                  onClick={() => setApproveConfirmOpen(true)}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Approve
+                </Button>
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1477,7 +1586,7 @@ export default function BalikManggagawaPage() {
                   if (json.success) {
                     toast({ title: 'Updated', description: 'BM application updated.' })
                     setEditOpen(false)
-                    fetchClearances({ page: pagination.page, limit: pagination.limit, search })
+                    fetchClearances(getCurrentFilters())
                   } else {
                     toast({ title: 'Error', description: json.error || 'Update failed', variant: 'destructive' })
                   }
@@ -1509,9 +1618,9 @@ export default function BalikManggagawaPage() {
                 const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'DELETE' })
                 const json = await res.json()
                 if (json.success) {
-                  toast({ title: 'Deleted', description: 'Clearance moved to trash (soft delete).' })
+                  toast({ title: 'Deleted', description: 'Clearance moved to trash.' })
                   setDeleteConfirmOpen(false)
-                  fetchClearances({ page: pagination.page, limit: pagination.limit })
+                  fetchClearances(getCurrentFilters())
                 } else {
                   toast({ title: 'Delete failed', description: json.error || 'Failed to delete', variant: 'destructive' })
                 }
@@ -1519,6 +1628,142 @@ export default function BalikManggagawaPage() {
                 toast({ title: 'Delete failed', description: 'Network error', variant: 'destructive' })
               }
             }}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <Dialog open={permanentDeleteConfirmOpen} onOpenChange={(o)=> { setPermanentDeleteConfirmOpen(o); if (!o) { setApplicationToPermanentDelete(null); setPermanentDeleteConfirmText("") } }}>
+        <DialogContent>
+          <DialogTitle className="text-red-600">Permanently Delete Application</DialogTitle>
+          <div className="text-sm text-gray-700">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
+                <Trash2 className="h-4 w-4" />
+                Warning: This action cannot be undone
+              </div>
+              <p className="text-red-700">
+                You are about to permanently delete the application for <strong>{applicationToPermanentDelete?.name_of_worker || applicationToPermanentDelete?.nameOfWorker || 'this applicant'}</strong>.
+              </p>
+              <p className="text-red-700 mt-2">
+                This will permanently remove all data including documents, processing records, and cannot be recovered.
+              </p>
+            </div>
+            <p className="font-semibold">Are you absolutely sure you want to proceed?</p>
+            <br />
+            To confirm, please type <strong>DELETE</strong> in the field below:
+          </div>
+          <div className="py-4">
+            <input
+              type="text"
+              value={permanentDeleteConfirmText}
+              onChange={(e) => setPermanentDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              className="w-full border rounded px-3 py-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && permanentDeleteConfirmText === "DELETE") {
+                  // Trigger the delete action
+                  const deleteButton = document.querySelector('[data-permanent-delete-button]') as HTMLButtonElement;
+                  if (deleteButton && !deleteButton.disabled) {
+                    deleteButton.click();
+                  }
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={()=> setPermanentDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed" 
+              disabled={permanentDeleteConfirmText !== "DELETE"}
+              data-permanent-delete-button
+              onClick={async ()=>{
+              if (!applicationToPermanentDelete?.id) return
+              try {
+                const res = await fetch(`/api/balik-manggagawa/clearance/${applicationToPermanentDelete.id}/permanent-delete`, { method: 'DELETE' })
+                const json = await res.json()
+                if (json.success) {
+                  toast({ title: 'Permanently Deleted', description: 'Clearance has been permanently deleted and cannot be recovered' })
+                  setPermanentDeleteConfirmOpen(false)
+                  setPermanentDeleteConfirmText("")
+                  fetchClearances(getCurrentFilters())
+                } else {
+                  toast({ title: 'Permanent delete failed', description: json.error || 'Failed to permanently delete', variant: 'destructive' })
+                }
+              } catch (e) {
+                toast({ title: 'Permanent delete failed', description: 'Network error', variant: 'destructive' })
+              }
+            }}>Permanently Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Confirmation Dialog */}
+      <Dialog open={restoreConfirmOpen} onOpenChange={(o)=> { setRestoreConfirmOpen(o); if (!o) { setApplicationToRestore(null); setRestoreConfirmText("") } }}>
+        <DialogContent>
+          <DialogTitle className="text-green-600">Restore Application</DialogTitle>
+          <div className="text-sm text-gray-700">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 text-green-800 font-semibold mb-2">
+                <CheckCircle className="h-4 w-4" />
+                Restore Application
+              </div>
+              <p className="text-green-700">
+                You are about to restore the application for <strong>{applicationToRestore?.name_of_worker || applicationToRestore?.nameOfWorker || 'this applicant'}</strong>.
+              </p>
+              <p className="text-green-700 mt-2">
+                This will move the application back to the active applications list and make it available for editing and processing.
+              </p>
+            </div>
+            <p className="font-semibold">Are you sure you want to restore this application?</p>
+            <br />
+            To confirm, please type <strong>RESTORE</strong> in the field below:
+          </div>
+          <div className="py-4">
+            <input
+              type="text"
+              value={restoreConfirmText}
+              onChange={(e) => setRestoreConfirmText(e.target.value)}
+              placeholder="Type RESTORE to confirm"
+              className="w-full border rounded px-3 py-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && restoreConfirmText === "RESTORE") {
+                  // Trigger the restore action
+                  const restoreButton = document.querySelector('[data-restore-button]') as HTMLButtonElement;
+                  if (restoreButton && !restoreButton.disabled) {
+                    restoreButton.click();
+                  }
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={()=> setRestoreConfirmOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed" 
+              disabled={restoreConfirmText !== "RESTORE"}
+              data-restore-button
+              onClick={async ()=>{
+              if (!applicationToRestore?.id) return
+              try {
+                const res = await fetch(`/api/balik-manggagawa/clearance/${applicationToRestore.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'restore' })
+                })
+                const json = await res.json()
+                if (json.success) {
+                  toast({ title: 'Restored', description: 'Clearance has been restored successfully' })
+                  setRestoreConfirmOpen(false)
+                  setRestoreConfirmText("")
+                  fetchClearances(getCurrentFilters())
+                } else {
+                  toast({ title: 'Restore failed', description: json.error || 'Failed to restore', variant: 'destructive' })
+                }
+              } catch (e) {
+                toast({ title: 'Restore failed', description: 'Network error', variant: 'destructive' })
+              }
+            }}>Restore</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1552,6 +1797,965 @@ export default function BalikManggagawaPage() {
               setUploadModalOpen(false)
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve Confirmation Dialog */}
+      <AlertDialog open={approveConfirmOpen} onOpenChange={setApproveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to approve the application for <strong>{selected?.name_of_worker || 'this applicant'}</strong>? This action will mark the application as approved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                if (!selected?.id) return
+                try {
+                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_update', status: 'approved', clearanceType: null }) })
+                  const json = await res.json()
+                  if (json.success) {
+                    toast({ title: 'Updated', description: 'Marked as Approved' })
+                    setViewOpen(false)
+                    setApproveConfirmOpen(false)
+                    fetchClearances(getCurrentFilters())
+                  } else {
+                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                  }
+                } catch {
+                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Approve
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Reason Dialog */}
+      <Dialog open={rejectReasonOpen} onOpenChange={(open) => { setRejectReasonOpen(open); if (!open) setRejectReason("") }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Application</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="reject-reason">Reason for rejection</Label>
+              <textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Enter the reason for rejection..."
+                className="w-full border rounded px-3 py-2 mt-1 min-h-[100px] resize-none"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRejectReasonOpen(false)}>Cancel</Button>
+              <Button 
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={!rejectReason.trim()}
+                onClick={async () => {
+                  if (!selected?.id || !rejectReason.trim()) return
+                  try {
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { 
+                      method: 'PATCH', 
+                      headers: { 'Content-Type': 'application/json' }, 
+                      body: JSON.stringify({ 
+                        action: 'status_update', 
+                        status: 'rejected', 
+                        clearanceType: null,
+                        rejectionReason: rejectReason.trim()
+                      }) 
+                    })
+                    const json = await res.json()
+                    if (json.success) {
+                      toast({ title: 'Updated', description: 'Marked as Rejected/Denied' })
+                      setViewOpen(false)
+                      setRejectReasonOpen(false)
+                      setRejectReason("")
+                      fetchClearances(getCurrentFilters())
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  }
+                }}
+              >
+                Reject
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Compliance Fields Dialog */}
+      <Dialog open={complianceDialogOpen} onOpenChange={(open) => { setComplianceDialogOpen(open); if (!open) { setSelectedComplianceType(""); setComplianceFields({}) } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>For Compliance Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              Please provide the required details for <strong>{
+                selectedComplianceType === 'critical_skill' ? 'Critical Skills' :
+                selectedComplianceType === 'for_assessment_country' ? 'For Assessment Country' :
+                selectedComplianceType === 'non_compliant_country' ? 'Non Compliant Country' :
+                selectedComplianceType === 'no_verified_contract' ? 'No Verified Contract' :
+                selectedComplianceType === 'seafarer_position' ? 'Seaferer\'s Position' :
+                selectedComplianceType === 'watchlisted_employer' ? 'Watchlisted Employer' :
+                selectedComplianceType === 'watchlisted_similar_name' ? 'Watchlisted OFW' : 'this type'
+              }</strong>.
+            </div>
+            {/* Special layout for For Assessment Country and Non Compliant Country months/years */}
+            {(selectedComplianceType === 'for_assessment_country' || selectedComplianceType === 'non_compliant_country') && (
+              <div>
+                <Label>No. of Month(s)/Year(s) with the Principal</Label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    id={`compliance-monthsYearsYears`}
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={complianceFields['monthsYearsYears'] || ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const sanitized = raw.replace(/[^0-9]/g, '')
+                      setComplianceFields(f => ({ ...f, ['monthsYearsYears']: sanitized }))
+                    }}
+                    className="w-1/2 border rounded px-3 py-2"
+                    placeholder="Year(s)"
+                  />
+                  <input
+                    id={`compliance-monthsYearsMonths`}
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={complianceFields['monthsYearsMonths'] || ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const sanitized = raw.replace(/[^0-9]/g, '')
+                      setComplianceFields(f => ({ ...f, ['monthsYearsMonths']: sanitized }))
+                    }}
+                    className="w-1/2 border rounded px-3 py-2"
+                    placeholder="Month(s)"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Special layout for Critical Skills employment duration and date fields */}
+            {selectedComplianceType === 'critical_skill' && (
+              <>
+                <div>
+                  <Label htmlFor="compliance-principalName">Name of the new principal *</Label>
+                  <input
+                    id="compliance-principalName"
+                    type="text"
+                    value={complianceFields['principalName'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['principalName']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                </div>
+                <div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateArrival">Date of Arrival *</Label>
+                      <input
+                        id="compliance-dateArrival"
+                        type="date"
+                        value={complianceFields['dateArrival'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['dateArrival']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['dateArrival']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateDeparture">Date of Departure *</Label>
+                      <input
+                        id="compliance-dateDeparture"
+                        type="date"
+                        value={complianceFields['dateDeparture'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8">
+                  <Label>Employment duration</Label>
+                  <div className="flex gap-2 mt-1">
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationFrom" className="text-xs font-normal">From *</label>
+                      <input
+                        id="compliance-employmentDurationFrom"
+                        type="date"
+                        value={complianceFields['employmentDurationFrom'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationUntil" className="text-xs font-normal">Until *</label>
+                      <input
+                        id="compliance-employmentDurationUntil"
+                        type="date"
+                        value={complianceFields['employmentDurationUntil'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Special layout for Seaferer's Position employment duration and date fields */}
+            {selectedComplianceType === 'seafarer_position' && (
+              <>
+                <div>
+                  <Label htmlFor="compliance-principalName">Name of the new principal *</Label>
+                  <input
+                    id="compliance-principalName"
+                    type="text"
+                    value={complianceFields['principalName'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['principalName']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                </div>
+                <div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateArrival">Date of Arrival *</Label>
+                      <input
+                        id="compliance-dateArrival"
+                        type="date"
+                        value={complianceFields['dateArrival'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['dateArrival']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['dateArrival']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateDeparture">Date of Departure *</Label>
+                      <input
+                        id="compliance-dateDeparture"
+                        type="date"
+                        value={complianceFields['dateDeparture'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8">
+                  <Label>Employment duration</Label>
+                  <div className="flex gap-2 mt-1">
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationFrom" className="text-xs font-normal">From *</label>
+                      <input
+                        id="compliance-employmentDurationFrom"
+                        type="date"
+                        value={complianceFields['employmentDurationFrom'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationUntil" className="text-xs font-normal">Until *</label>
+                      <input
+                        id="compliance-employmentDurationUntil"
+                        type="date"
+                        value={complianceFields['employmentDurationUntil'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Special layout for Watchlisted Employer fields */}
+            {selectedComplianceType === 'watchlisted_employer' && (
+              <>
+                <div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-placeEmployment">Place of Employment *</Label>
+                      <input
+                        id="compliance-placeEmployment"
+                        type="text"
+                        value={complianceFields['placeEmployment'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase()
+                          setComplianceFields(f => ({ ...f, ['placeEmployment']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                        placeholder="e.g., UNITED ARAB EMIRATES"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateEmployment">Year of Employment *</Label>
+                      <select
+                        id="compliance-dateEmployment"
+                        value={complianceFields['dateEmployment'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['dateEmployment']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      >
+                        <option value="">Select Year</option>
+                        {Array.from({ length: 101 }, (_, i) => {
+                          const currentYear = new Date().getFullYear()
+                          const year = currentYear - i
+                          return (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="compliance-totalDeployedOfws">Total Deployed OFWs *</Label>
+                  <input
+                    id="compliance-totalDeployedOfws"
+                    type="number"
+                    min="0"
+                    value={complianceFields['totalDeployedOfws'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setComplianceFields(f => ({ ...f, ['totalDeployedOfws']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., 1500"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-dateBlacklisting">Date of Blacklisting *</Label>
+                  <input
+                    id="compliance-dateBlacklisting"
+                    type="date"
+                    value={complianceFields['dateBlacklisting'] || ''}
+                    max={todayIso}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val && val > todayIso) {
+                        setComplianceFields(f => ({ ...f, ['dateBlacklisting']: todayIso }))
+                        return
+                      }
+                      setComplianceFields(f => ({ ...f, ['dateBlacklisting']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-reasonBlacklisting">Reason for Blacklisting *</Label>
+                  <input
+                    id="compliance-reasonBlacklisting"
+                    type="text"
+                    value={complianceFields['reasonBlacklisting'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['reasonBlacklisting']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., CONTRACTUAL VIOLATION"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-yearsWithPrincipal">No. of Years with the Principal *</Label>
+                  <input
+                    id="compliance-yearsWithPrincipal"
+                    type="number"
+                    min="0"
+                    value={complianceFields['yearsWithPrincipal'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setComplianceFields(f => ({ ...f, ['yearsWithPrincipal']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., 2"
+                  />
+                </div>
+                <div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateArrival">Date of Arrival *</Label>
+                      <input
+                        id="compliance-dateArrival"
+                        type="date"
+                        value={complianceFields['dateArrival'] || ''}
+                        max={todayIso}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val && val > todayIso) {
+                            setComplianceFields(f => ({ ...f, ['dateArrival']: todayIso }))
+                            return
+                          }
+                          setComplianceFields(f => ({ ...f, ['dateArrival']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label htmlFor="compliance-dateDeparture">Date of Departure *</Label>
+                      <input
+                        id="compliance-dateDeparture"
+                        type="date"
+                        value={complianceFields['dateDeparture'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Special layout for Non Compliant Country date fields */}
+            {selectedComplianceType === 'non_compliant_country' && (
+              <div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label htmlFor="compliance-dateArrival">Date of Arrival *</Label>
+                    <input
+                      id="compliance-dateArrival"
+                      type="date"
+                      value={complianceFields['dateArrival'] || ''}
+                      max={todayIso}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val && val > todayIso) {
+                          setComplianceFields(f => ({ ...f, ['dateArrival']: todayIso }))
+                          return
+                        }
+                        setComplianceFields(f => ({ ...f, ['dateArrival']: val }))
+                      }}
+                      className="w-full border rounded px-3 py-2 mt-1"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor="compliance-dateDeparture">Date of Departure *</Label>
+                    <input
+                      id="compliance-dateDeparture"
+                      type="date"
+                      value={complianceFields['dateDeparture'] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                      }}
+                      className="w-full border rounded px-3 py-2 mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Special layout for Watchlisted OFW fields */}
+            {selectedComplianceType === 'watchlisted_similar_name' && (
+              <>
+                <div>
+                  <Label htmlFor="compliance-activeEmailAddress">Active E-Mail Address *</Label>
+                  <input
+                    id="compliance-activeEmailAddress"
+                    type="email"
+                    value={complianceFields['activeEmailAddress'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setComplianceFields(f => ({ ...f, ['activeEmailAddress']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., john.doe@email.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-activePhMobileNumber">Active PH Mobile Number *</Label>
+                  <input
+                    id="compliance-activePhMobileNumber"
+                    type="text"
+                    value={complianceFields['activePhMobileNumber'] || '09'}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
+                      setComplianceFields(f => ({ ...f, ['activePhMobileNumber']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., 09123456789"
+                    maxLength={11}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-dateDeparture">Date of Departure (PH to Job Site) *</Label>
+                  <input
+                    id="compliance-dateDeparture"
+                    type="date"
+                    value={complianceFields['dateDeparture'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="compliance-remarks">Remarks</Label>
+                  <input
+                    id="compliance-remarks"
+                    type="text"
+                    value={complianceFields['remarks'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['remarks']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="Optional remarks"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Special layout for No Verified Contract fields */}
+            {selectedComplianceType === 'no_verified_contract' && (
+              <>
+                <div>
+                  <Label htmlFor="compliance-principalName">Name of the new principal *</Label>
+                  <input
+                    id="compliance-principalName"
+                    type="text"
+                    value={complianceFields['principalName'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['principalName']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., SAMSUNG"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label htmlFor="compliance-dateArrival">Date of arrival *</Label>
+                    <input
+                      id="compliance-dateArrival"
+                      type="date"
+                      value={complianceFields['dateArrival'] || ''}
+                      max={todayIso}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val && val > todayIso) {
+                          setComplianceFields(f => ({ ...f, ['dateArrival']: todayIso }))
+                          return
+                        }
+                        setComplianceFields(f => ({ ...f, ['dateArrival']: val }))
+                      }}
+                      className="w-full border rounded px-3 py-2 mt-1"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor="compliance-dateDeparture">Date of departure *</Label>
+                    <input
+                      id="compliance-dateDeparture"
+                      type="date"
+                      value={complianceFields['dateDeparture'] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setComplianceFields(f => ({ ...f, ['dateDeparture']: val }))
+                      }}
+                      className="w-full border rounded px-3 py-2 mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="mt-8">
+                  <Label>Employment duration</Label>
+                  <div className="flex gap-2 mt-1">
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationFrom" className="text-xs font-normal">From *</label>
+                      <input
+                        id="compliance-employmentDurationFrom"
+                        type="date"
+                        value={complianceFields['employmentDurationFrom'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label htmlFor="compliance-employmentDurationUntil" className="text-xs font-normal">Until *</label>
+                      <input
+                        id="compliance-employmentDurationUntil"
+                        type="date"
+                        value={complianceFields['employmentDurationUntil'] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: val }))
+                        }}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="compliance-remarks">Remarks</Label>
+                  <input
+                    id="compliance-remarks"
+                    type="text"
+                    value={complianceFields['remarks'] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setComplianceFields(f => ({ ...f, ['remarks']: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="Optional remarks"
+                  />
+                </div>
+              </>
+            )}
+
+            {getComplianceFieldDefs(selectedComplianceType)
+              .filter(def => !((selectedComplianceType === 'for_assessment_country' || selectedComplianceType === 'non_compliant_country') && (def.key === 'monthsYearsYears' || def.key === 'monthsYearsMonths')) && !(selectedComplianceType === 'non_compliant_country' && (def.key === 'dateArrival' || def.key === 'dateDeparture')) && !(selectedComplianceType === 'critical_skill' && (def.key === 'principalName' || def.key === 'employmentDurationFrom' || def.key === 'employmentDurationUntil' || def.key === 'dateArrival' || def.key === 'dateDeparture')) && !(selectedComplianceType === 'seafarer_position' && (def.key === 'principalName' || def.key === 'employmentDurationFrom' || def.key === 'employmentDurationUntil' || def.key === 'dateArrival' || def.key === 'dateDeparture')) && !(selectedComplianceType === 'watchlisted_employer' && (def.key === 'placeEmployment' || def.key === 'dateEmployment' || def.key === 'totalDeployedOfws' || def.key === 'dateBlacklisting' || def.key === 'reasonBlacklisting' || def.key === 'yearsWithPrincipal' || def.key === 'dateArrival' || def.key === 'dateDeparture')) && !(selectedComplianceType === 'watchlisted_similar_name' && (def.key === 'activeEmailAddress' || def.key === 'activePhMobileNumber' || def.key === 'dateDeparture' || def.key === 'remarks')) && !(selectedComplianceType === 'no_verified_contract' && (def.key === 'principalName' || def.key === 'employmentDurationFrom' || def.key === 'employmentDurationUntil' || def.key === 'dateArrival' || def.key === 'dateDeparture' || def.key === 'remarks')))
+              .map(def => (
+              <div key={def.key}>
+                <Label htmlFor={`compliance-${def.key}`}>{def.label}{def.required ? ' *' : ''}</Label>
+                {def.inputType === 'date' ? (
+                  <input
+                    id={`compliance-${def.key}`}
+                    type="date"
+                    value={complianceFields[def.key] || ''}
+                    max={(def.key === 'dateArrival' || def.key === 'employmentStartDate') ? todayIso : undefined}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if ((def.key === 'dateArrival' || def.key === 'employmentStartDate') && val && val > todayIso) {
+                        // Clamp arrival to today if future
+                        setComplianceFields(f => ({ ...f, [def.key]: todayIso }))
+                        return
+                      }
+                      setComplianceFields(f => ({ ...f, [def.key]: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                ) : def.inputType === 'number' ? (
+                  <input
+                    id={`compliance-${def.key}`}
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={complianceFields[def.key] || ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const sanitized = raw.replace(/[^0-9]/g, '')
+                      setComplianceFields(f => ({ ...f, [def.key]: sanitized }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder={def.label}
+                  />
+                ) : def.inputType === 'year' ? (
+                  <input
+                    id={`compliance-${def.key}`}
+                    type="number"
+                    min="1900"
+                    max={new Date().getFullYear()}
+                    value={complianceFields[def.key] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setComplianceFields(f => ({ ...f, [def.key]: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="e.g., 2023"
+                  />
+                ) : (
+                  <input
+                    id={`compliance-${def.key}`}
+                    type="text"
+                    value={complianceFields[def.key] || ''}
+                    onChange={(e) => {
+                      const val = def.toUpper ? e.target.value.toUpperCase() : e.target.value
+                      setComplianceFields(f => ({ ...f, [def.key]: val }))
+                    }}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder={def.label}
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setComplianceDialogOpen(false)}>Cancel</Button>
+              <Button 
+                className="bg-[#1976D2] hover:bg-[#1565C0] text-white"
+                disabled={(() => {
+                  if (complianceSubmitting) return true
+                  const missingRequired = getComplianceFieldDefs(selectedComplianceType).some(d => d.required && !String(complianceFields[d.key] || '').trim())
+                  if (missingRequired) {
+                    console.log('Missing required fields:', getComplianceFieldDefs(selectedComplianceType).filter(d => d.required && !String(complianceFields[d.key] || '').trim()))
+                    return true
+                  }
+                  // Extra check: arrival must not be in the future
+                  const arrival = complianceFields['dateArrival']
+                  if (arrival && arrival > todayIso) return true
+                  // For Assessment Country: employment start date not in the future
+                  const empStart = complianceFields['employmentStartDate']
+                  if (empStart && empStart > todayIso) return true
+                  return false
+                })()}
+                onClick={async () => {
+                  if (!selected?.id) return
+                  setComplianceSubmitting(true)
+                  try {
+                    // Prepare metadata for generation
+                    const toLongDate = (d: string) => {
+                      try { 
+                        const date = new Date(d)
+                        const day = date.getDate()
+                        const month = date.toLocaleDateString('en-GB', { month: 'long' }).toUpperCase()
+                        const year = date.getFullYear()
+                        return `${day} ${month} ${year}`
+                      } catch { return d }
+                    }
+                    let fieldsPayload: Record<string, string> = {}
+                    if (selectedComplianceType === 'critical_skill') {
+                      const fromDate = complianceFields['employmentDurationFrom'] || ''
+                      const untilDate = complianceFields['employmentDurationUntil'] || ''
+                      const formatLongDate = (dateStr: string) => {
+                        try {
+                          const date = new Date(dateStr)
+                          return date.toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          }).toUpperCase()
+                        } catch {
+                          return dateStr
+                        }
+                      }
+                      const employmentDurationText = fromDate && untilDate ? 
+                        `${formatLongDate(fromDate)} TO ${formatLongDate(untilDate)}` : ''
+                      
+                      fieldsPayload = {
+                        new_principal_name: (complianceFields['principalName'] || '').toString().toUpperCase(),
+                        employment_duration: employmentDurationText,
+                        date_arrival: complianceFields['dateArrival'] || '',
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_arrival_long: complianceFields['dateArrival'] ? toLongDate(complianceFields['dateArrival']) : '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                        remarks: (complianceFields['remarks'] || '').toString().toUpperCase(),
+                      }
+                    } else if (selectedComplianceType === 'for_assessment_country') {
+                      const years = parseInt(complianceFields['monthsYearsYears'] || '0', 10) || 0
+                      const months = parseInt(complianceFields['monthsYearsMonths'] || '0', 10) || 0
+                      const monthsYearsText = `${years} YEAR${years === 1 ? '' : 'S'} ${months} MONTH${months === 1 ? '' : 'S'}`.toUpperCase()
+                      fieldsPayload = {
+                        months_years: monthsYearsText,
+                        employment_start_date: complianceFields['employmentStartDate'] || '',
+                        employment_start_date_long: complianceFields['employmentStartDate'] ? toLongDate(complianceFields['employmentStartDate']) : '',
+                      }
+                    } else if (selectedComplianceType === 'seafarer_position') {
+                      const fromDate = complianceFields['employmentDurationFrom'] || ''
+                      const untilDate = complianceFields['employmentDurationUntil'] || ''
+                      const formatLongDate = (dateStr: string) => {
+                        try {
+                          const date = new Date(dateStr)
+                          return date.toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          }).toUpperCase()
+                        } catch {
+                          return dateStr
+                        }
+                      }
+                      const employmentDurationText = fromDate && untilDate ? 
+                        `${formatLongDate(fromDate)} TO ${formatLongDate(untilDate)}` : ''
+                      
+                      fieldsPayload = {
+                        new_principal_name: (complianceFields['principalName'] || '').toString().toUpperCase(),
+                        employment_duration: employmentDurationText,
+                        date_arrival: complianceFields['dateArrival'] || '',
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_arrival_long: complianceFields['dateArrival'] ? toLongDate(complianceFields['dateArrival']) : '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                        remarks: (complianceFields['remarks'] || '').toString().toUpperCase(),
+                      }
+                    } else if (selectedComplianceType === 'watchlisted_employer') {
+                      const placeEmployment = (complianceFields['placeEmployment'] || '').toString().toUpperCase()
+                      const dateEmployment = complianceFields['dateEmployment'] || ''
+                      const placeDateEmployment = placeEmployment && dateEmployment ? `${placeEmployment} / ${dateEmployment}` : ''
+                      
+                      const totalDeployed = (complianceFields['totalDeployedOfws'] || '').toString()
+                      
+                      fieldsPayload = {
+                        place_date_employment: placeDateEmployment,
+                        total_deployed_ofws: totalDeployed, // Store only the number
+                        date_blacklisting: complianceFields['dateBlacklisting'] || '',
+                        date_blacklisting_long: complianceFields['dateBlacklisting'] ? toLongDate(complianceFields['dateBlacklisting']) : '',
+                        reason_blacklisting: (complianceFields['reasonBlacklisting'] || '').toString().toUpperCase(),
+                        years_with_principal: (complianceFields['yearsWithPrincipal'] || '').toString(),
+                        date_of_arrival: complianceFields['dateArrival'] || '',
+                        date_of_arrival_long: complianceFields['dateArrival'] ? toLongDate(complianceFields['dateArrival']) : '',
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                        remarks: (complianceFields['remarks'] || '').toString().toUpperCase(),
+                      }
+                    } else if (selectedComplianceType === 'watchlisted_similar_name') {
+                      fieldsPayload = {
+                        active_email_address: (complianceFields['activeEmailAddress'] || '').toString(),
+                        active_ph_mobile_number: (complianceFields['activePhMobileNumber'] || '').toString(),
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                        remarks: (complianceFields['remarks'] || '').toString().toUpperCase(),
+                      }
+                    } else if (selectedComplianceType === 'no_verified_contract') {
+                      const fromDate = complianceFields['employmentDurationFrom'] || ''
+                      const untilDate = complianceFields['employmentDurationUntil'] || ''
+                      const employmentDuration = fromDate && untilDate ? `${toLongDate(fromDate)} TO ${toLongDate(untilDate)}` : ''
+                      
+                      fieldsPayload = {
+                        new_principal_name: (complianceFields['principalName'] || '').toString().toUpperCase(),
+                        employment_duration: employmentDuration,
+                        date_arrival: complianceFields['dateArrival'] || '',
+                        date_arrival_long: complianceFields['dateArrival'] ? toLongDate(complianceFields['dateArrival']) : '',
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                        remarks: (complianceFields['remarks'] || '').toString().toUpperCase(),
+                      }
+                    } else if (selectedComplianceType === 'non_compliant_country') {
+                      const years = parseInt(complianceFields['monthsYearsYears'] || '0', 10) || 0
+                      const months = parseInt(complianceFields['monthsYearsMonths'] || '0', 10) || 0
+                      const monthsYearsText = `${years} YEAR${years === 1 ? '' : 'S'} ${months} MONTH${months === 1 ? '' : 'S'}`.toUpperCase()
+                      fieldsPayload = {
+                        months_years: monthsYearsText,
+                        employment_start_date: complianceFields['employmentStartDate'] || '',
+                        employment_start_date_long: complianceFields['employmentStartDate'] ? toLongDate(complianceFields['employmentStartDate']) : '',
+                        processing_date: complianceFields['dateProcessed'] || '',
+                        processing_date_long: complianceFields['dateProcessed'] ? toLongDate(complianceFields['dateProcessed']) : '',
+                        date_arrival: complianceFields['dateArrival'] || '',
+                        date_arrival_long: complianceFields['dateArrival'] ? toLongDate(complianceFields['dateArrival']) : '',
+                        date_departure: complianceFields['dateDeparture'] || '',
+                        date_departure_long: complianceFields['dateDeparture'] ? toLongDate(complianceFields['dateDeparture']) : '',
+                      }
+                    } else {
+                      // Default mapping for other types; extend as needed
+                      fieldsPayload = {
+                        remarks: (complianceFields['remarks'] || '').toString(),
+                      }
+                    }
+                    const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { 
+                      method: 'PATCH', 
+                      headers: { 'Content-Type': 'application/json' }, 
+                      body: JSON.stringify({ 
+                        action: 'status_update', 
+                        status: 'for_clearance', 
+                        clearanceType: selectedComplianceType,
+                        metadata: fieldsPayload
+                      }) 
+                    })
+                    const json = await res.json()
+                    if (json.success) {
+                      const gen = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/generate`, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          clearanceType: selectedComplianceType,
+                          fields: fieldsPayload,
+                          fileName: getComplianceTitle(selectedComplianceType)
+                        })
+                      })
+                      const gj = await gen.json()
+                      if (gj.success) {
+                        const clearanceTypeName = getComplianceTitle(selectedComplianceType)
+                        toast({ title: 'Updated', description: `Set to For Compliance and ${clearanceTypeName} document generated` })
+                        // Refresh documents in the view modal
+                        setDocumentsRefreshTrigger(prev => prev + 1)
+                      } else {
+                        const clearanceTypeName = getComplianceTitle(selectedComplianceType)
+                        toast({ title: 'Updated', description: `Set to For Compliance (${clearanceTypeName} document generation failed)`, variant: 'destructive' })
+                      }
+                      setComplianceDialogOpen(false)
+                      fetchClearances(getCurrentFilters())
+                    } else {
+                      toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                    }
+                  } catch {
+                    toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                  } finally {
+                    setComplianceSubmitting(false)
+                  }
+                }}
+              >
+                {complianceSubmitting ? 'Submitting...' : 'Submit'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

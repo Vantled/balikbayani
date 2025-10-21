@@ -8,11 +8,18 @@ import { join } from 'path'
 import { ApiResponse } from '@/lib/types'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    let fileNameOverride: string | undefined
+    try {
+      const body = await request.json()
+      if (body && typeof body.fileName === 'string' && body.fileName.trim()) {
+        fileNameOverride = body.fileName.trim()
+      }
+    } catch {}
 
     const clearance = await DatabaseService.getBalikManggagawaClearanceById(id)
     if (!clearance) {
@@ -28,7 +35,7 @@ export async function POST(
     // Pick template per clearance type (see public/templates)
     const typeToTemplate: Record<string, string> = {
       watchlisted_employer: 'watchlisted employer.docx',
-      seafarer_position: 'seafarer.docx',
+      seafarer_position: 'seaferer.docx',
       non_compliant_country: 'non-compliant-country.docx',
       no_verified_contract: 'no-verified-contract.docx',
       for_assessment_country: 'for-assessment-country.docx',
@@ -130,7 +137,7 @@ export async function POST(
         place_date_employment: (clearance as any).place_date_employment || '',
         date_blacklisting: blacklisting.iso || (clearance as any).date_blacklisting || '',
         date_blacklisting_long: blacklisting.long,
-        total_deployed_ofws: (clearance as any).total_deployed_ofws || '',
+        total_deployed_ofws: (clearance as any).total_deployed_ofws ? `${(clearance as any).total_deployed_ofws} RECORDS` : '',
         reason_blacklisting: (clearance as any).reason_blacklisting || '',
         years_with_principal: (clearance as any).years_with_principal || '',
         employment_start_date: employmentStart.iso,
@@ -138,10 +145,10 @@ export async function POST(
         processing_date: processing.iso,
         processing_date_long: processing.long,
         remarks: (clearance as any).remarks || '',
-        // Watchlisted OFW specific aliases
-        full_name_of_ofw: clearance.name_of_worker,
         active_email_address: (clearance as any).active_email_address || '',
         active_ph_mobile_number: (clearance as any).active_ph_mobile_number || '',
+        // Watchlisted OFW specific aliases
+        full_name_of_ofw: clearance.name_of_worker,
         clearance_type: clearance.clearance_type
       },
       cmdDelimiter: ['{{', '}}']
@@ -153,11 +160,11 @@ export async function POST(
       for_assessment_country: 'For assessment countries CLEARANCE REQUEST',
       no_verified_contract: 'NO VERIFIED CONTRACT CLEARANCE REQUEST',
       non_compliant_country: 'NON COMPLIANT COUNTRY CLEARANCE REQUEST',
-      seafarer_position: "SEAFARER'S POSITION PROCESS REQUEST",
+      seafarer_position: "SEAFERER'S POSITION PROCESS REQUEST",
       watchlisted_employer: 'WATCHLISTED EMPLOYER PROCESS REQUEST',
-      watchlisted_similar_name: 'WATCHLISTED OFW CLEARANCE REQUEST',
+      watchlisted_similar_name: 'Watchlisted OFW',
     }
-    const rawDocName = typeToDocName[clearance.clearance_type] || 'CLEARANCE REQUEST'
+    const rawDocName = fileNameOverride || typeToDocName[clearance.clearance_type] || 'CLEARANCE REQUEST'
     const sentenceCase = (s: string) => {
       const lower = s.trim().toLowerCase()
       return lower ? lower.charAt(0).toUpperCase() + lower.slice(1) : ''

@@ -633,6 +633,7 @@ export class DatabaseService {
     search?: string;
     clearanceType?: string;
     sex?: string;
+    status?: string;
     dateFrom?: string;
     dateTo?: string;
     jobsite?: string;
@@ -684,15 +685,37 @@ export class DatabaseService {
       }
     }
 
+    if (filters.status) {
+      const statuses = String(filters.status).split(',').filter(Boolean)
+      if (statuses.length > 0) {
+        query += ` AND c.status = ANY($${paramIndex}::text[])`;
+        params.push(statuses);
+        paramIndex++;
+      }
+    }
+
     if (filters.dateFrom && filters.dateTo) {
       query += ` AND c.created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
       params.push(filters.dateFrom, filters.dateTo);
       paramIndex += 2;
     }
 
+    if (filters.jobsite) {
+      query += ` AND c.destination ILIKE $${paramIndex}`;
+      params.push(`%${filters.jobsite}%`);
+      paramIndex++;
+    }
+
+    if (filters.position) {
+      query += ` AND c.position ILIKE $${paramIndex}`;
+      params.push(`%${filters.position}%`);
+      paramIndex++;
+    }
+
     // Only show clearances that are completed (have documents_completed = true) or don't have processing records
     // Temporarily commented out to debug pagination
     // query += ` AND (p.documents_completed = true OR p.documents_completed IS NULL)`;
+
 
     // Get total count - use a simpler count query
     let countQuery = `SELECT COUNT(*) FROM balik_manggagawa_clearance c WHERE 1=1`;
@@ -730,10 +753,31 @@ export class DatabaseService {
       }
     }
 
+    if (filters.status) {
+      const statuses = String(filters.status).split(',').filter(Boolean)
+      if (statuses.length > 0) {
+        countQuery += ` AND c.status = ANY($${countParamIndex}::text[])`;
+        countParams.push(statuses);
+        countParamIndex++;
+      }
+    }
+
     if (filters.dateFrom && filters.dateTo) {
       countQuery += ` AND c.created_at::date BETWEEN $${countParamIndex} AND $${countParamIndex + 1}`;
       countParams.push(filters.dateFrom, filters.dateTo);
       countParamIndex += 2;
+    }
+
+    if (filters.jobsite) {
+      countQuery += ` AND c.destination ILIKE $${countParamIndex}`;
+      countParams.push(`%${filters.jobsite}%`);
+      countParamIndex++;
+    }
+
+    if (filters.position) {
+      countQuery += ` AND c.position ILIKE $${countParamIndex}`;
+      countParams.push(`%${filters.position}%`);
+      countParamIndex++;
     }
     const { rows: countRows } = await db.query(countQuery, countParams);
     const total = parseInt(countRows[0].count);
@@ -859,13 +903,49 @@ export class DatabaseService {
     }
   }
 
-  static async updateBalikManggagawaStatus(id: string, data: { status: string | null; clearanceType: string | null }): Promise<BalikManggagawaClearance | null> {
+  static async updateBalikManggagawaStatus(
+    id: string,
+    data: {
+      status?: string | null;
+      clearanceType?: string | null;
+      newPrincipalName?: string | null;
+      employmentDuration?: string | null;
+      dateArrival?: string | null;
+      dateDeparture?: string | null;
+      remarks?: string | null;
+      monthsYears?: string | null;
+      employmentStartDate?: string | null;
+      processingDate?: string | null;
+      placeDateEmployment?: string | null;
+      totalDeployedOfws?: string | null;
+      dateBlacklisting?: string | null;
+      reasonBlacklisting?: string | null;
+      yearsWithPrincipal?: string | null;
+      activeEmailAddress?: string | null;
+      activePhMobileNumber?: string | null;
+    }
+  ): Promise<BalikManggagawaClearance | null> {
     // Build dynamic set parts for flexible updates
     const setParts: string[] = []
     const values: any[] = []
     let idx = 1
     if (data.status !== undefined) { setParts.push(`status = $${idx++}`); values.push(data.status) }
     if (data.clearanceType !== undefined) { setParts.push(`clearance_type = $${idx++}`); values.push(data.clearanceType) }
+    if (data.newPrincipalName !== undefined) { setParts.push(`new_principal_name = $${idx++}`); values.push(data.newPrincipalName) }
+    if (data.employmentDuration !== undefined) { setParts.push(`employment_duration = $${idx++}`); values.push(data.employmentDuration) }
+    if (data.dateArrival !== undefined) { setParts.push(`date_arrival = $${idx++}`); values.push(data.dateArrival) }
+    if (data.dateDeparture !== undefined) { setParts.push(`date_departure = $${idx++}`); values.push(data.dateDeparture) }
+    if (data.remarks !== undefined) { setParts.push(`remarks = $${idx++}`); values.push(data.remarks) }
+    if (data.monthsYears !== undefined) { setParts.push(`months_years = $${idx++}`); values.push(data.monthsYears) }
+    if (data.employmentStartDate !== undefined) { setParts.push(`employment_start_date = $${idx++}`); values.push(data.employmentStartDate) }
+    if (data.processingDate !== undefined) { setParts.push(`processing_date = $${idx++}`); values.push(data.processingDate) }
+    if (data.placeDateEmployment !== undefined) { setParts.push(`place_date_employment = $${idx++}`); values.push(data.placeDateEmployment) }
+    if (data.totalDeployedOfws !== undefined) { setParts.push(`total_deployed_ofws = $${idx++}`); values.push(data.totalDeployedOfws) }
+    if (data.dateBlacklisting !== undefined) { setParts.push(`date_blacklisting = $${idx++}`); values.push(data.dateBlacklisting) }
+    if (data.reasonBlacklisting !== undefined) { setParts.push(`reason_blacklisting = $${idx++}`); values.push(data.reasonBlacklisting) }
+    if (data.yearsWithPrincipal !== undefined) { setParts.push(`years_with_principal = $${idx++}`); values.push(data.yearsWithPrincipal) }
+    if (data.activeEmailAddress !== undefined) { setParts.push(`active_email_address = $${idx++}`); values.push(data.activeEmailAddress) }
+    if (data.activePhMobileNumber !== undefined) { setParts.push(`active_ph_mobile_number = $${idx++}`); values.push(data.activePhMobileNumber) }
     if (setParts.length === 0) return await this.getBalikManggagawaClearanceById(id)
     setParts.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
@@ -881,6 +961,18 @@ export class DatabaseService {
 
   static async restoreBalikManggagawaClearance(id: string): Promise<boolean> {
     const { rowCount } = await db.query('UPDATE balik_manggagawa_clearance SET deleted_at = NULL WHERE id = $1', [id]);
+    return (rowCount || 0) > 0;
+  }
+
+  static async permanentlyDeleteBalikManggagawaClearance(id: string): Promise<boolean> {
+    // First delete related documents
+    await db.query('DELETE FROM documents WHERE application_id = $1 AND application_type = $2', [id, 'balik_manggagawa']);
+    
+    // Delete related processing records
+    await db.query('DELETE FROM balik_manggagawa_processing WHERE clearance_id = $1', [id]);
+    
+    // Then permanently delete the clearance
+    const { rowCount } = await db.query('DELETE FROM balik_manggagawa_clearance WHERE id = $1', [id]);
     return (rowCount || 0) > 0;
   }
 

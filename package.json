@@ -21,6 +21,7 @@
     "db:security-migrate": "tsx lib/migrate-security.ts",
     "db:role-migrate": "tsx lib/migrate-role-hierarchy.ts",
     "db:set-superadmin-password": "tsx lib/set-superadmin-password.ts",
+    "db:migrate-info-soft-delete": "tsx scripts/migrate-info-sheet-soft-delete.ts",
     "db:update-admin-names": "tsx lib/update-admin-names.ts",
     
     "db:seed-peso": "tsx scripts/seed-peso-contacts.ts",

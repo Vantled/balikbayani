@@ -26,6 +26,7 @@ interface ApplicationsTableProps {
     totalPages: number
   }
   onPageChange?: (page: number) => void
+  onRowDoubleClick?: (application: Application) => void
 }
 
 // Helper function to get category color
@@ -55,7 +56,7 @@ const getCategoryColor = (category: string) => {
   return 'bg-gray-100 text-gray-800 border-gray-200'
 }
 
-export default function ApplicationsTable({ applications, search = "", filterQuery = "", pagination, onPageChange }: ApplicationsTableProps) {
+export default function ApplicationsTable({ applications, search = "", filterQuery = "", pagination, onPageChange, onRowDoubleClick }: ApplicationsTableProps) {
 
   return (
     <>
@@ -185,8 +186,7 @@ export default function ApplicationsTable({ applications, search = "", filterQue
                 className="hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none"
                 onDoubleClick={(e) => {
                   e.preventDefault()
-                  setSelected(application)
-                  setViewOpen(true)
+                  onRowDoubleClick?.(application)
                 }}
               >
                 <td className="py-3 px-4 text-center">{application.controlNumber}</td>

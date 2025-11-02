@@ -224,7 +224,7 @@ export default function FilterPanel(props: FilterPanelProps) {
 						<SelectContent>
 							{[
 								{ value: 'draft', label: 'Draft' },
-								{ value: 'pending', label: 'Pending' },
+								{ value: 'pending', label: 'For Evaluation' },
 								{ value: 'evaluated', label: 'Evaluated' },
 								{ value: 'for_confirmation', label: 'For Confirmation' },
 								{ value: 'emailed_to_dhad', label: 'Emailed to DHAD' },

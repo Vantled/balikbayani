@@ -12,7 +12,7 @@ export default function DashboardPage() {
       <Header />
       
       {/* Main Content */}
-      <main className="flex-1 p-6 pt-24">
+      <main className="flex-1 px-6 pt-24 pb-0">
         <DirectHireTable />
       </main>
     </div>

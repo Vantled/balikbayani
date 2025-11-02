@@ -25,6 +25,26 @@ export interface User {
   created_by_name?: string;
   created_at: string;
   updated_at: string;
+  permissions?: UserPermission[];
+}
+
+export interface UserPermission {
+  id: string;
+  user_id: string;
+  permission_key: string;
+  granted: boolean;
+  granted_by?: string;
+  granted_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PermissionUpdateRequest {
+  user_id: string;
+  permissions: {
+    permission_key: string;
+    granted: boolean;
+  }[];
 }
 
 export interface LoginResponse {
@@ -200,6 +220,10 @@ export interface GovToGovApplication {
   other_job_experience?: JobExperience;
   created_at: Date;
   updated_at: Date;
+  deleted_at?: Date;
+  date_received_by_region?: Date;
+  date_card_released?: Date;
+  remarks?: string;
 }
 
 export interface TaiwanWorkExperience {

@@ -5,7 +5,7 @@ import { ApiResponse } from '@/lib/types';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
     // Get session token from cookies
@@ -55,8 +55,10 @@ export async function PUT(
       }, { status: 400 });
     }
 
+    const { id } = await params;
+
     // Activate user
-    const result = await AuthService.activateUser(params.id, user.id);
+    const result = await AuthService.activateUser(id, user.id);
 
     if (result.success) {
       return NextResponse.json({

@@ -9,6 +9,15 @@ import { useEffect, useState } from "react"
 import { Search, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import FilterPanel from "./filter-panel"
+import { Doughnut } from "react-chartjs-2"
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+} from "chart.js"
+
+ChartJS.register(ArcElement, ChartTooltip, ChartLegend)
 
 type Application = {
   id: number
@@ -82,49 +91,8 @@ type DashboardStats = {
   pendingUsers: number
 }
 
-// Import data arrays from each module
-const govToGovData = [
-  { lastName: "Reyes", firstName: "Maria", middleName: "Clara", sex: "Female", taiwanExp: "Yes" },
-  { lastName: "Lim", firstName: "Roberto", middleName: "Santos", sex: "Male", taiwanExp: "No" },
-  { lastName: "Gomez", firstName: "Ana", middleName: "Lopez", sex: "Female", taiwanExp: "Yes" },
-  { lastName: "Torres", firstName: "Michael", middleName: "Dela Cruz", sex: "Male", taiwanExp: "No" },
-  { lastName: "Navarro", firstName: "Jose", middleName: "Ramos", sex: "Male", taiwanExp: "Yes" },
-  { lastName: "Cruz", firstName: "Angela", middleName: "Villanueva", sex: "Female", taiwanExp: "No" },
-  { lastName: "Delos Santos", firstName: "Patricia", middleName: "Mae", sex: "Female", taiwanExp: "Yes" },
-]
-
-const balikManggagawaData = [
-  { control: "NCC 2025-0319-013-001", name: "Reyes, Maria Clara", sex: "Female", employer: "GlobalCare Inc.", destination: "UAE", salary: "$1,200" },
-  { control: "WE 2025-0319-013-001", name: "Lim, Roberto", sex: "Male", employer: "QatarWorks", destination: "Qatar", salary: "$1,500" },
-  { control: "FAC 2025-0319-025-001", name: "Gomez, Ana", sex: "Female", employer: "Kuwait Solutions", destination: "Kuwait", salary: "$1,800" },
-  { control: "NVEC-2025-0319-029-001", name: "Torres, Michael", sex: "Male", employer: "HK Domestic", destination: "Hong Kong", salary: "$950" },
-  { control: "SP-2025-0319-023-002", name: "Navarro, Jose", sex: "Male", employer: "Greek Shipping", destination: "Greece", salary: "$2,200" },
-  { control: "CS-2025-0319-120-049", name: "Cruz, Angela", sex: "Female", employer: "Canada Health", destination: "Canada", salary: "$2,500" },
-  { control: "DHPSW-ROIVA-2025-0319-013-001", name: "Delos Santos, Patricia Mae", sex: "Female", employer: "ABC Company", destination: "Singapore", salary: "$1,900" },
-]
-
-const infoSheetData = [
-  { familyName: "Reyes", firstName: "Maria", middleName: "Clara", gender: "Female", jobsite: "UAE", agency: "GlobalCare Inc.", purpose: "Employment", workerCategory: "Landbased (Newhire)", requestedRecord: "Information Sheet" },
-  { familyName: "Lim", firstName: "Roberto", middleName: "Santos", gender: "Male", jobsite: "Qatar", agency: "QatarWorks", purpose: "Legal", workerCategory: "Rehire (Balik Manggagawa)", requestedRecord: "OEC" },
-  { familyName: "Gomez", firstName: "Ana", middleName: "Lopez", gender: "Female", jobsite: "Kuwait", agency: "Kuwait Solutions", purpose: "Loan", workerCategory: "Seafarer", requestedRecord: "Employment Contract" },
-  { familyName: "Torres", firstName: "Michael", middleName: "Dela Cruz", gender: "Male", jobsite: "Hong Kong", agency: "HK Domestic", purpose: "VISA", workerCategory: "Landbased (Newhire)", requestedRecord: "Information Sheet" },
-  { familyName: "Navarro", firstName: "Jose", middleName: "Ramos", gender: "Male", jobsite: "Greece", agency: "Greek Shipping", purpose: "Employment", workerCategory: "Seafarer", requestedRecord: "OEC" },
-  { familyName: "Cruz", firstName: "Angela", middleName: "Villanueva", gender: "Female", jobsite: "Canada", agency: "Canada Health", purpose: "Philhealth", workerCategory: "Landbased (Newhire)", requestedRecord: "Employment Contract" },
-  { familyName: "Delos Santos", firstName: "Patricia", middleName: "Mae", gender: "Female", jobsite: "Singapore", agency: "ABC Agency", purpose: "Employment", workerCategory: "Landbased (Newhire)", requestedRecord: "Information Sheet" },
-]
-
-// Calculate counts
-const govToGovCount = govToGovData.length
-const govToGovMaleCount = govToGovData.filter(item => item.sex === "Male").length
-const govToGovFemaleCount = govToGovData.filter(item => item.sex === "Female").length
-
-const balikManggagawaCount = balikManggagawaData.length
-const balikManggagawaMaleCount = balikManggagawaData.filter(item => item.sex === "Male").length
-const balikManggagawaFemaleCount = balikManggagawaData.filter(item => item.sex === "Female").length
-
-const infoSheetCount = infoSheetData.length
-const infoSheetMaleCount = infoSheetData.filter(item => item.gender === "Male").length
-const infoSheetFemaleCount = infoSheetData.filter(item => item.gender === "Female").length
+// Remote totals for Gov-to-Gov and Information Sheet
+type SexTotals = { all: number; male: number; female: number }
 
 export default function DirectHireTable() {
   const [activeTab, setActiveTab] = useState("overview")
@@ -166,6 +134,17 @@ export default function DirectHireTable() {
   const [govToGovFilter, setGovToGovFilter] = useState<"all" | "male" | "female">("all")
   const [infoSheetFilter, setInfoSheetFilter] = useState<"all" | "male" | "female">("all")
 
+  // Totals sourced from API
+  const [govToGovTotals, setGovToGovTotals] = useState<SexTotals>({ all: 0, male: 0, female: 0 })
+  const [infoSheetTotals, setInfoSheetTotals] = useState<SexTotals>({ all: 0, male: 0, female: 0 })
+  const [loadingGovToGov, setLoadingGovToGov] = useState(false)
+  const [loadingInfoSheet, setLoadingInfoSheet] = useState(false)
+
+  // Gender totals (DH + BM)
+  const [genderTotals, setGenderTotals] = useState<{ male: number; female: number } | null>(null)
+
+  // Direct Hire status distribution handled by ProcessingStatusCard
+
   // Helper functions to get the display value for each card
   const getDirectHireDisplayValue = () => {
     if (loadingStats) return '—'
@@ -186,18 +165,20 @@ export default function DirectHireTable() {
   }
 
   const getGovToGovDisplayValue = () => {
+    if (loadingGovToGov) return '—'
     switch (govToGovFilter) {
-      case "male": return govToGovMaleCount
-      case "female": return govToGovFemaleCount
-      default: return govToGovCount
+      case "male": return govToGovTotals.male
+      case "female": return govToGovTotals.female
+      default: return govToGovTotals.all
     }
   }
 
   const getInfoSheetDisplayValue = () => {
+    if (loadingInfoSheet) return '—'
     switch (infoSheetFilter) {
-      case "male": return infoSheetMaleCount
-      case "female": return infoSheetFemaleCount
-      default: return infoSheetCount
+      case "male": return infoSheetTotals.male
+      case "female": return infoSheetTotals.female
+      default: return infoSheetTotals.all
     }
   }
 
@@ -214,6 +195,69 @@ export default function DirectHireTable() {
 
   useEffect(() => {
     fetchStats()
+  }, [])
+
+  // Fetch Gov-to-Gov totals from API using pagination.total
+  useEffect(() => {
+    const run = async () => {
+      setLoadingGovToGov(true)
+      try {
+        const [allRes, maleRes, femaleRes] = await Promise.all([
+          fetch('/api/gov-to-gov?page=1&limit=1'),
+          fetch('/api/gov-to-gov?sex=male&page=1&limit=1'),
+          fetch('/api/gov-to-gov?sex=female&page=1&limit=1'),
+        ])
+        const [allJson, maleJson, femaleJson] = await Promise.all([allRes.json(), maleRes.json(), femaleRes.json()])
+        const all = allJson?.data?.pagination?.total ?? (allJson?.data?.data?.length ?? 0)
+        const male = maleJson?.data?.pagination?.total ?? (maleJson?.data?.data?.length ?? 0)
+        const female = femaleJson?.data?.pagination?.total ?? (femaleJson?.data?.data?.length ?? 0)
+        setGovToGovTotals({ all, male, female })
+      } finally {
+        setLoadingGovToGov(false)
+      }
+    }
+    run()
+  }, [])
+
+  // Derive gender totals from base stats (no date range; ready for future filter controls)
+  useEffect(() => {
+    if (stats) {
+      setGenderTotals({
+        male: (stats.directHireMale ?? 0) + (stats.clearanceMale ?? 0),
+        female: (stats.directHireFemale ?? 0) + (stats.clearanceFemale ?? 0),
+      })
+    }
+  }, [stats])
+
+  // Combined totals across all workers (DH + BM + Gov-to-Gov + Info Sheet)
+  const totalWorkersAll = (stats?.directHire ?? 0) + (stats?.clearance ?? 0) + govToGovTotals.all + infoSheetTotals.all
+  const allGenderTotals = {
+    male: (stats?.directHireMale ?? 0) + (stats?.clearanceMale ?? 0) + govToGovTotals.male + infoSheetTotals.male,
+    female: (stats?.directHireFemale ?? 0) + (stats?.clearanceFemale ?? 0) + govToGovTotals.female + infoSheetTotals.female,
+  }
+
+  // Status distribution now fetched inside ProcessingStatusCard
+
+  // Fetch Information Sheet totals from API using pagination.total
+  useEffect(() => {
+    const run = async () => {
+      setLoadingInfoSheet(true)
+      try {
+        const [allRes, maleRes, femaleRes] = await Promise.all([
+          fetch('/api/information-sheet?page=1&limit=1'),
+          fetch('/api/information-sheet?sex=male&page=1&limit=1'),
+          fetch('/api/information-sheet?sex=female&page=1&limit=1'),
+        ])
+        const [allJson, maleJson, femaleJson] = await Promise.all([allRes.json(), maleRes.json(), femaleRes.json()])
+        const all = allJson?.data?.pagination?.total ?? (allJson?.data?.data?.length ?? 0)
+        const male = maleJson?.data?.pagination?.total ?? (maleJson?.data?.data?.length ?? 0)
+        const female = femaleJson?.data?.pagination?.total ?? (femaleJson?.data?.data?.length ?? 0)
+        setInfoSheetTotals({ all, male, female })
+      } finally {
+        setLoadingInfoSheet(false)
+      }
+    }
+    run()
   }, [])
 
   const [recentApps, setRecentApps] = useState<any[]>([])
@@ -330,7 +374,7 @@ export default function DirectHireTable() {
       {activeTab === "overview" ? (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {/* Direct Hire Card */}
             <Card className="p-4 bg-white">
               <div className="flex justify-between items-center mb-2">
@@ -402,24 +446,24 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{getBalikManggagawaDisplayValue()}</h2>
+              <h2 className="text-xl font-bold mb-3">{getBalikManggagawaDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "all" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "male" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "female" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("female")}
                 >
@@ -451,31 +495,31 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{getGovToGovDisplayValue()}</h2>
+              <h2 className="text-xl font-bold mb-3">{getGovToGovDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-xs h-8 rounded ${govToGovFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${govToGovFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "all" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${govToGovFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${govToGovFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "male" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${govToGovFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${govToGovFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "female" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("female")}
                 >
                   Female
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">{govToGovCount} total</p>
+              <p className="text-xs text-gray-500 mt-2">{loadingGovToGov ? '—' : govToGovTotals.all} total</p>
             </Card>
 
             {/* Information Sheet Card */}
@@ -500,40 +544,82 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-4">{getInfoSheetDisplayValue()}</h2>
+              <h2 className="text-xl font-bold mb-3">{getInfoSheetDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-xs h-8 rounded ${infoSheetFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "all" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${infoSheetFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "male" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-xs h-8 rounded ${infoSheetFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "female" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("female")}
                 >
                   Female
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">{infoSheetCount} total</p>
+              <p className="text-xs text-gray-500 mt-2">{loadingInfoSheet ? '—' : infoSheetTotals.all} total</p>
             </Card>
           </div>
 
-          {/* Chart */}
-          <Card className="p-6 bg-white">
-            <h3 className="text-base font-medium mb-1">Applications Timeline</h3>
-            <p className="text-xs text-gray-500 mb-4">Application trends over time across all categories</p>
-            <ProcessingPathsChart />
-          </Card>
+          {/* Timeline + Gender Ratio row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-0">
+            <Card className="p-4 bg-white md:col-span-2">
+              <h3 className="text-sm font-medium mb-1">Applications Timeline</h3>
+              <p className="text-xs text-gray-500 mb-2">Recent trends</p>
+              <ProcessingPathsChart height={340} />
+            </Card>
+            <div className="grid grid-cols-1 auto-rows-min gap-4">
+              <Card className="p-4 bg-white">
+                <h3 className="text-sm text-gray-600">Gender Ratio (DH + BM)</h3>
+                <div className="flex items-end gap-4 mt-3">
+                <div className="flex-1 h-[180px]">
+                    <Doughnut
+                      data={{
+                        labels: ['Male','Female'],
+                        datasets: [{
+                        data: [allGenderTotals.male, allGenderTotals.female],
+                          backgroundColor: ['#42A5F5','#EF9A9A'],
+                          borderWidth: 0,
+                        }]
+                      }}
+                      options={{ responsive: true, maintainAspectRatio: false }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-gray-600">
+                  <div>Male: <span className="font-semibold">{allGenderTotals.male}</span></div>
+                  <div>Female: <span className="font-semibold">{allGenderTotals.female}</span></div>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 bg-white">
+                <h3 className="text-sm text-gray-600">Total Workers</h3>
+                <div className="text-2xl font-bold mt-2">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : totalWorkersAll}</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 rounded border bg-white">
+                    <div className="text-gray-500">Male</div>
+                    <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.male}</div>
+                  </div>
+                  <div className="p-2 rounded border bg-white">
+                    <div className="text-gray-500">Female</div>
+                    <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.female}</div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">All categories</p>
+              </Card>
+            </div>
+          </div>
+          
         </>
              ) : (
          <ApplicationsTable 

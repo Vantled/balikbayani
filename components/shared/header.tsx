@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useRouter, usePathname } from "next/navigation"
 import { logout, getUser, isSuperadmin, isAdmin } from "@/lib/auth"
+import { usePermissions } from "@/hooks/use-permissions"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { useState, useEffect } from "react"
@@ -19,6 +20,7 @@ export default function Header() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [authReady, setAuthReady] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const { hasPermission, loading: permsLoading } = usePermissions()
 
   useEffect(() => {
     const user = getUser()
@@ -123,7 +125,7 @@ export default function Header() {
     <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between fixed top-0 left-0 w-full z-30">
       <h1 className="text-[#1976D2] text-base md:text-lg lg:text-2xl font-bold">BalikBayani Portal</h1>
       <div className="flex items-center gap-2 lg:gap-4 min-w-0">
-        {mounted && authReady && (
+        {mounted && authReady && !permsLoading && (
         <nav className="hidden md:flex items-center gap-3 lg:gap-6 overflow-x-auto whitespace-nowrap max-w-[55vw] lg:max-w-[65vw] pr-2">
           <Link 
             href="/dashboard" 
@@ -135,79 +137,89 @@ export default function Header() {
           >
             Dashboard
           </Link>
-          <Link 
-            href="/direct-hire" 
-            className={`text-xs lg:text-sm pb-1 ${
-              isActive('/direct-hire') 
-                ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
-                : 'text-gray-600 hover:text-[#1976D2]'
-            }`}
-          >
-            Direct Hire
-          </Link>
-          <Link 
-            href="/balik-manggagawa" 
-            className={`text-xs lg:text-sm pb-1 ${
-              pathname.startsWith('/balik-manggagawa') 
-                ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
-                : 'text-gray-600 hover:text-[#1976D2]'
-            }`}
-          >
-            Balik Manggagawa
-          </Link>
-          <Link 
-            href="/gov-to-gov" 
-            className={`text-xs lg:text-sm pb-1 ${
-              isActive('/gov-to-gov') 
-                ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
-                : 'text-gray-600 hover:text-[#1976D2]'
-            }`}
-          >
-            Gov to Gov
-          </Link>
-          <Link 
-            href="/information-sheet" 
-            className={`text-xs lg:text-sm pb-1 ${
-              isActive('/information-sheet') 
-                ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
-                : 'text-gray-600 hover:text-[#1976D2]'
-            }`}
-          >
-            Information Sheet
-          </Link>
-          <div className="relative">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={`text-xs lg:text-sm pb-1 flex items-center gap-1 ${
-                    pathname.startsWith('/job-fairs')
-                      ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
-                      : 'text-gray-600 hover:text-[#1976D2]'
-                  }`}
-                  aria-label="Monitoring List menu"
-                >
-                  Monitoring List
-                  <ChevronDown className="h-4 w-4 ml-1" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem asChild>
-                  <Link href="/job-fairs/list">List of Job Fairs</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/job-fairs/peso">PESO IV-A Contact Info</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/job-fairs/pras">PRAs Contact Info</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/job-fairs/monitoring">Job Fair Monitoring Summary</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {(isAdmin(currentUser) || hasPermission('direct_hire')) && (
+            <Link 
+              href="/direct-hire" 
+              className={`text-xs lg:text-sm pb-1 ${
+                isActive('/direct-hire') 
+                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                  : 'text-gray-600 hover:text-[#1976D2]'
+              }`}
+            >
+              Direct Hire
+            </Link>
+          )}
+          {(isAdmin(currentUser) || hasPermission('balik_manggagawa')) && (
+            <Link 
+              href="/balik-manggagawa" 
+              className={`text-xs lg:text-sm pb-1 ${
+                pathname.startsWith('/balik-manggagawa') 
+                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                  : 'text-gray-600 hover:text-[#1976D2]'
+              }`}
+            >
+              Balik Manggagawa
+            </Link>
+          )}
+          {(isAdmin(currentUser) || hasPermission('gov_to_gov')) && (
+            <Link 
+              href="/gov-to-gov" 
+              className={`text-xs lg:text-sm pb-1 ${
+                isActive('/gov-to-gov') 
+                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                  : 'text-gray-600 hover:text-[#1976D2]'
+              }`}
+            >
+              Gov to Gov
+            </Link>
+          )}
+          {(isAdmin(currentUser) || hasPermission('information_sheet')) && (
+            <Link 
+              href="/information-sheet" 
+              className={`text-xs lg:text-sm pb-1 ${
+                isActive('/information-sheet') 
+                  ? 'text-[#1976D2] border-b-2 border-[#1976D2]' 
+                  : 'text-gray-600 hover:text-[#1976D2]'
+              }`}
+            >
+              Information Sheet
+            </Link>
+          )}
+          {(isAdmin(currentUser) || hasPermission('monitoring')) && (
+            <div className="relative">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={`text-xs lg:text-sm pb-1 flex items-center gap-1 ${
+                      pathname.startsWith('/job-fairs')
+                        ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
+                        : 'text-gray-600 hover:text-[#1976D2]'
+                    }`}
+                    aria-label="Monitoring List menu"
+                  >
+                    Monitoring List
+                    <ChevronDown className="h-4 w-4 ml-1" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link href="/job-fairs/list">List of Job Fairs</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/job-fairs/peso">PESO IV-A Contact Info</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/job-fairs/pras">PRAs Contact Info</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/job-fairs/monitoring">Job Fair Monitoring Summary</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
           {/* Superadmin Panel - Only visible after auth ready to avoid flicker */}
-          {authReady && mounted && isSuperadmin(currentUser) && (
+          {authReady && mounted && (isAdmin(currentUser) || isSuperadmin(currentUser)) && (
             <div className="relative">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -217,9 +229,9 @@ export default function Header() {
                         ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
                         : 'text-gray-600 hover:text-[#1976D2]'
                     }`}
-                    aria-label="Superadmin Panel menu"
+                    aria-label="Admin Panel menu"
                   >
-                    Superadmin Panel
+                    Admin Panel
                     <ChevronDown className="h-4 w-4 ml-1" />
                   </button>
                 </DropdownMenuTrigger>
@@ -227,9 +239,11 @@ export default function Header() {
                   <DropdownMenuItem asChild>
                     <Link href="/user-management">User Management</Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/data-backups">Data Backups</Link>
-                  </DropdownMenuItem>
+                  {isSuperadmin(currentUser) && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/data-backups">Data Backups</Link>
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

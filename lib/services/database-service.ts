@@ -2,6 +2,8 @@
 import { db } from '../database';
 import { 
   User, 
+  UserPermission,
+  PermissionUpdateRequest,
   DirectHireApplication, 
   BalikManggagawaClearance,
   BalikManggagawaProcessing,
@@ -1225,15 +1227,22 @@ export class DatabaseService {
         last_name, first_name, middle_name, sex, date_of_birth, age, height, weight,
         educational_attainment, present_address, email_address, contact_number,
         passport_number, passport_validity, id_presented, id_number,
-        with_taiwan_work_experience, with_job_experience
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
+        with_taiwan_work_experience, with_job_experience,
+        taiwan_company, taiwan_year_started, taiwan_year_ended,
+        other_company, other_year_started, other_year_ended,
+        date_received_by_region, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) RETURNING *`,
       [
         appData.last_name, appData.first_name, appData.middle_name, appData.sex,
         appData.date_of_birth, appData.age, appData.height, appData.weight,
         appData.educational_attainment, appData.present_address, appData.email_address,
         appData.contact_number, appData.passport_number, appData.passport_validity,
         appData.id_presented, appData.id_number, appData.with_taiwan_work_experience,
-        appData.with_job_experience
+        appData.with_job_experience,
+        (appData as any).taiwan_company || null, (appData as any).taiwan_year_started || null, (appData as any).taiwan_year_ended || null,
+        (appData as any).other_company || null, (appData as any).other_year_started || null, (appData as any).other_year_ended || null,
+        (appData as any).date_received_by_region ? new Date((appData as any).date_received_by_region) : null,
+        (appData as any).remarks || null
       ]
     );
     return rows[0];
@@ -1244,15 +1253,105 @@ export class DatabaseService {
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Handle soft delete filtering
+    if (filters.include_active === false && filters.include_deleted === false) {
+      // Show nothing when both are false
+      query += ` AND 1=0`; // This will return no results
+    } else if (filters.include_active === false) {
+      // Show only deleted records when include_active is false (regardless of include_deleted)
+      query += ` AND deleted_at IS NOT NULL`;
+    } else if (filters.include_deleted === true) {
+      // Show all records (including deleted) when include_deleted is true
+    } else {
+      // Default: show only active records (not deleted)
+      query += ` AND deleted_at IS NULL`;
+    }
+
     if (filters.search) {
-      query += ` AND (last_name ILIKE $${paramIndex} OR first_name ILIKE $${paramIndex})`;
-      params.push(`%${filters.search}%`);
-      paramIndex++;
+      const searchTerm = filters.search.trim();
+      
+      // Check if search term contains key:value pattern
+      if (searchTerm.includes(':')) {
+        const [key, value] = searchTerm.split(':', 2);
+        const fieldKey = key.trim().toLowerCase();
+        const searchValue = value.trim();
+        
+        // Map field keys to database columns
+        const fieldMap: Record<string, string> = {
+          'name': 'CONCAT(last_name, \' \', first_name, \' \', COALESCE(middle_name, \'\'))',
+          'firstname': 'first_name',
+          'lastname': 'last_name',
+          'email': 'email_address',
+          'contact': 'contact_number',
+          'passport': 'passport_number',
+          'sex': 'sex',
+          'education': 'educational_attainment',
+          'address': 'present_address',
+          'id': 'id_number',
+          'idpresented': 'id_presented',
+          'company': 'taiwan_company',
+          'taiwancompany': 'taiwan_company',
+          'othercompany': 'other_company',
+          'remarks': 'remarks'
+        };
+        
+        const dbField = fieldMap[fieldKey];
+        if (dbField) {
+          // Special handling for sex field - use exact match
+          if (fieldKey === 'sex') {
+            query += ` AND ${dbField} = $${paramIndex}`;
+            params.push(searchValue.toLowerCase());
+          } else if (fieldKey === 'name') {
+            // Special handling for name - search across concatenated name fields
+            query += ` AND ${dbField} ILIKE $${paramIndex}`;
+            params.push(`%${searchValue}%`);
+          } else {
+            // Default ILIKE search for other fields
+            query += ` AND ${dbField} ILIKE $${paramIndex}`;
+            params.push(`%${searchValue}%`);
+          }
+          paramIndex++;
+        } else {
+          // If key is not recognized, fall back to general search
+          query += ` AND (last_name ILIKE $${paramIndex} OR first_name ILIKE $${paramIndex})`;
+          params.push(`%${searchTerm}%`);
+          paramIndex++;
+        }
+      } else {
+        // General search across name fields
+        query += ` AND (last_name ILIKE $${paramIndex} OR first_name ILIKE $${paramIndex})`;
+        params.push(`%${searchTerm}%`);
+        paramIndex++;
+      }
     }
 
     if (filters.sex) {
       query += ` AND sex = $${paramIndex}`;
       params.push(filters.sex);
+      paramIndex++;
+    }
+
+    if (filters.educational_attainment) {
+      query += ` AND educational_attainment = $${paramIndex}`;
+      params.push(filters.educational_attainment);
+      paramIndex++;
+    }
+
+    if (filters.with_taiwan_work_experience !== undefined) {
+      query += ` AND with_taiwan_work_experience = $${paramIndex}`;
+      params.push(filters.with_taiwan_work_experience);
+      paramIndex++;
+    }
+
+    if (filters.date_from) {
+      query += ` AND created_at >= $${paramIndex}`;
+      params.push(filters.date_from);
+      paramIndex++;
+    }
+
+    if (filters.date_to) {
+      query += ` AND created_at <= $${paramIndex}`;
+      params.push(filters.date_to);
       paramIndex++;
     }
 
@@ -1276,6 +1375,60 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async updateGovToGovApplication(id: string, appData: Partial<Omit<GovToGovApplication, 'id' | 'created_at' | 'updated_at'>>): Promise<GovToGovApplication | null> {
+    // Update a fixed set of known columns; values may be null-safe where allowed by schema
+    const columns = [
+      'last_name','first_name','middle_name','sex','date_of_birth','age','height','weight',
+      'educational_attainment','present_address','email_address','contact_number',
+      'passport_number','passport_validity','id_presented','id_number',
+      'with_taiwan_work_experience','with_job_experience',
+      'taiwan_company','taiwan_year_started','taiwan_year_ended',
+      'other_company','other_year_started','other_year_ended',
+      'date_received_by_region','date_card_released','remarks'
+    ] as const
+    const sets: string[] = []
+    const params: any[] = []
+    let idx = 1
+    for (const col of columns) {
+      if (col in appData) {
+        sets.push(`${col} = $${idx++}`)
+        // @ts-expect-error index
+        params.push((appData as any)[col])
+      }
+    }
+    if (sets.length === 0) return await (async () => {
+      const { rows } = await db.query('SELECT * FROM gov_to_gov_applications WHERE id = $1', [id])
+      return rows[0] || null
+    })()
+    params.push(id)
+    const { rows } = await db.query(
+      `UPDATE gov_to_gov_applications SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
+      params
+    )
+    return rows[0] || null
+  }
+
+  static async deleteGovToGovApplication(id: string): Promise<boolean> {
+    const res = await db.query('DELETE FROM gov_to_gov_applications WHERE id = $1', [id])
+    return (res.rowCount || 0) > 0
+  }
+
+  static async softDeleteGovToGovApplication(id: string): Promise<GovToGovApplication | null> {
+    const { rows } = await db.query(
+      'UPDATE gov_to_gov_applications SET deleted_at = NOW() WHERE id = $1 RETURNING *',
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+  static async restoreGovToGovApplication(id: string): Promise<GovToGovApplication | null> {
+    const { rows } = await db.query(
+      'UPDATE gov_to_gov_applications SET deleted_at = NULL WHERE id = $1 RETURNING *',
+      [id]
+    );
+    return rows[0] || null;
   }
 
   // Information Sheet Records
@@ -1304,6 +1457,20 @@ export class DatabaseService {
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Soft-delete visibility handling
+    const includeDeleted = (filters as any).include_deleted === true;
+    const includeActive = (filters as any).include_active !== false; // default true
+    // Cases:
+    // 1) include_deleted && include_active => show all (no filter)
+    // 2) include_deleted && !include_active => only deleted
+    // 3) !include_deleted && include_active => only active
+    // 4) !include_deleted && !include_active => only active (sane default)
+    if (includeDeleted && !includeActive) {
+      query += ' AND deleted_at IS NOT NULL';
+    } else if (!includeDeleted) {
+      query += ' AND deleted_at IS NULL';
+    }
+
     if (filters.search) {
       query += ` AND (family_name ILIKE $${paramIndex} OR first_name ILIKE $${paramIndex})`;
       params.push(`%${filters.search}%`);
@@ -1319,6 +1486,36 @@ export class DatabaseService {
     if (filters.worker_category) {
       query += ` AND worker_category = $${paramIndex}`;
       params.push(filters.worker_category);
+      paramIndex++;
+    }
+
+    if ((filters as any).sex) {
+      query += ` AND gender = $${paramIndex}`;
+      params.push((filters as any).sex);
+      paramIndex++;
+    }
+
+    if ((filters as any).jobsite) {
+      query += ` AND jobsite ILIKE $${paramIndex}`;
+      params.push(`%${(filters as any).jobsite}%`);
+      paramIndex++;
+    }
+
+    if ((filters as any).requested_record) {
+      query += ` AND requested_record = $${paramIndex}`;
+      params.push((filters as any).requested_record);
+      paramIndex++;
+    }
+
+    if ((filters as any).date_from) {
+      query += ` AND created_at >= $${paramIndex}`;
+      params.push((filters as any).date_from);
+      paramIndex++;
+    }
+
+    if ((filters as any).date_to) {
+      query += ` AND created_at <= ($${paramIndex}::date + INTERVAL '1 day' - INTERVAL '1 millisecond')`;
+      params.push((filters as any).date_to);
       paramIndex++;
     }
 
@@ -1342,6 +1539,47 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
+  }
+
+  static async softDeleteInformationSheetRecord(id: string): Promise<InformationSheetRecord | null> {
+    const { rows } = await db.query(
+      'UPDATE information_sheet_records SET deleted_at = NOW() WHERE id = $1 RETURNING *',
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+  static async restoreInformationSheetRecord(id: string): Promise<InformationSheetRecord | null> {
+    const { rows } = await db.query(
+      'UPDATE information_sheet_records SET deleted_at = NULL WHERE id = $1 RETURNING *',
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+  static async getInformationSheetRecordById(id: string): Promise<InformationSheetRecord | null> {
+    const { rows } = await db.query('SELECT * FROM information_sheet_records WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  static async updateInformationSheetRecord(
+    id: string,
+    updates: Partial<Omit<InformationSheetRecord, 'id' | 'created_at' | 'updated_at'>>
+  ): Promise<InformationSheetRecord | null> {
+    const keys = Object.keys(updates);
+    if (!keys.length) return await this.getInformationSheetRecordById(id);
+    const setClauses = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+    const values = keys.map(k => (updates as any)[k]);
+    const { rows } = await db.query(
+      `UPDATE information_sheet_records SET ${setClauses}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, id]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteInformationSheetRecord(id: string): Promise<InformationSheetRecord | null> {
+    const { rows } = await db.query('DELETE FROM information_sheet_records WHERE id = $1 RETURNING *', [id]);
+    return rows[0] || null;
   }
 
   // Job Fairs
@@ -2343,5 +2581,140 @@ export class DatabaseService {
       console.error(`Error getting last modified time for table ${tableName}:`, error);
       return null;
     }
+  }
+
+  // Permission Management Methods
+  
+  /**
+   * Get user permissions
+   */
+  static async getUserPermissions(userId: string): Promise<UserPermission[]> {
+    try {
+      const result = await db.query(
+        'SELECT * FROM user_permissions WHERE user_id = $1 ORDER BY permission_key',
+        [userId]
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching user permissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user permissions
+   */
+  static async updateUserPermissions(
+    userId: string, 
+    permissions: { permission_key: string; granted: boolean }[],
+    grantedBy: string
+  ): Promise<void> {
+    try {
+      await db.query('BEGIN');
+      
+      for (const permission of permissions) {
+        await db.query(
+          `INSERT INTO user_permissions (user_id, permission_key, granted, granted_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (user_id, permission_key)
+           DO UPDATE SET 
+             granted = EXCLUDED.granted,
+             granted_by = EXCLUDED.granted_by,
+             granted_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP`,
+          [userId, permission.permission_key, permission.granted, grantedBy]
+        );
+      }
+      
+      await db.query('COMMIT');
+    } catch (error) {
+      await db.query('ROLLBACK');
+      console.error('Error updating user permissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user has specific permission
+   */
+  static async hasPermission(userId: string, permissionKey: string): Promise<boolean> {
+    try {
+      const result = await db.query(
+        'SELECT granted FROM user_permissions WHERE user_id = $1 AND permission_key = $2',
+        [userId, permissionKey]
+      );
+      
+      if (result.rows.length === 0) {
+        // If no permission record exists, check user role
+        const userResult = await db.query(
+          'SELECT role FROM users WHERE id = $1',
+          [userId]
+        );
+        
+        if (userResult.rows.length === 0) return false;
+        
+        const role = userResult.rows[0].role;
+        // Superadmin and admin have all permissions by default
+        return role === 'superadmin' || role === 'admin';
+      }
+      
+      return result.rows[0].granted;
+    } catch (error) {
+      console.error('Error checking user permission:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get users with their permissions
+   */
+  static async getUsersWithPermissions(): Promise<User[]> {
+    try {
+      const result = await db.query(`
+        SELECT 
+          u.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', up.id,
+                'permission_key', up.permission_key,
+                'granted', up.granted,
+                'granted_by', up.granted_by,
+                'granted_at', up.granted_at,
+                'created_at', up.created_at,
+                'updated_at', up.updated_at
+              )
+            ) FILTER (WHERE up.id IS NOT NULL),
+            '[]'::json
+          ) as permissions
+        FROM users u
+        LEFT JOIN user_permissions up ON u.id = up.user_id
+        WHERE u.role <> 'superadmin'
+        GROUP BY u.id
+        ORDER BY u.full_name
+      `);
+      
+      return result.rows.map(row => ({
+        ...row,
+        permissions: row.permissions || []
+      }));
+    } catch (error) {
+      console.error('Error fetching users with permissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all available permission keys
+   */
+  static getAvailablePermissions(): string[] {
+    return [
+      'direct_hire',
+      'balik_manggagawa',
+      'gov_to_gov',
+      'information_sheet',
+      'monitoring',
+      'data_backups'
+    ];
   }
 }

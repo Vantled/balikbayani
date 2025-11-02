@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast"
 import { AVAILABLE_CURRENCIES, getUSDEquivalentAsync, type Currency } from "@/lib/currency-converter"
 import { useCallback, useRef } from "react"
 import BMFilterPanel from "@/components/bm-filter-panel"
+import ProcessingStatusCard from "@/components/processing-status-card"
 
 function BMDocumentsSection({ 
   applicationId, 
@@ -987,167 +988,198 @@ export default function BalikManggagawaPage() {
             </div>
           </div>
         {/* Table placeholder: reuse existing clearance list via hook */}
-        <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
-          <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#1976D2] text-white">
-                  <th className="py-3 px-4 font-medium">Control No.</th>
-                  <th className="py-3 px-4 font-medium">Name of Worker</th>
-                  <th className="py-3 px-4 font-medium">Sex</th>
-                  <th className="py-3 px-4 font-medium">Destination</th>
-                  <th className="py-3 px-4 font-medium">Employer</th>
-                  <th className="py-3 px-4 font-medium">Status</th>
-                  <th className="py-3 px-4 font-medium text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {loading ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-gray-500">Loading...</td></tr>
-                ) : error ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-red-500">{error}</td></tr>
-                ) : clearances.length === 0 ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-gray-500">No records found</td></tr>
-                ) : clearances.map((row: any, i: number) => (
-                  <tr 
-                    key={row.id ?? i} 
-                    className={`hover:bg-gray-150 transition-colors duration-75 select-none ${row.deleted_at ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                    onDoubleClick={(e) => {
-                      e.preventDefault()
-                      // Prevent viewing deleted records
-                      if (row.deleted_at) {
-                        return
-                      }
-                      setSelected(row)
-                      setViewOpen(true)
-                    }}
-                  >
-                    <td className="py-3 px-4 text-center">{row.control_number || <span className="text-gray-400">-</span>}</td>
-                    <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
-                    <td className="py-3 px-4 text-center">{(row.sex || '').toUpperCase()}</td>
-                    <td className="py-3 px-4 text-center">{row.destination}</td>
-                    <td className="py-3 px-4 text-center">{row.employer || <span className="text-gray-400">-</span>}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center">
-                        {(() => {
-                          // Check if record is soft deleted
-                          if (row.deleted_at) {
-                            return (
-                              <span className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 bg-red-50 text-red-700 ring-red-200 font-medium">
-                                <span className="font-medium">Deleted</span>
-                              </span>
-                            )
-                          }
-                          
-                          const s = (row.status || '').toString()
-                          const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : s === 'approved' ? 'Approved' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
-                          const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : s === 'approved' ? 'bg-green-100 text-green-800 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
-                          return (
-                            <span className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
-                              <span className="font-medium">{label}</span>
-                            </span>
-                          )
-                        })()}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          {!row.deleted_at && (
-                            <DropdownMenuItem onClick={async () => {
-                              try {
-                                const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
-                                const json = await res.json()
-                                if (json.success) {
-                                  setSelected(json.data)
-                                  setViewOpen(true)
-                                } else {
-                                  toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
-                                }
-                              } catch {}
-                            }}>
-                              <Eye className="h-4 w-4 mr-2" /> View
-                            </DropdownMenuItem>
-                          )}
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
+            <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-[#1976D2] text-white">
+                    <th className="py-3 px-4 font-medium">Control No.</th>
+                    <th className="py-3 px-4 font-medium">Name of Worker</th>
+                    <th className="py-3 px-4 font-medium">Sex</th>
+                    <th className="py-3 px-4 font-medium">Destination</th>
+                    <th className="py-3 px-4 font-medium">Employer</th>
+                    <th className="py-3 px-4 font-medium">Status</th>
+                    <th className="py-3 px-4 font-medium text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {loading ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-gray-500">Loading...</td></tr>
+                  ) : error ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-red-500">{error}</td></tr>
+                  ) : clearances.length === 0 ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-gray-500">No records found</td></tr>
+                  ) : clearances.map((row: any, i: number) => (
+                    <tr 
+                      key={row.id ?? i} 
+                      className={`hover:bg-gray-150 transition-colors duration-75 select-none ${row.deleted_at ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                      onDoubleClick={(e) => {
+                        e.preventDefault()
+                        // Prevent viewing deleted records
+                        if (row.deleted_at) {
+                          return
+                        }
+                        setSelected(row)
+                        setViewOpen(true)
+                      }}
+                    >
+                      <td className="py-3 px-4 text-center">{row.control_number || <span className="text-gray-400">-</span>}</td>
+                      <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
+                      <td className="py-3 px-4 text-center">{(row.sex || '').toUpperCase()}</td>
+                      <td className="py-3 px-4 text-center">{row.destination}</td>
+                      <td className="py-3 px-4 text-center">{row.employer || <span className="text-gray-400">-</span>}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-center">
                           {(() => {
-                            // Show different options for deleted records
+                            // Check if record is soft deleted
                             if (row.deleted_at) {
                               return (
-                                <>
-                                  <DropdownMenuItem onClick={() => {
-                                    setApplicationToRestore(row)
-                                    setRestoreConfirmOpen(true)
-                                  }} className="text-green-600 focus:text-green-700">
-                                    <CheckCircle className="h-4 w-4 mr-2" /> Restore
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => {
-                                    setApplicationToPermanentDelete(row)
-                                    setPermanentDeleteConfirmOpen(true)
-                                  }} className="text-red-600 focus:text-red-700">
-                                    <Trash2 className="h-4 w-4 mr-2" /> Permanently Delete
-                                  </DropdownMenuItem>
-                                </>
+                                <span className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 bg-red-50 text-red-700 ring-red-200 font-medium">
+                                  <span className="font-medium">Deleted</span>
+                                </span>
                               )
                             }
                             
                             const s = (row.status || '').toString()
-                            const isLocked = s === 'approved' || s === 'rejected'
-                            if (isLocked) return null
+                            const label = s === 'for_clearance' ? 'For Compliance' : s === 'for_approval' ? 'For Approval' : s === 'approved' ? 'Approved' : (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending')
+                            const color = s === 'finished' ? 'bg-green-50 text-green-700 ring-green-200' : s === 'approved' ? 'bg-green-100 text-green-800 ring-green-200' : (s === 'for_clearance' ? 'bg-blue-50 text-blue-700 ring-blue-200' : (s === 'for_approval' ? 'bg-blue-100 text-blue-800 ring-blue-200' : (s === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-[#FFF3E0] text-[#F57C00] ring-[#FFE0B2]')))
                             return (
-                              <>
-                                <DropdownMenuItem onClick={async () => {
-                                  try {
-                                    const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
-                                    const json = await res.json()
-                                    if (json.success) {
-                                      const d = json.data
-                                      setSelected(d)
-                                      setEditData({
-                                        nameOfWorker: d.name_of_worker || '',
-                                        sex: d.sex || '',
-                                        employer: d.employer || '',
-                                        destination: d.destination || '',
-                                        position: d.position || '',
-                                        salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
-                                        job_type: d.job_type || '',
-                                        salaryCurrency: d.salary_currency || '',
-                                      })
-                                      setEditOpen(true)
-                                    } else {
-                                      toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
-                                    }
-                                  } catch {}
-                                }}>
-                                  <Edit className="h-4 w-4 mr-2" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { 
-                                  const status = (row.status || '').toString()
-                                  if (status === 'approved' || status === 'rejected') {
-                                    toast({ title: 'Action not allowed', description: 'Approved/Rejected applications cannot be deleted', variant: 'destructive' })
-                                    return
-                                  }
-                                  setSelected(row); 
-                                  setDeleteConfirmOpen(true) 
-                                }} className="text-red-600 focus:text-red-700">
-                                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                                </DropdownMenuItem>
-                              </>
+                              <span className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ${color} font-medium`}>
+                                <span className="font-medium">{label}</span>
+                              </span>
                             )
                           })()}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-150">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            {!row.deleted_at && (
+                              <DropdownMenuItem onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                  const json = await res.json()
+                                  if (json.success) {
+                                    setSelected(json.data)
+                                    setViewOpen(true)
+                                  } else {
+                                    toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
+                                  }
+                                } catch {}
+                              }}>
+                                <Eye className="h-4 w-4 mr-2" /> View
+                              </DropdownMenuItem>
+                            )}
+                            {(() => {
+                              // Show different options for deleted records
+                              if (row.deleted_at) {
+                                return (
+                                  <>
+                                    <DropdownMenuItem onClick={() => {
+                                      setApplicationToRestore(row)
+                                      setRestoreConfirmOpen(true)
+                                    }} className="text-green-600 focus:text-green-700">
+                                      <CheckCircle className="h-4 w-4 mr-2" /> Restore
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      setApplicationToPermanentDelete(row)
+                                      setPermanentDeleteConfirmOpen(true)
+                                    }} className="text-red-600 focus:text-red-700">
+                                      <Trash2 className="h-4 w-4 mr-2" /> Permanently Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                )
+                              }
+                              
+                              const s = (row.status || '').toString()
+                              const isLocked = s === 'approved' || s === 'rejected'
+                              if (isLocked) return null
+                              return (
+                                <>
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      const res = await fetch(`/api/balik-manggagawa/clearance/${row.id}`)
+                                      const json = await res.json()
+                                      if (json.success) {
+                                        const d = json.data
+                                        setSelected(d)
+                                        setEditData({
+                                          nameOfWorker: d.name_of_worker || '',
+                                          sex: d.sex || '',
+                                          employer: d.employer || '',
+                                          destination: d.destination || '',
+                                          position: d.position || '',
+                                          salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
+                                          job_type: d.job_type || '',
+                                          salaryCurrency: d.salary_currency || '',
+                                        })
+                                        setEditOpen(true)
+                                      } else {
+                                        toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
+                                      }
+                                    } catch {}
+                                  }}>
+                                    <Edit className="h-4 w-4 mr-2" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { 
+                                    const status = (row.status || '').toString()
+                                    if (status === 'approved' || status === 'rejected') {
+                                      toast({ title: 'Action not allowed', description: 'Approved/Rejected applications cannot be deleted', variant: 'destructive' })
+                                      return
+                                    }
+                                    setSelected(row); 
+                                    setDeleteConfirmOpen(true) 
+                                  }} className="text-red-600 focus:text-red-700">
+                                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )
+                            })()}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-
+          <div className="w-full md:w-[360px]">
+            {(() => {
+              // Provide BM-specific totals mapping via fetchTotals
+              const fetchBmTotals = async () => {
+                const statuses = [
+                  { key: 'pending', api: 'for_clearance' },
+                  { key: 'forReview', api: 'for_approval' },
+                  { key: 'approved', api: 'approved' },
+                  { key: 'rejected', api: 'rejected' },
+                ] as const
+                const resps = await Promise.all(statuses.map(s => fetch(`/api/balik-manggagawa/clearance?status=${s.api}&page=1&limit=1`)))
+                const jsons = await Promise.all(resps.map(r => r.json()))
+                const result: any = { pending: 0, forReview: 0, approved: 0, rejected: 0 }
+                jsons.forEach((j, idx) => {
+                  const key = statuses[idx].key as 'pending'|'forReview'|'approved'|'rejected'
+                  result[key] = j?.data?.pagination?.total ?? (j?.data?.data?.length ?? 0)
+                })
+                return result as { pending: number; forReview: number; approved: number; rejected: number }
+              }
+              return (
+                <ProcessingStatusCard 
+                  title="Overall Status"
+                  verticalLayout={true}
+                  chartHeight={240}
+                  fetchTotals={fetchBmTotals}
+                  labelOverrides={{ pending: 'For Compliance', forReview: 'For Approval', approved: 'Approved', rejected: 'Rejected' }}
+                />
+              )
+            })()}
+          </div>
         </div>
       </main>
 

@@ -6,7 +6,7 @@ import { isSuperadmin } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
     // Get token from cookies
@@ -70,8 +70,9 @@ export async function PUT(
       }, { status: 400 });
     }
 
+    const { id } = await params;
     // Update user role
-    const result = await AuthService.updateUserRole(params.id, role, user.id);
+    const result = await AuthService.updateUserRole(id, role, user.id);
 
     if (!result.success) {
       return NextResponse.json({
@@ -96,7 +97,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
     // Get token from cookies
@@ -126,8 +127,9 @@ export async function DELETE(
       }, { status: 403 });
     }
 
+    const { id } = await params;
     // Delete user
-    const result = await AuthService.deleteUser(params.id, user.id);
+    const result = await AuthService.deleteUser(id, user.id);
 
     if (!result.success) {
       return NextResponse.json({

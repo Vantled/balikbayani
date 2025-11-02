@@ -205,8 +205,7 @@ export default function JobFairMonitoringTable({
                     className={`hover:bg-gray-150 transition-colors duration-75 cursor-pointer select-none ${record.deleted_at ? 'bg-red-50' : ''}`}
                     onDoubleClick={(e) => {
                       e.preventDefault()
-                      setSelected(record)
-                      setViewOpen(true)
+                      onView(record)
                     }}
                   >
                     <td className="py-3 px-4 text-center">

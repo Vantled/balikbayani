@@ -10,6 +10,8 @@ import FilterPanel from "@/components/filter-panel"
 import CreateApplicationModal from "@/components/create-application-modal"
 import Header from "@/components/shared/header"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
+import PermissionGuard from "@/components/permission-guard"
+import ProcessingStatusCard from "@/components/processing-status-card";
 
 export default function DirectHirePage() {
   // Handle login success toast
@@ -58,6 +60,7 @@ export default function DirectHirePage() {
   }
 
   return (
+    <PermissionGuard permission="direct_hire" fallback={<div className="min-h-screen bg-[#EEF5FD]"><Header /></div>}>
     <div className="bg-[#EEF5FD] flex flex-col">
       <Header />
 
@@ -152,14 +155,22 @@ export default function DirectHirePage() {
           </div>
         </div>
 
-        <DirectHireApplicationsTable
-          search={search}
-          filterQuery={panelQuery}
-          showDeletedOnly={showDeletedOnly}
-          showFinishedOnly={showFinishedOnly}
-          showProcessingOnly={showProcessingOnly}
-          statusFilter={statusFilter}
-        />
+        {/* Replace table grid with flex to display table left and card right (on desktop) */}
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          <div className="flex-1 w-full">
+            <DirectHireApplicationsTable
+              search={search}
+              filterQuery={panelQuery}
+              showDeletedOnly={showDeletedOnly}
+              showFinishedOnly={showFinishedOnly}
+              showProcessingOnly={showProcessingOnly}
+              statusFilter={statusFilter}
+            />
+          </div>
+          <div className="w-full md:w:[340px] md:w-[380px]">
+            <ProcessingStatusCard title="Overall Status" verticalLayout={true} detailedDirectHire={true} chartHeight={260} />
+          </div>
+        </div>
       </main>
 
       {/* Create Application Modal */}
@@ -173,5 +184,6 @@ export default function DirectHirePage() {
         />
       )}
     </div>
+    </PermissionGuard>
   )
 }

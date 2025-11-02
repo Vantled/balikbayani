@@ -5,7 +5,7 @@ import { ApiResponse } from '@/lib/types';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
     // Get session token from cookies
@@ -35,8 +35,10 @@ export async function PUT(
       }, { status: 403 });
     }
 
+    const { id } = await params;
+
     // Prevent superadmin from deactivating themselves
-    if (user.id === params.id) {
+    if (user.id === id) {
       return NextResponse.json({
         success: false,
         error: 'Cannot deactivate your own account'
@@ -64,7 +66,7 @@ export async function PUT(
     }
 
     // Deactivate user
-    const result = await AuthService.deactivateUser(params.id, user.id);
+    const result = await AuthService.deactivateUser(id, user.id);
 
     if (result.success) {
       return NextResponse.json({

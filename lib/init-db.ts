@@ -36,6 +36,14 @@ export async function initializeDatabase() {
       await db.query(mig2)
     }
 
+    // Apply deleted_at for information_sheet_records (soft delete support)
+    const infoDeletedMig = path.join(process.cwd(), 'migrations', '20251028_add_deleted_at_information_sheet.sql')
+    if (fs.existsSync(infoDeletedMig)) {
+      console.log('Applying 20251028_add_deleted_at_information_sheet.sql...')
+      const mig3 = fs.readFileSync(infoDeletedMig, 'utf8')
+      await db.query(mig3)
+    }
+
     // Create default admin user if it doesn't exist
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const saltRounds = 12;

@@ -21,6 +21,7 @@ import JobFairDetails from "@/components/job-fair-details"
 import JobFairFilterPanel from "@/components/job-fair-filter-panel"
 import { JobFair } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
+import PermissionGuard from "@/components/permission-guard"
 
 export default function JobFairsListPage() {
   // Handle login success toast
@@ -156,30 +157,9 @@ export default function JobFairsListPage() {
     setPanelQuery("")
   }
 
-  // Generate dynamic title based on applied filters
+  // Page title
   const generateTitle = () => {
-    const currentYear = new Date().getFullYear()
-    const months = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ]
-
-    // Check if date range is applied (dateWithin contains a date range)
-    if (dateWithin && dateWithin.includes("|")) {
-      return "List of Job Fairs on CALABARZON"
-    }
-
-    if (appliedYearFilter !== "all" && appliedMonthFilter !== "all") {
-      const monthName = months[parseInt(appliedMonthFilter) - 1]
-      return `List of Job Fairs on CALABARZON for ${monthName} ${appliedYearFilter}`
-    } else if (appliedYearFilter !== "all") {
-      return `List of Job Fairs on CALABARZON for the Year ${appliedYearFilter}`
-    } else if (appliedMonthFilter !== "all") {
-      const monthName = months[parseInt(appliedMonthFilter) - 1]
-      return `List of Job Fairs on CALABARZON for ${monthName} ${currentYear}`
-    } else {
-      return `List of Job Fairs on CALABARZON for the Year ${currentYear}`
-    }
+    return "Monitoring List"
   }
 
   const handleExport = async (format: 'pdf' | 'excel') => {
@@ -219,6 +199,7 @@ export default function JobFairsListPage() {
   }
 
   return (
+    <PermissionGuard permission="monitoring" fallback={<div className="bg-[#eaf3fc]"><Header /></div>}>
     <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
       <main className="p-6 pt-24 flex-1">
@@ -475,5 +456,6 @@ export default function JobFairsListPage() {
               />
             )}
     </div>
+    </PermissionGuard>
   )
 } 

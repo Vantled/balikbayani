@@ -6,6 +6,7 @@ import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { isSuperadmin, getUser } from "@/lib/auth"
+import PermissionGuard from "@/components/permission-guard"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PlusCircle, Upload as UploadIcon, Download as DownloadIcon, RotateCcw, Trash2 } from "lucide-react"
 
@@ -116,6 +117,7 @@ export default function DataBackupsPage() {
   }
 
   return (
+    <PermissionGuard permission="data_backups" fallback={<div className="min-h-screen bg-gray-50"><Header /></div>}>
     <div className="min-h-screen bg-gray-50">
       <Header />
       <div className="pt-20 container mx-auto p-6">
@@ -375,6 +377,7 @@ export default function DataBackupsPage() {
         </div>
       )}
     </div>
+    </PermissionGuard>
   )
 }
 

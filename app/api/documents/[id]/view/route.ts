@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { FileUploadService } from '@/lib/file-upload-service';
 
 export async function GET(
   request: NextRequest,
@@ -18,9 +19,14 @@ export async function GET(
       return new NextResponse('Document not found', { status: 404 });
     }
 
-    // Read the file from storage
-    const filePath = join(process.cwd(), 'uploads', document.file_path);
-    const fileBuffer = await readFile(filePath);
+    // Read the file from storage (document.file_path may already include /uploads or \uploads)
+    const cleaned = document.file_path.replace(/^[\\/]+/, '');
+    const lower = cleaned.toLowerCase();
+    const startsWithUploads = lower.startsWith('uploads' + '/') || lower.startsWith('uploads' + '\\') || lower === 'uploads' || lower.startsWith('uploads');
+    const normalizedPath = startsWithUploads
+      ? join(process.cwd(), cleaned)
+      : join(process.cwd(), 'uploads', cleaned);
+    const fileBuffer = await readFile(normalizedPath);
     
     // Set appropriate headers based on file type
     const headers = new Headers();

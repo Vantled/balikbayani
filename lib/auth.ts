@@ -126,6 +126,39 @@ export const isStaff = (user: User | null): boolean => hasRole(user, 'staff');
 
 export const canManageUsers = (user: User | null): boolean => isSuperadmin(user);
 export const canAccessAdminFeatures = (user: User | null): boolean => hasRole(user, 'admin');
+export const canManagePermissions = (user: User | null): boolean => hasRole(user, 'admin');
+
+// Permission checking functions
+export const checkPermission = async (permissionKey: string): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/permissions/check', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ permission_key: permissionKey })
+    });
+
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    return data.success && data.data?.hasPermission;
+  } catch (error) {
+    console.error('Error checking permission:', error);
+    return false;
+  }
+};
+
+// Available permission keys
+export const PERMISSIONS = {
+  DIRECT_HIRE: 'direct_hire',
+  BALIK_MANGGAGAWA: 'balik_manggagawa',
+  GOV_TO_GOV: 'gov_to_gov',
+  INFORMATION_SHEET: 'information_sheet',
+  MONITORING: 'monitoring',
+  DATA_BACKUPS: 'data_backups'
+} as const;
 
 export const validateSession = async (): Promise<boolean> => {
   const token = Cookies.get(AUTH_COOKIE);

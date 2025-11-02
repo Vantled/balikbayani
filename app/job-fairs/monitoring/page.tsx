@@ -26,6 +26,7 @@ import JobFairMonitoringDetails from "@/components/job-fair-monitoring-details"
 import JobFairMonitoringFilterPanel from "@/components/job-fair-monitoring-filter-panel"
 import { JobFairMonitoring } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
+import PermissionGuard from "@/components/permission-guard"
 
 export default function MonitoringSummaryPage() {
   // Handle login success toast
@@ -205,6 +206,7 @@ export default function MonitoringSummaryPage() {
   }
 
   return (
+    <PermissionGuard permission="monitoring" fallback={<div className="bg-[#eaf3fc]"><Header /></div>}>
     <div className="bg-[#eaf3fc] flex flex-col">
       <Header />
       <main className="p-6 pt-24 flex-1 relative">
@@ -464,5 +466,6 @@ export default function MonitoringSummaryPage() {
 
 
     </div>
+    </PermissionGuard>
   )
 } 

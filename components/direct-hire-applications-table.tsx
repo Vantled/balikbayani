@@ -554,7 +554,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
             statusColor = 'bg-blue-50 text-blue-700' // Very Light Blue
             break
           case 'pending':
-            currentStatus = 'Pending'
+            currentStatus = 'For Evaluation'
             statusColor = 'bg-orange-100 text-orange-700'
             break
           case 'approved':
@@ -1046,7 +1046,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                     if (!status_checklist) {
                       // Fallback to old status system
                       const oldStatuses = [
-                        { key: 'pending', label: 'Pending', color: 'text-orange-600' },
+                        { key: 'pending', label: 'For Evaluation', color: 'text-orange-600' },
                         { key: 'evaluated', label: 'Evaluated', color: 'text-green-600' },
                         { key: 'for_confirmation', label: 'For Confirmation', color: 'text-blue-600' },
                         { key: 'for_interview', label: 'For Interview', color: 'text-purple-600' },

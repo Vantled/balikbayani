@@ -91,7 +91,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   const [formData, setFormData] = useState<FormDataType>({
     name: "",
     email: "",
-    cellphone: "",
+    cellphone: "09",
     sex: "" as 'male' | 'female' | '',
     jobsite: "",
     position: "",
@@ -876,7 +876,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
 
   return (
     <div className={`fixed inset-0 z-[60] flex items-center justify-center transition-opacity duration-150 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
-      <div className={`absolute inset-0 bg-black transition-opacity duration-150 ${mounted ? 'bg-opacity-50' : 'bg-opacity-0'}`} onClick={onClose} />
+      <div className={`absolute inset-0 bg-black transition-opacity duration-150 ${mounted ? 'bg-opacity-50' : 'bg-opacity-0'}`} />
       <div className={`relative bg-white rounded-lg w-full ${activeTile === 'form2' ? 'max-w-6xl' : 'max-w-2xl'} mx-4 max-h-[90vh] overflow-hidden transform transition-all duration-150 ${mounted ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-1'}`}>
         {/* Modal Header */}
         <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
@@ -910,7 +910,34 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 </div>
               </button>
               <button
-                onClick={() => setActiveTile('form2')}
+                onClick={() => {
+                  // Gate to Form 2: require Form 1 completeness
+                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+                  const missing: string[] = []
+                  const fieldErrors: {[key: string]: string} = {}
+                  if (!formData.name.trim()) { missing.push('Worker Name'); fieldErrors.name = 'Name is required' }
+                  if (!formData.jobsite.trim()) { missing.push('Jobsite'); fieldErrors.jobsite = 'Jobsite is required' }
+                  if (!formData.position.trim()) { missing.push('Position'); fieldErrors.position = 'Position is required' }
+                  if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) { missing.push('Salary'); fieldErrors.salary = 'Valid salary is required' }
+                  if (!formData.sex) { missing.push('Sex') }
+                  if (!formData.job_type) { missing.push('Job Type') }
+                  if (!formData.salaryCurrency) { missing.push('Salary Currency') }
+                  if (formData.email && !emailRegex.test(formData.email)) { missing.push('Valid Email Address'); fieldErrors.email = 'Enter a valid email' }
+                  if (formData.cellphone) {
+                    const digits = formData.cellphone.replace(/\D/g, '')
+                    if (!/^09\d{9}$/.test(digits)) { missing.push('Valid Cellphone Number (starts with 09, 11 digits)'); fieldErrors.cellphone = 'Must start with 09 and be 11 digits' }
+                  }
+                  if (missing.length > 0) {
+                    setValidationErrors(prev => ({ ...prev, ...fieldErrors }))
+                    toast({
+                      title: 'Complete Basic Information',
+                      description: `Please complete: ${missing.join(', ')}`,
+                      variant: 'destructive'
+                    })
+                    return
+                  }
+                  setActiveTile('form2')
+                }}
                 className={`flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2 ${
                   activeTile === 'form2'
                     ? 'text-[#1976D2] border-[#1976D2]'
@@ -923,7 +950,88 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 </div>
               </button>
               <button
-                onClick={() => setActiveTile('form3')}
+                onClick={() => {
+                  // Gate to Form 3: require Form 1 and required documents (Form 2)
+                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+                  const missingForm1: string[] = []
+                  const fieldErrors: {[key: string]: string} = {}
+                  if (!formData.name.trim()) { missingForm1.push('Worker Name'); fieldErrors.name = 'Name is required' }
+                  if (!formData.jobsite.trim()) { missingForm1.push('Jobsite'); fieldErrors.jobsite = 'Jobsite is required' }
+                  if (!formData.position.trim()) { missingForm1.push('Position'); fieldErrors.position = 'Position is required' }
+                  if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) { missingForm1.push('Salary'); fieldErrors.salary = 'Valid salary is required' }
+                  if (!formData.sex) { missingForm1.push('Sex') }
+                  if (!formData.job_type) { missingForm1.push('Job Type') }
+                  if (!formData.salaryCurrency) { missingForm1.push('Salary Currency') }
+                  if (formData.email && !emailRegex.test(formData.email)) { missingForm1.push('Valid Email Address'); fieldErrors.email = 'Enter a valid email' }
+                  if (formData.cellphone) {
+                    const digits = formData.cellphone.replace(/\D/g, '')
+                    if (!/^09\d{9}$/.test(digits)) { missingForm1.push('Valid Cellphone Number (starts with 09, 11 digits)'); fieldErrors.cellphone = 'Must start with 09 and be 11 digits' }
+                  }
+                  if (missingForm1.length > 0) {
+                    setValidationErrors(prev => ({ ...prev, ...fieldErrors }))
+                    toast({
+                      title: 'Complete Basic Information',
+                      description: `Please complete: ${missingForm1.join(', ')}`,
+                      variant: 'destructive'
+                    })
+                    return
+                  }
+                  const requiredDocs: Array<{ key: keyof DocFiles, label: string }> = [
+                    { key: 'passport', label: 'Passport' },
+                    { key: 'work_visa', label: 'Work Visa' },
+                    { key: 'employment_contract', label: 'Employment Contract' },
+                    { key: 'tesda_license', label: 'TESDA/PRC License' },
+                  ]
+                  const missingDocs: string[] = []
+                  requiredDocs.forEach(({ key, label }) => {
+                    if (!docFiles[key]) missingDocs.push(label)
+                  })
+                  const metadataMissing: string[] = []
+                  // Metadata checks only for required docs present
+                  if (docFiles.passport) {
+                    if (!docMetadata.passport_number?.trim()) metadataMissing.push('Passport Number')
+                    if (!docMetadata.passport_expiry?.trim()) metadataMissing.push('Passport Expiry Date')
+                  }
+                  if (docFiles.work_visa) {
+                    if (!docMetadata.visa_category?.trim()) metadataMissing.push('Visa Category')
+                    if (!docMetadata.visa_type?.trim()) metadataMissing.push('Visa Type')
+                    if (!docMetadata.visa_number?.trim()) metadataMissing.push('Visa Number')
+                    if (!docMetadata.visa_validity?.trim()) metadataMissing.push('Visa Validity Date')
+                  }
+                  if (docFiles.employment_contract) {
+                    if (!docMetadata.ec_issued_date?.trim()) metadataMissing.push('Employment Contract Issued Date')
+                    if (!docMetadata.ec_verification?.trim()) metadataMissing.push('Employment Contract Verification Type')
+                  }
+                  if (missingDocs.length > 0 || metadataMissing.length > 0) {
+                    // surface document metadata field errors
+                    const dmErrors: {[key: string]: string} = {}
+                    if (docFiles.passport) {
+                      if (!docMetadata.passport_number?.trim()) dmErrors.passport_number = 'Passport number is required'
+                      if (!docMetadata.passport_expiry?.trim()) dmErrors.passport_expiry = 'Passport expiry date is required'
+                    }
+                    if (docFiles.work_visa) {
+                      if (!docMetadata.visa_category?.trim()) dmErrors.visa_category = 'Visa category is required'
+                      if (!docMetadata.visa_type?.trim()) dmErrors.visa_type = 'Visa type is required'
+                      if (!docMetadata.visa_number?.trim()) dmErrors.visa_number = 'Visa number is required'
+                      if (!docMetadata.visa_validity?.trim()) dmErrors.visa_validity = 'Visa validity date is required'
+                    }
+                    if (docFiles.employment_contract) {
+                      if (!docMetadata.ec_issued_date?.trim()) dmErrors.ec_issued_date = 'Issued date is required'
+                      if (!docMetadata.ec_verification?.trim()) dmErrors.ec_verification = 'Verification type is required'
+                    }
+                    setDocumentMetadataErrors(prev => ({ ...prev, ...dmErrors }))
+                    const parts: string[] = []
+                    if (missingDocs.length > 0) parts.push(`Required documents: ${missingDocs.join(', ')}`)
+                    if (metadataMissing.length > 0) parts.push(`Document details: ${metadataMissing.join(', ')}`)
+                    toast({
+                      title: 'Complete Documents',
+                      description: parts.join(' | '),
+                      variant: 'destructive'
+                    })
+                    return
+                  }
+                  setActiveTile('form3')
+                }}
                 className={`flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2 ${
                   activeTile === 'form3'
                     ? 'text-[#1976D2] border-[#1976D2]'
@@ -1003,8 +1111,20 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                     pattern="[0-9]*"
                     value={formData.cellphone}
                     onChange={(e) => {
-                      const digits = (e.target.value || '').replace(/\D/g, '').slice(0, 11)
-                      setFormData({ ...formData, cellphone: digits })
+                      const raw = (e.target.value || '').replace(/\D/g, '')
+                      let next = raw
+                      // Ensure it always starts with 09
+                      if (!next.startsWith('09')) {
+                        if (next.startsWith('9')) {
+                          next = `0${next}`
+                        } else if (next.startsWith('0')) {
+                          next = `09${next.slice(1)}`
+                        } else {
+                          next = `09${next}`
+                        }
+                      }
+                      next = next.slice(0, 11)
+                      setFormData({ ...formData, cellphone: next })
                       clearFieldError('cellphone')
                     }}
                     className="mt-1"
@@ -1174,7 +1294,33 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                <div className="flex justify-between pt-6">
                  <div></div>
                  <Button 
-                   onClick={() => setActiveTile('form2')}
+                   onClick={() => {
+                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+                     const missing: string[] = []
+                     const fieldErrors: {[key: string]: string} = {}
+                     if (!formData.name.trim()) { missing.push('Worker Name'); fieldErrors.name = 'Name is required' }
+                     if (!formData.jobsite.trim()) { missing.push('Jobsite'); fieldErrors.jobsite = 'Jobsite is required' }
+                     if (!formData.position.trim()) { missing.push('Position'); fieldErrors.position = 'Position is required' }
+                     if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) { missing.push('Salary'); fieldErrors.salary = 'Valid salary is required' }
+                     if (!formData.sex) { missing.push('Sex') }
+                     if (!formData.job_type) { missing.push('Job Type') }
+                     if (!formData.salaryCurrency) { missing.push('Salary Currency') }
+                     if (formData.email && !emailRegex.test(formData.email)) { missing.push('Valid Email Address'); fieldErrors.email = 'Enter a valid email' }
+                     if (formData.cellphone) {
+                       const digits = formData.cellphone.replace(/\D/g, '')
+                       if (!/^09\d{9}$/.test(digits)) { missing.push('Valid Cellphone Number (starts with 09, 11 digits)'); fieldErrors.cellphone = 'Must start with 09 and be 11 digits' }
+                     }
+                     if (missing.length > 0) {
+                       setValidationErrors(prev => ({ ...prev, ...fieldErrors }))
+                       toast({
+                         title: 'Complete Basic Information',
+                         description: `Please complete: ${missing.join(', ')}`,
+                         variant: 'destructive'
+                       })
+                       return
+                     }
+                     setActiveTile('form2')
+                   }}
                    className="bg-[#1976D2] hover:bg-[#1565C0]"
                  >
                    Next
@@ -1352,7 +1498,86 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                {/* Navigation buttons for Form 2 */}
                <div className="flex justify-end pt-6">
                  <Button 
-                   onClick={() => setActiveTile('form3')}
+                   onClick={() => {
+                     // Gate to Form 3 from Next
+                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+                     const missingForm1: string[] = []
+                     const fieldErrors: {[key: string]: string} = {}
+                     if (!formData.name.trim()) { missingForm1.push('Worker Name'); fieldErrors.name = 'Name is required' }
+                     if (!formData.jobsite.trim()) { missingForm1.push('Jobsite'); fieldErrors.jobsite = 'Jobsite is required' }
+                     if (!formData.position.trim()) { missingForm1.push('Position'); fieldErrors.position = 'Position is required' }
+                     if (!formData.salary.trim() || isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) { missingForm1.push('Salary'); fieldErrors.salary = 'Valid salary is required' }
+                     if (!formData.sex) { missingForm1.push('Sex') }
+                     if (!formData.job_type) { missingForm1.push('Job Type') }
+                     if (!formData.salaryCurrency) { missingForm1.push('Salary Currency') }
+                     if (formData.email && !emailRegex.test(formData.email)) { missingForm1.push('Valid Email Address'); fieldErrors.email = 'Enter a valid email' }
+                     if (formData.cellphone) {
+                       const digits = formData.cellphone.replace(/\D/g, '')
+                       if (!/^09\d{9}$/.test(digits)) { missingForm1.push('Valid Cellphone Number (starts with 09, 11 digits)'); fieldErrors.cellphone = 'Must start with 09 and be 11 digits' }
+                     }
+                     if (missingForm1.length > 0) {
+                       setValidationErrors(prev => ({ ...prev, ...fieldErrors }))
+                       toast({
+                         title: 'Complete Basic Information',
+                         description: `Please complete: ${missingForm1.join(', ')}`,
+                         variant: 'destructive'
+                       })
+                       return
+                     }
+                     const requiredDocs: Array<{ key: keyof DocFiles, label: string }> = [
+                       { key: 'passport', label: 'Passport' },
+                       { key: 'work_visa', label: 'Work Visa' },
+                       { key: 'employment_contract', label: 'Employment Contract' },
+                       { key: 'tesda_license', label: 'TESDA/PRC License' },
+                     ]
+                     const missingDocs: string[] = []
+                     requiredDocs.forEach(({ key, label }) => {
+                       if (!docFiles[key]) missingDocs.push(label)
+                     })
+                     const metadataMissing: string[] = []
+                     if (docFiles.passport) {
+                       if (!docMetadata.passport_number?.trim()) metadataMissing.push('Passport Number')
+                       if (!docMetadata.passport_expiry?.trim()) metadataMissing.push('Passport Expiry Date')
+                     }
+                     if (docFiles.work_visa) {
+                       if (!docMetadata.visa_category?.trim()) metadataMissing.push('Visa Category')
+                       if (!docMetadata.visa_type?.trim()) metadataMissing.push('Visa Type')
+                       if (!docMetadata.visa_number?.trim()) metadataMissing.push('Visa Number')
+                       if (!docMetadata.visa_validity?.trim()) metadataMissing.push('Visa Validity Date')
+                     }
+                     if (docFiles.employment_contract) {
+                       if (!docMetadata.ec_issued_date?.trim()) metadataMissing.push('Employment Contract Issued Date')
+                       if (!docMetadata.ec_verification?.trim()) metadataMissing.push('Employment Contract Verification Type')
+                     }
+                     if (missingDocs.length > 0 || metadataMissing.length > 0) {
+                       const dmErrors: {[key: string]: string} = {}
+                       if (docFiles.passport) {
+                         if (!docMetadata.passport_number?.trim()) dmErrors.passport_number = 'Passport number is required'
+                         if (!docMetadata.passport_expiry?.trim()) dmErrors.passport_expiry = 'Passport expiry date is required'
+                       }
+                       if (docFiles.work_visa) {
+                         if (!docMetadata.visa_category?.trim()) dmErrors.visa_category = 'Visa category is required'
+                         if (!docMetadata.visa_type?.trim()) dmErrors.visa_type = 'Visa type is required'
+                         if (!docMetadata.visa_number?.trim()) dmErrors.visa_number = 'Visa number is required'
+                         if (!docMetadata.visa_validity?.trim()) dmErrors.visa_validity = 'Visa validity date is required'
+                       }
+                       if (docFiles.employment_contract) {
+                         if (!docMetadata.ec_issued_date?.trim()) dmErrors.ec_issued_date = 'Issued date is required'
+                         if (!docMetadata.ec_verification?.trim()) dmErrors.ec_verification = 'Verification type is required'
+                       }
+                       setDocumentMetadataErrors(prev => ({ ...prev, ...dmErrors }))
+                       const parts: string[] = []
+                       if (missingDocs.length > 0) parts.push(`Required documents: ${missingDocs.join(', ')}`)
+                       if (metadataMissing.length > 0) parts.push(`Document details: ${metadataMissing.join(', ')}`)
+                       toast({
+                         title: 'Complete Documents',
+                         description: parts.join(' | '),
+                         variant: 'destructive'
+                       })
+                       return
+                     }
+                     setActiveTile('form3')
+                   }}
                    className="bg-[#1976D2] hover:bg-[#1565C0]"
                  >
                    Next

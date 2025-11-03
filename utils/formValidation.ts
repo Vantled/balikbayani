@@ -90,8 +90,11 @@ export const validateForm = (formData: FormData): string[] => {
   if (formData.email && !emailRegex.test(formData.email)) {
     errors.push("Email address is invalid")
   }
-  if (formData.cellphone && formData.cellphone.replace(/\D/g, '').length !== 11) {
-    errors.push("Cellphone number must be 11 digits")
+  if (formData.cellphone) {
+    const digits = formData.cellphone.replace(/\D/g, '')
+    if (!/^09\d{9}$/.test(digits)) {
+      errors.push("Cellphone number must start with 09 and be 11 digits")
+    }
   }
   
   return errors;
@@ -128,8 +131,11 @@ export const getMissingFields = (formData: FormData, docMetadata: DocMetadata, d
   if (formData.email && !emailRegex.test(formData.email)) {
     missingFields.push("Valid Email Address");
   }
-  if (formData.cellphone && formData.cellphone.replace(/\D/g, '').length !== 11) {
-    missingFields.push("Valid Cellphone Number (11 digits)");
+  if (formData.cellphone) {
+    const digits = formData.cellphone.replace(/\D/g, '')
+    if (!/^09\d{9}$/.test(digits)) {
+      missingFields.push("Valid Cellphone Number (starts with 09, 11 digits)");
+    }
   }
   
   // Additional Details (Form 3) - Required fields
@@ -233,8 +239,11 @@ export const getFieldErrors = (formData: FormData, isDraft: boolean = false): {[
     if (formData.email && !emailRegex.test(formData.email)) {
       errors.email = "Enter a valid email"
     }
-    if (formData.cellphone && formData.cellphone.replace(/\D/g, '').length !== 11) {
-      errors.cellphone = "Must be 11 digits"
+    if (formData.cellphone) {
+      const digits = formData.cellphone.replace(/\D/g, '')
+      if (!/^09\d{9}$/.test(digits)) {
+        errors.cellphone = "Must start with 09 and be 11 digits"
+      }
     }
   }
   

@@ -18,11 +18,30 @@ config({ path: '.env.local' });
 // Import database connection dynamically
 let db;
 try {
+  // Try ESM JS build first
   const databaseModule = await import('../lib/database.js');
-  db = databaseModule.db;
-} catch (error) {
-  console.error('Failed to import database module:', error.message);
-  process.exit(1);
+  db = databaseModule.db || databaseModule.default;
+} catch (errorJs) {
+  try {
+    // Try importing TS directly (may work if a loader is present)
+    const databaseModuleTs = await import('../lib/database.ts');
+    // @ts-ignore
+    db = databaseModuleTs.db || databaseModuleTs.default;
+  } catch (errorTs) {
+    // Fallback: create a direct pg pool
+    const host = process.env.DB_HOST || 'localhost';
+    const port = parseInt(process.env.DB_PORT || '5432');
+    const database = process.env.DB_NAME || 'balikbayani';
+    const user = process.env.DB_USER || 'postgres';
+    const password = process.env.DB_PASSWORD || '';
+
+    console.warn('Database module not found; using fallback pg Pool connection');
+    const pool = new Pool({ host, port, database, user, password, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false });
+    db = {
+      query: (text, params) => pool.query(text, params),
+      end: () => pool.end()
+    };
+  }
 }
 
 async function resetDatabaseIfRequested() {

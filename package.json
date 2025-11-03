@@ -12,7 +12,7 @@
     "install-deps": "npm install --legacy-peer-deps",
     
     "db:init": "tsx lib/init-db.ts",
-    "db:init-complete": "node scripts/init-database.js",
+    "db:init-complete": "node scripts/init-database.js --reset",
     "db:init-complete-alt": "node scripts/init-database-alt.js",
     "db:manager": "node scripts/database-manager.js",
     "db:reset": "tsx lib/init-db.ts --reset",

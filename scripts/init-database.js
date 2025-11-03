@@ -6,6 +6,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { Pool } from 'pg';
 
 // Get current file directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +23,42 @@ try {
 } catch (error) {
   console.error('Failed to import database module:', error.message);
   process.exit(1);
+}
+
+async function resetDatabaseIfRequested() {
+  const shouldReset = process.argv.includes('--reset');
+  if (!shouldReset) return;
+
+  const host = process.env.DB_HOST || 'localhost';
+  const port = parseInt(process.env.DB_PORT || '5432');
+  const database = process.env.DB_NAME || 'balikbayani';
+  const user = process.env.DB_USER || 'postgres';
+  const password = process.env.DB_PASSWORD || '';
+
+  console.log(`\n⚠️  Reset requested: dropping and recreating database "${database}"...`);
+
+  // Connect to the default postgres database to manage target DB
+  const adminPool = new Pool({ host, port, database: 'postgres', user, password });
+  try {
+    // Terminate existing connections to the target database
+    await adminPool.query(
+      `SELECT pg_terminate_backend(pid)
+       FROM pg_stat_activity
+       WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [database]
+    );
+
+    // Drop and recreate the database (quote identifier safely)
+    const dbIdent = database.replace(/"/g, '""');
+    await adminPool.query(`DROP DATABASE IF EXISTS "${dbIdent}"`);
+    await adminPool.query(`CREATE DATABASE "${dbIdent}"`);
+    console.log('✅ Database reset completed');
+  } catch (err) {
+    console.error('❌ Database reset failed:', err.message);
+    process.exit(1);
+  } finally {
+    await adminPool.end();
+  }
 }
 
 async function readSqlFile(filePath) {
@@ -55,6 +92,9 @@ async function executeSqlFile(filePath, description) {
 async function initializeDatabase() {
   try {
     console.log('🚀 Starting comprehensive database initialization...\n');
+
+    // Optional reset step
+    await resetDatabaseIfRequested();
 
     // Step 1: Execute main schema
     await executeSqlFile('lib/schema.sql', 'Creating main database schema');

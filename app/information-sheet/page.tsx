@@ -511,18 +511,45 @@ export default function InformationSheetPage() {
                                       View
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => { 
-                                      setSelected(row); 
+                                      setSelected(row);
+                                      const purposeMap: Record<string, string> = {
+                                        employment: 'Employment',
+                                        owwa: 'OWWA',
+                                        legal: 'Legal',
+                                        loan: 'Loan',
+                                        visa: 'VISA',
+                                        balik_manggagawa: 'Balik Manggagawa',
+                                        reduced_travel_tax: 'Reduced Travel Tax',
+                                        philhealth: 'Philhealth',
+                                        others: 'Others',
+                                      }
+                                      const workerCategoryMap: Record<string, string> = {
+                                        landbased_newhire: 'Landbased (Newhire)',
+                                        rehire_balik_manggagawa: 'Rehire (Balik Manggagawa)',
+                                        seafarer: 'Seafarer',
+                                      }
+                                      const requestedRecordMap: Record<string, string> = {
+                                        information_sheet: 'Information Sheet',
+                                        oec: 'OEC',
+                                        employment_contract: 'Employment Contract',
+                                      }
+                                      const norm = (v: any) => String(v || '').toLowerCase().replace(/\s+/g, '_')
+                                      const genderLabel = (() => {
+                                        const g = String(row.gender || '').toLowerCase()
+                                        if (g === 'male' || g === 'female') return g.charAt(0).toUpperCase() + g.slice(1)
+                                        return ''
+                                      })()
                                       setEditForm({
                                         familyName: row.family_name || '',
                                         firstName: row.first_name || '',
                                         middleName: row.middle_name || '',
-                                        gender: (row.gender || '').charAt(0).toUpperCase() + (row.gender || '').slice(1),
+                                        gender: genderLabel,
                                         jobsite: row.jobsite || '',
                                         agency: row.name_of_agency || '',
-                                        purpose: (row.purpose || '').replaceAll('_',' '),
+                                        purpose: purposeMap[norm(row.purpose)] || '',
                                         purposeOther: row.purpose_others || '',
-                                        workerCategory: (row.worker_category || '').replaceAll('_',' '),
-                                        requestedRecord: (row.requested_record || '').replaceAll('_',' '),
+                                        workerCategory: workerCategoryMap[norm(row.worker_category)] || '',
+                                        requestedRecord: requestedRecordMap[norm(row.requested_record)] || '',
                                         documents: (row.documents_presented && row.documents_presented[0]) || '',
                                         documentsOther: row.documents_others || ''
                                       }); 

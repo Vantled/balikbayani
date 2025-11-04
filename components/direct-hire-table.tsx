@@ -86,6 +86,7 @@ type DashboardStats = {
   clearance: number
   clearanceMale: number
   clearanceFemale: number
+  processing: number
   govToGov: number
   infoSheet: number
   pendingUsers: number
@@ -229,8 +230,8 @@ export default function DirectHireTable() {
     }
   }, [stats])
 
-  // Combined totals across all workers (DH + BM + Gov-to-Gov + Info Sheet)
-  const totalWorkersAll = (stats?.directHire ?? 0) + (stats?.clearance ?? 0) + govToGovTotals.all + infoSheetTotals.all
+  // Combined totals across all workers (DH + BM Clearance + BM Processing + Gov-to-Gov + Info Sheet)
+  const totalWorkersAll = (stats?.directHire ?? 0) + (stats?.clearance ?? 0) + (stats?.processing ?? 0) + govToGovTotals.all + infoSheetTotals.all
   const allGenderTotals = {
     male: (stats?.directHireMale ?? 0) + (stats?.clearanceMale ?? 0) + govToGovTotals.male + infoSheetTotals.male,
     female: (stats?.directHireFemale ?? 0) + (stats?.clearanceFemale ?? 0) + govToGovTotals.female + infoSheetTotals.female,
@@ -574,48 +575,45 @@ export default function DirectHireTable() {
 
           {/* Timeline + Gender Ratio row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-0">
-            <Card className="p-4 bg-white md:col-span-2">
+            <Card className="p-4 bg-white md:col-span-2 min-h-[420px]">
               <h3 className="text-sm font-medium mb-1">Applications Timeline</h3>
-              <p className="text-xs text-gray-500 mb-2">Recent trends</p>
-              <ProcessingPathsChart height={340} />
+              <p className="text-xs text-gray-500 mb-2">Processed records for the past 6 months</p>
+              <ProcessingPathsChart height={320} />
             </Card>
             <div className="grid grid-cols-1 auto-rows-min gap-4">
-              <Card className="p-4 bg-white">
-                <h3 className="text-sm text-gray-600">Gender Ratio (DH + BM)</h3>
-                <div className="flex items-end gap-4 mt-3">
-                <div className="flex-1 h-[180px]">
-                    <Doughnut
-                      data={{
-                        labels: ['Male','Female'],
-                        datasets: [{
-                        data: [allGenderTotals.male, allGenderTotals.female],
-                          backgroundColor: ['#42A5F5','#EF9A9A'],
-                          borderWidth: 0,
-                        }]
-                      }}
-                      options={{ responsive: true, maintainAspectRatio: false }}
-                    />
-                  </div>
-                  <div className="text-[11px] text-gray-600">
-                  <div>Male: <span className="font-semibold">{allGenderTotals.male}</span></div>
-                  <div>Female: <span className="font-semibold">{allGenderTotals.female}</span></div>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4 bg-white">
-                <h3 className="text-sm text-gray-600">Total Workers</h3>
+              <Card className="p-4 bg-white min-h-[420px]">
+                <h3 className="text-sm text-gray-600">Total Processsed Workers</h3>
                 <div className="text-2xl font-bold mt-2">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : totalWorkersAll}</div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2 rounded border bg-white">
-                    <div className="text-gray-500">Male</div>
-                    <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.male}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 items-end">
+                  <div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded border bg-white">
+                        <div className="text-gray-500">Male</div>
+                        <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.male}</div>
+                      </div>
+                      <div className="p-2 rounded border bg-white">
+                        <div className="text-gray-500">Female</div>
+                        <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.female}</div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">All categories</p>
                   </div>
-                  <div className="p-2 rounded border bg-white">
-                    <div className="text-gray-500">Female</div>
-                    <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.female}</div>
+                  <div className="flex items-end gap-4">
+                    <div className="flex-1 h-[240px]">
+                      <Doughnut
+                        data={{
+                          labels: ['Male','Female'],
+                          datasets: [{
+                            data: [allGenderTotals.male, allGenderTotals.female],
+                            backgroundColor: ['#42A5F5','#EF9A9A'],
+                            borderWidth: 0,
+                          }]
+                        }}
+                        options={{ responsive: true, maintainAspectRatio: false }}
+                      />
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">All categories</p>
               </Card>
             </div>
           </div>

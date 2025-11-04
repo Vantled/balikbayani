@@ -845,7 +845,6 @@ export default function BalikManggagawaPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-medium text-[#1976D2]">Balik Manggagawa</h2>
-            <p className="text-sm text-gray-600 mt-1">Manage BM clearances</p>
           </div>
           <div className="flex items-center gap-2 relative">
             <div className="relative">

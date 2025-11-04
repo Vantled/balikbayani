@@ -64,7 +64,7 @@ export default function ProcessingPathsChart({ height = 220 }: { height?: number
       x: { grid: { display: false } },
     },
     plugins: {
-      legend: { display: false },
+      legend: { display: true, position: "top", labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } } },
       tooltip: {
         callbacks: {
           label: function(context) {
@@ -111,17 +111,6 @@ export default function ProcessingPathsChart({ height = 220 }: { height?: number
   return (
     <div className="w-full" style={{ height }}>
       <Line options={options} data={chartData} />
-      <div className="flex flex-wrap justify-center mt-4 text-[10px] gap-3">
-        {chartData.datasets.map((dataset: any) => (
-          <div key={dataset.label} className="flex items-center">
-            <div 
-              className="w-3 h-3 rounded-full mr-1" 
-              style={{ backgroundColor: dataset.borderColor }}
-            />
-            <span>{dataset.label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

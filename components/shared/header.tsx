@@ -225,7 +225,7 @@ export default function Header() {
                 <DropdownMenuTrigger asChild>
                   <button
                     className={`text-xs lg:text-sm pb-1 flex items-center gap-1 ${
-                      pathname.startsWith('/user-management') || pathname.startsWith('/data-backups')
+                      pathname.startsWith('/user-management') || pathname.startsWith('/data-backups') || pathname.startsWith('/system-reports')
                         ? 'text-[#1976D2] border-b-2 border-[#1976D2]'
                         : 'text-gray-600 hover:text-[#1976D2]'
                     }`}
@@ -238,6 +238,9 @@ export default function Header() {
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem asChild>
                     <Link href="/user-management">User Management</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/system-reports">System Reports</Link>
                   </DropdownMenuItem>
                   {isSuperadmin(currentUser) && (
                     <DropdownMenuItem asChild>

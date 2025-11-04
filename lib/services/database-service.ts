@@ -2448,6 +2448,7 @@ export class DatabaseService {
         clearanceCount,
         clearanceMaleCount,
         clearanceFemaleCount,
+        processingCount,
         govToGovCount,
         infoSheetCount,
         pendingUsersCount
@@ -2458,8 +2459,9 @@ export class DatabaseService {
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'male'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'female'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
-        client.query(`SELECT COUNT(*) FROM gov_to_gov_applications${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
-        client.query(`SELECT COUNT(*) FROM information_sheet_records${dateFrom && dateTo ? ' WHERE created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM balik_manggagawa_processing WHERE clearance_id IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
+        client.query(`SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query('SELECT COUNT(*) FROM users WHERE is_approved = false')
       ]);
 
@@ -2470,6 +2472,7 @@ export class DatabaseService {
         clearance: parseInt(clearanceCount.rows[0].count),
         clearanceMale: parseInt(clearanceMaleCount.rows[0].count),
         clearanceFemale: parseInt(clearanceFemaleCount.rows[0].count),
+        processing: parseInt(processingCount.rows[0].count),
         govToGov: parseInt(govToGovCount.rows[0].count),
         infoSheet: parseInt(infoSheetCount.rows[0].count),
         pendingUsers: parseInt(pendingUsersCount.rows[0].count)
@@ -2716,5 +2719,355 @@ export class DatabaseService {
       'monitoring',
       'data_backups'
     ];
+  }
+
+  /**
+   * Get processed workers count for utilization report
+   * Returns monthly, quarter-to-date, and year-to-date counts
+   */
+  static async getProcessedWorkersCount(month: number, year: number): Promise<{
+    monthly: number
+    quarterToDate: number
+    yearToDate: number
+  }> {
+    try {
+      // Calculate date ranges
+      // month is 1-12 (1 = January, 12 = December)
+      // JavaScript Date months are 0-indexed (0 = January, 11 = December)
+      const monthStart = new Date(year, month - 1, 1)
+      const monthEnd = new Date(year, month, 0, 23, 59, 59, 999)
+      
+      // Quarter start (first month of the quarter)
+      const quarterStartMonth = Math.floor((month - 1) / 3) * 3
+      const quarterStart = new Date(year, quarterStartMonth, 1)
+      const quarterEnd = new Date(year, month, 0, 23, 59, 59, 999)
+      
+      // Year start (January 1st of the selected year, 00:00:00)
+      const yearStart = new Date(year, 0, 1, 0, 0, 0, 0)
+      // Year end (last day of the selected month, 23:59:59.999)
+      // Using month (not month-1) because Date(2025, 1, 0) = last day of month 0 (January)
+      const yearEnd = new Date(year, month, 0, 23, 59, 59, 999)
+
+      const stats = await db.transaction(async (client) => {
+        // Monthly counts
+        const [
+          monthlyDirectHire,
+          monthlyClearance,
+          monthlyGovToGov,
+          monthlyInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          )
+        ])
+
+        // Quarter-to-date counts
+        const [
+          quarterDirectHire,
+          quarterClearance,
+          quarterGovToGov,
+          quarterInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          )
+        ])
+
+        // Year-to-date counts
+        const [
+          yearDirectHire,
+          yearClearance,
+          yearGovToGov,
+          yearInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          )
+        ])
+
+        // Calculate totals (only BM Clearance, not BM Processing)
+        const monthly = 
+          parseInt(monthlyDirectHire.rows[0].count) +
+          parseInt(monthlyClearance.rows[0].count) +
+          parseInt(monthlyGovToGov.rows[0].count) +
+          parseInt(monthlyInfoSheet.rows[0].count)
+
+        const quarterToDate = 
+          parseInt(quarterDirectHire.rows[0].count) +
+          parseInt(quarterClearance.rows[0].count) +
+          parseInt(quarterGovToGov.rows[0].count) +
+          parseInt(quarterInfoSheet.rows[0].count)
+
+        const yearToDate = 
+          parseInt(yearDirectHire.rows[0].count) +
+          parseInt(yearClearance.rows[0].count) +
+          parseInt(yearGovToGov.rows[0].count) +
+          parseInt(yearInfoSheet.rows[0].count)
+
+        // Debug logging to show breakdown
+        console.log('[getProcessedWorkersCount] Year-to-Date Breakdown:', {
+          year,
+          month,
+          directHire: parseInt(yearDirectHire.rows[0].count),
+          clearance: parseInt(yearClearance.rows[0].count),
+          govToGov: parseInt(yearGovToGov.rows[0].count),
+          infoSheet: parseInt(yearInfoSheet.rows[0].count),
+          total: yearToDate
+        })
+
+        return { monthly, quarterToDate, yearToDate }
+      })
+
+      return stats
+    } catch (error) {
+      console.error('Error getting processed workers count:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get detailed breakdown of processed workers count by table
+   * This helps debug where the counts are coming from
+   */
+  static async getProcessedWorkersCountBreakdown(month: number, year: number): Promise<{
+    monthly: {
+      directHire: number
+      clearance: number
+      govToGov: number
+      infoSheet: number
+      total: number
+    }
+    yearToDate: {
+      directHire: number
+      clearance: number
+      govToGov: number
+      infoSheet: number
+      total: number
+    }
+  }> {
+    try {
+      const monthStart = new Date(year, month - 1, 1)
+      const monthEnd = new Date(year, month, 0, 23, 59, 59, 999)
+      const yearStart = new Date(year, 0, 1, 0, 0, 0, 0)
+      const yearEnd = new Date(year, month, 0, 23, 59, 59, 999)
+
+      const breakdown = await db.transaction(async (client) => {
+        // Monthly counts
+        const [
+          monthlyDirectHire,
+          monthlyClearance,
+          monthlyGovToGov,
+          monthlyInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [monthStart, monthEnd]
+          )
+        ])
+
+        // Year-to-date counts
+        const [
+          yearDirectHire,
+          yearClearance,
+          yearGovToGov,
+          yearInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [yearStart, yearEnd]
+          )
+        ])
+
+        const monthly = {
+          directHire: parseInt(monthlyDirectHire.rows[0].count),
+          clearance: parseInt(monthlyClearance.rows[0].count),
+          govToGov: parseInt(monthlyGovToGov.rows[0].count),
+          infoSheet: parseInt(monthlyInfoSheet.rows[0].count),
+          total: parseInt(monthlyDirectHire.rows[0].count) +
+                 parseInt(monthlyClearance.rows[0].count) +
+                 parseInt(monthlyGovToGov.rows[0].count) +
+                 parseInt(monthlyInfoSheet.rows[0].count)
+        }
+
+        const yearToDate = {
+          directHire: parseInt(yearDirectHire.rows[0].count),
+          clearance: parseInt(yearClearance.rows[0].count),
+          govToGov: parseInt(yearGovToGov.rows[0].count),
+          infoSheet: parseInt(yearInfoSheet.rows[0].count),
+          total: parseInt(yearDirectHire.rows[0].count) +
+                 parseInt(yearClearance.rows[0].count) +
+                 parseInt(yearGovToGov.rows[0].count) +
+                 parseInt(yearInfoSheet.rows[0].count)
+        }
+
+        return { monthly, yearToDate }
+      })
+
+      return breakdown
+    } catch (error) {
+      console.error('Error getting processed workers count breakdown:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Create a system report certificate record
+   */
+  static async createSystemReportCertificate(data: {
+    month: number
+    year: number
+    file_name: string
+    file_path: string
+    file_size: number
+    mime_type: string
+    created_by: string
+  }): Promise<any> {
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO system_reports_certificates 
+         (month, year, file_name, file_path, file_size, mime_type, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [data.month, data.year, data.file_name, data.file_path, data.file_size, data.mime_type, data.created_by]
+      )
+      return rows[0]
+    } catch (error) {
+      console.error('Error creating system report certificate:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get all system report certificates
+   */
+  static async getSystemReportCertificates(pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<any>> {
+    try {
+      const offset = (pagination.page - 1) * pagination.limit
+      
+      const [result, countResult] = await Promise.all([
+        db.query(
+          `SELECT c.*, u.full_name as created_by_name
+           FROM system_reports_certificates c
+           LEFT JOIN users u ON c.created_by = u.id
+           ORDER BY c.created_at DESC
+           LIMIT $1 OFFSET $2`,
+          [pagination.limit, offset]
+        ),
+        db.query('SELECT COUNT(*) FROM system_reports_certificates')
+      ])
+
+      const total = parseInt(countResult.rows[0].count)
+      
+      return {
+        data: result.rows,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          totalPages: Math.ceil(total / pagination.limit)
+        }
+      }
+    } catch (error) {
+      console.error('Error getting system report certificates:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get system report certificate by ID
+   */
+  static async getSystemReportCertificateById(id: string): Promise<any | null> {
+    try {
+      const { rows } = await db.query(
+        `SELECT c.*, u.full_name as created_by_name
+         FROM system_reports_certificates c
+         LEFT JOIN users u ON c.created_by = u.id
+         WHERE c.id = $1`,
+        [id]
+      )
+      return rows[0] || null
+    } catch (error) {
+      console.error('Error getting system report certificate:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete system report certificate
+   */
+  static async deleteSystemReportCertificate(id: string): Promise<boolean> {
+    try {
+      const { rowCount } = await db.query(
+        'DELETE FROM system_reports_certificates WHERE id = $1',
+        [id]
+      )
+      return (rowCount || 0) > 0
+    } catch (error) {
+      console.error('Error deleting system report certificate:', error)
+      throw error
+    }
   }
 }

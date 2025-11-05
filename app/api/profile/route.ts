@@ -25,24 +25,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     // Validate session and get user
-    const session = await AuthService.validateSession(token);
-    if (!session) {
+    // validateSession returns a User object (from JOIN with users table)
+    const user = await AuthService.validateSession(token);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired session' },
         { status: 401 }
       );
     }
 
-    // Get complete user data from database
-    const user = await AuthService.getUserById(session.id);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Return user data (without password hash)
+    // User data is already available from validateSession
     const userData = {
       id: user.id,
       username: user.username,
@@ -84,19 +77,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     // Validate session and get user
-    const session = await AuthService.validateSession(token);
-    if (!session) {
+    // validateSession returns a User object (from JOIN with users table)
+    const user = await AuthService.validateSession(token);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired session' },
         { status: 401 }
-      );
-    }
-
-    const user = await AuthService.getUserById(session.id);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
       );
     }
 

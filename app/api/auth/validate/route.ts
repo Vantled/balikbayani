@@ -10,6 +10,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const tokenFromCookie = request.cookies.get('bb_auth_token')?.value;
     const token = tokenFromBody || tokenFromCookie;
 
+    // Debug logging
+    console.log('Validate: Token from body:', tokenFromBody ? 'present' : 'missing');
+    console.log('Validate: Token from cookie:', tokenFromCookie ? 'present' : 'missing');
+    console.log('Validate: All cookies:', Array.from(request.cookies.getAll()).map(c => c.name));
+
     if (!token) {
       return NextResponse.json({
         success: false,

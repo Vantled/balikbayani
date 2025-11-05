@@ -44,20 +44,36 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       message: 'Login successful'
     });
 
+    // Determine if cookies should be secure (HTTPS only)
+    // Check if request is over HTTPS, or if explicitly enabled via env var
+    const url = new URL(request.url);
+    const isHttps = url.protocol === 'https:';
+    const forceSecureCookies = process.env.FORCE_SECURE_COOKIES === 'true';
+    const useSecureCookies = isHttps || forceSecureCookies;
+
     // Set HttpOnly session cookie for token
     const ONE_DAY = 60 * 60 * 24;
-    response.cookies.set('bb_auth_token', loginResult.token!, {
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: useSecureCookies,
+      sameSite: 'lax' as const,
       path: '/',
       maxAge: ONE_DAY,
+    };
+    
+    console.log('Login: Setting cookies with options:', {
+      secure: cookieOptions.secure,
+      sameSite: cookieOptions.sameSite,
+      protocol: url.protocol,
+      host: url.host,
     });
+    
+    response.cookies.set('bb_auth_token', loginResult.token!, cookieOptions);
     // Set readable user cookie for UI (non-HttpOnly)
     response.cookies.set('bb_user', JSON.stringify(userWithoutPassword), {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: useSecureCookies,
+      sameSite: 'lax' as const,
       path: '/',
       maxAge: ONE_DAY,
     });

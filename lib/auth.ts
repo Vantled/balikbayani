@@ -24,6 +24,7 @@ export const login = async (username: string, password: string): Promise<{ succe
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Ensure cookies are sent and received
       body: JSON.stringify({ username, password }),
     });
 
@@ -170,6 +171,7 @@ export const validateSession = async (): Promise<boolean> => {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Ensure cookies are sent with the request
       body: JSON.stringify(token ? { token } : {}),
     });
 

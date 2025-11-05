@@ -393,11 +393,8 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + this.SESSION_IDLE_MINUTES);
 
-    // Enforce single active session per user: invalidate any existing active sessions
-    await db.query(
-      'DELETE FROM user_sessions WHERE user_id = $1',
-      [userId]
-    );
+    // Allow multiple active sessions per user (multiple devices)
+    // No longer deleting existing sessions - each device can have its own session
 
     const result = await db.query(
       `INSERT INTO user_sessions (user_id, session_token, ip_address, user_agent, expires_at)
@@ -443,21 +440,10 @@ export class AuthService {
         return null;
       }
 
-      // Enforce single active session: if this is not the most recent session, invalidate it
-      const latestSessionResult = await db.query(
-        `SELECT session_token FROM user_sessions 
-         WHERE user_id = $1 AND expires_at > CURRENT_TIMESTAMP 
-         ORDER BY created_at DESC LIMIT 1`,
-        [session.user_id]
-      );
+      // Allow multiple active sessions - no longer enforcing single session per user
+      // Each device can maintain its own session independently
 
-      if (latestSessionResult.rows.length > 0 && latestSessionResult.rows[0].session_token !== token) {
-        // This is not the most recent session, invalidate it
-        await this.invalidateSession(token);
-        return null;
-      }
-
-      // Refresh idle timeout only for the most recent session
+      // Refresh idle timeout for this session
       const newExpires = new Date();
       newExpires.setMinutes(newExpires.getMinutes() + this.SESSION_IDLE_MINUTES);
       await db.query('UPDATE user_sessions SET expires_at = $1 WHERE session_token = $2', [newExpires, token]);

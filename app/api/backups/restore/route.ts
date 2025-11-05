@@ -28,6 +28,42 @@ function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv) {
   })
 }
 
+// Find psql executable in common locations
+function findPsqlPath(): string {
+  // If PSQL_PATH is explicitly set, use it
+  if (process.env.PSQL_PATH && process.env.PSQL_PATH.trim() !== '') {
+    return process.env.PSQL_PATH.trim()
+  }
+  
+  // Common macOS locations for psql
+  const commonPaths = [
+    '/opt/homebrew/opt/libpq/bin/psql',      // Homebrew (Apple Silicon)
+    '/opt/homebrew/opt/postgresql/bin/psql', // Homebrew (Apple Silicon)
+    '/usr/local/opt/libpq/bin/psql',        // Homebrew (Intel)
+    '/usr/local/opt/postgresql/bin/psql',    // Homebrew (Intel)
+    '/usr/bin/psql',                         // System default
+    '/usr/local/bin/psql',                   // System default
+    '/bin/psql',                             // System default
+  ]
+  
+  // Check for PostgreSQL versions in Library
+  for (let version = 17; version >= 12; version--) {
+    commonPaths.push(`/Library/PostgreSQL/${version}/bin/psql`)
+  }
+  
+  // Check if any of these paths exist
+  for (const psqlPath of commonPaths) {
+    if (fs.existsSync(psqlPath)) {
+      console.log(`[BACKUPS RESTORE] Found psql at: ${psqlPath}`)
+      return psqlPath
+    }
+  }
+  
+  // If not found, default to 'psql' (will fail if not in PATH)
+  console.warn('[BACKUPS RESTORE] psql not found in common locations, using "psql" (must be in PATH)')
+  return 'psql'
+}
+
 export async function POST(request: NextRequest) {
   console.log('[BACKUPS RESTORE] Starting restore process...')
   
@@ -231,7 +267,7 @@ export async function POST(request: NextRequest) {
       const fileSize = fs.statSync(dumpPath).size
       console.log(`[BACKUPS RESTORE] Found dump.sql, size: ${fileSize} bytes`)
       try {
-        const psqlCmd = process.env.PSQL_PATH && process.env.PSQL_PATH.trim() !== '' ? process.env.PSQL_PATH.trim() : 'psql'
+        const psqlCmd = findPsqlPath()
         const env = process.env
         const host = env.DB_HOST || env.PGHOST || 'localhost'
         const port = String(env.DB_PORT || env.PGPORT || '5432')

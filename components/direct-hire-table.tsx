@@ -447,24 +447,24 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold mb-3">{getBalikManggagawaDisplayValue()}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getBalikManggagawaDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "all" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "male" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${balikManggagawaFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${balikManggagawaFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={balikManggagawaFilter === "female" ? "default" : "outline"}
                   onClick={() => setBalikManggagawaFilter("female")}
                 >
@@ -496,24 +496,24 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold mb-3">{getGovToGovDisplayValue()}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getGovToGovDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-[11px] h-7 rounded ${govToGovFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${govToGovFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "all" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${govToGovFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${govToGovFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "male" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${govToGovFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${govToGovFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={govToGovFilter === "female" ? "default" : "outline"}
                   onClick={() => setGovToGovFilter("female")}
                 >
@@ -545,24 +545,24 @@ export default function DirectHireTable() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold mb-3">{getInfoSheetDisplayValue()}</h2>
+              <h2 className="text-2xl font-bold mb-4">{getInfoSheetDisplayValue()}</h2>
               <div className="grid grid-cols-3 gap-1">
                 <Button 
-                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "all" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "all" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("all")}
                 >
                   All
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "male" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "male" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("male")}
                 >
                   Male
                 </Button>
                 <Button 
-                  className={`text-[11px] h-7 rounded ${infoSheetFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
+                  className={`text-xs h-8 rounded ${infoSheetFilter === "female" ? "bg-[#1976D2] hover:bg-[#1565C0] text-white" : "bg-white"}`}
                   variant={infoSheetFilter === "female" ? "default" : "outline"}
                   onClick={() => setInfoSheetFilter("female")}
                 >
@@ -589,11 +589,11 @@ export default function DirectHireTable() {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="p-2 rounded border bg-white">
                         <div className="text-gray-500">Male</div>
-                        <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.male}</div>
+                        <div className="text-2xl font-bold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.male}</div>
                       </div>
                       <div className="p-2 rounded border bg-white">
                         <div className="text-gray-500">Female</div>
-                        <div className="text-base font-semibold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.female}</div>
+                        <div className="text-2xl font-bold">{(loadingStats || loadingGovToGov || loadingInfoSheet) ? '—' : allGenderTotals.female}</div>
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">All categories</p>

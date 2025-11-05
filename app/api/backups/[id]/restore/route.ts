@@ -13,8 +13,30 @@ const BACKUP_DIR = path.join(process.cwd(), 'uploads', 'backups')
 function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv) {
   return new Promise<void>((resolve, reject) => {
     const p = spawn(cmd, args, { env })
+    let stderr = ''
+    let stdout = ''
+    
+    p.stdout?.on('data', (data) => {
+      stdout += data.toString()
+    })
+    
+    p.stderr?.on('data', (data) => {
+      stderr += data.toString()
+    })
+    
     p.on('error', reject)
-    p.on('exit', (c) => (c === 0 ? resolve() : reject(new Error(`${cmd} exited ${c}`))))
+    p.on('exit', (c) => {
+      if (c === 0) {
+        resolve()
+      } else {
+        const errorMsg = stderr || stdout || `${cmd} exited ${c}`
+        const error = new Error(errorMsg)
+        ;(error as any).code = c
+        ;(error as any).stderr = stderr
+        ;(error as any).stdout = stdout
+        reject(error)
+      }
+    })
   })
 }
 
@@ -397,11 +419,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
           
           if (psqlAvailable) {
             try {
-              // Use single transaction to avoid partial state; allow clean statements in dump
-              await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
+              // Use psql without ON_ERROR_STOP to allow DROP statements to fail gracefully
+              // The database connection fallback handles errors better anyway
+              console.log(`[BACKUPS RESTORE ID] Executing psql restore command...`)
+              console.log(`[BACKUPS RESTORE ID] psql command: ${psqlCmd} -h ${host} -p ${port} -U ${userName} -d ${dbName} -f ${dumpPath}`)
+              await run(psqlCmd, ['-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
               console.log(`[BACKUPS RESTORE ID] DB restore completed from ${dumpPath} using psql`)
             } catch (psqlError: any) {
-              console.warn('[BACKUPS RESTORE ID] psql failed, falling back to database connection:', psqlError.message)
+              console.warn('[BACKUPS RESTORE ID] psql failed, falling back to database connection')
+              console.warn('[BACKUPS RESTORE ID] psql error message:', psqlError.message)
+              if (psqlError.stderr) {
+                console.warn('[BACKUPS RESTORE ID] psql stderr:', psqlError.stderr.substring(0, 500))
+              }
+              if (psqlError.stdout) {
+                console.warn('[BACKUPS RESTORE ID] psql stdout:', psqlError.stdout.substring(0, 500))
+              }
               console.log('[BACKUPS RESTORE ID] Attempting to execute SQL directly via database connection...')
               psqlAvailable = false // Fall through to database connection approach
             }

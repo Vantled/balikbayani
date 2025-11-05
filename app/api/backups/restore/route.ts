@@ -248,23 +248,35 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: false, error: 'psql command not available. Please install PostgreSQL client tools or set PSQL_PATH environment variable.' }, { status: 500 })
         }
         
-        // For simple backups with INSERT statements, we can use the database connection directly
-        // This avoids requiring psql to be installed on the new device
+        // Read SQL content to detect format
         const sqlContent = fs.readFileSync(dumpPath, 'utf8')
         console.log(`[BACKUPS RESTORE] SQL file preview (first 1000 chars): ${sqlContent.substring(0, 1000)}`)
         
-        // Detect backup format - check for our simple backup markers
-        const isSimpleBackup = sqlContent.includes('-- BalikBayani logical backup') || 
-                               sqlContent.includes('INSERT INTO') ||
-                               (sqlContent.includes('CREATE TABLE') === false && sqlContent.length > 0)
+        // Detect backup format - prioritize explicit markers
+        const hasSimpleBackupMarker = sqlContent.includes('-- BalikBayani logical backup')
+        const hasPgDumpMarker = sqlContent.includes('-- PostgreSQL database dump') || 
+                                sqlContent.includes('pg_dump version') ||
+                                sqlContent.includes('Dumped by pg_dump')
+        
+        // Simple backup: has our marker, or has INSERT but no CREATE TABLE (data-only)
+        const isSimpleBackup = hasSimpleBackupMarker || 
+                               (sqlContent.includes('INSERT INTO') && !sqlContent.includes('CREATE TABLE'))
+        
+        // pg_dump format: has pg_dump markers, or has both CREATE TABLE and DROP statements
+        const isPgDumpFormat = hasPgDumpMarker || 
+                               (sqlContent.includes('CREATE TABLE') && 
+                                (sqlContent.includes('DROP CONSTRAINT') || sqlContent.includes('ALTER TABLE')))
         
         console.log(`[BACKUPS RESTORE] Backup format detection:`)
-        console.log(`[BACKUPS RESTORE] - Contains '-- BalikBayani logical backup': ${sqlContent.includes('-- BalikBayani logical backup')}`)
+        console.log(`[BACKUPS RESTORE] - Contains '-- BalikBayani logical backup': ${hasSimpleBackupMarker}`)
+        console.log(`[BACKUPS RESTORE] - Contains pg_dump markers: ${hasPgDumpMarker}`)
         console.log(`[BACKUPS RESTORE] - Contains 'INSERT INTO': ${sqlContent.includes('INSERT INTO')}`)
         console.log(`[BACKUPS RESTORE] - Contains 'CREATE TABLE': ${sqlContent.includes('CREATE TABLE')}`)
+        console.log(`[BACKUPS RESTORE] - Contains 'DROP CONSTRAINT': ${sqlContent.includes('DROP CONSTRAINT')}`)
         console.log(`[BACKUPS RESTORE] - Detected as simple backup: ${isSimpleBackup}`)
+        console.log(`[BACKUPS RESTORE] - Detected as pg_dump format: ${isPgDumpFormat}`)
         
-        if (isSimpleBackup) {
+        if (isSimpleBackup && !isPgDumpFormat) {
           // Simple backup with INSERT statements - execute directly via database connection
           console.log('[BACKUPS RESTORE] Detected simple backup format with INSERT statements')
           console.log('[BACKUPS RESTORE] Executing SQL directly via database connection (no psql required)')
@@ -349,21 +361,61 @@ export async function POST(request: NextRequest) {
           console.log('[BACKUPS RESTORE] Detected full backup format (pg_dump), trying psql first...')
           console.log('[BACKUPS RESTORE] Executing psql command...')
           
+          // Check if psql is available
+          let psqlAvailable = false
           try {
-            // Use single transaction to avoid partial state; allow clean statements in dump
-            await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
-            console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath} using psql`)
-          } catch (psqlError: any) {
-            console.warn('[BACKUPS RESTORE] psql failed, falling back to database connection:', psqlError.message)
-            console.log('[BACKUPS RESTORE] Attempting to execute SQL directly via database connection...')
-            
+            await run(psqlCmd, ['--version'], { ...process.env, PGPASSWORD: pass })
+            psqlAvailable = true
+            console.log('[BACKUPS RESTORE] psql is available')
+          } catch (versionError) {
+            console.warn('[BACKUPS RESTORE] psql not available, will use database connection:', versionError)
+            psqlAvailable = false
+          }
+          
+          if (psqlAvailable) {
+            try {
+              // Use single transaction to avoid partial state; allow clean statements in dump
+              await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
+              console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath} using psql`)
+            } catch (psqlError: any) {
+              console.warn('[BACKUPS RESTORE] psql failed, falling back to database connection:', psqlError.message)
+              console.log('[BACKUPS RESTORE] Attempting to execute SQL directly via database connection...')
+              psqlAvailable = false // Fall through to database connection approach
+            }
+          }
+          
+          if (!psqlAvailable) {
             // Fallback: Try to execute SQL directly via database connection
             try {
-              // Split SQL into statements
-              const statements = sqlContent
-                .split(';')
-                .map(s => s.trim())
-                .filter(s => s.length > 0 && !s.startsWith('--'))
+              // Parse SQL into statements - handle pg_dump format carefully
+              const lines = sqlContent.split('\n')
+              const statements: string[] = []
+              let currentStatement = ''
+              
+              for (const line of lines) {
+                const trimmedLine = line.trim()
+                
+                // Skip comment lines
+                if (trimmedLine.startsWith('--') || trimmedLine.length === 0) {
+                  continue
+                }
+                
+                currentStatement += (currentStatement ? '\n' : '') + line
+                
+                // If line ends with semicolon, it's a complete statement
+                if (trimmedLine.endsWith(';')) {
+                  const statement = currentStatement.trim()
+                  if (statement.length > 0) {
+                    statements.push(statement)
+                  }
+                  currentStatement = ''
+                }
+              }
+              
+              // Add any remaining statement
+              if (currentStatement.trim().length > 0) {
+                statements.push(currentStatement.trim())
+              }
               
               console.log(`[BACKUPS RESTORE] Parsed ${statements.length} SQL statements from pg_dump format`)
               
@@ -372,6 +424,7 @@ export async function POST(request: NextRequest) {
               }
               
               // Execute statements in a transaction
+              // For pg_dump format, we need to handle DROP statements more gracefully
               await db.transaction(async (client) => {
                 let executedCount = 0
                 for (const statement of statements) {
@@ -383,13 +436,23 @@ export async function POST(request: NextRequest) {
                         console.log(`[BACKUPS RESTORE] Executed ${executedCount}/${statements.length} statements...`)
                       }
                     } catch (stmtError: any) {
-                      // Skip errors for statements that might already exist (like CREATE EXTENSION)
-                      if (stmtError.code === '42P07' || stmtError.code === '42710') {
-                        console.log(`[BACKUPS RESTORE] Skipping statement (already exists): ${stmtError.code}`)
+                      // Skip errors for statements that might already exist or have dependencies
+                      // DROP statements in pg_dump can fail due to dependencies - this is often OK
+                      if (stmtError.code === '42P07' || stmtError.code === '42710' || 
+                          stmtError.code === '2BP01' || stmtError.code === '42P16' || 
+                          stmtError.code === '42P17') {
+                        console.log(`[BACKUPS RESTORE] Skipping statement (dependency or already exists): ${stmtError.code} - ${stmtError.message.substring(0, 100)}`)
+                        executedCount++
+                        continue
+                      }
+                      // For other errors, log but continue if it's a DROP statement
+                      if (statement.toUpperCase().includes('DROP') && stmtError.code) {
+                        console.warn(`[BACKUPS RESTORE] DROP statement failed (may be OK): ${stmtError.code} - ${stmtError.message.substring(0, 100)}`)
                         executedCount++
                         continue
                       }
                       console.error(`[BACKUPS RESTORE] Error executing statement ${executedCount + 1}/${statements.length}:`, stmtError.message)
+                      console.error(`[BACKUPS RESTORE] Error code: ${stmtError.code}`)
                       console.error(`[BACKUPS RESTORE] Statement was: ${statement.substring(0, 300)}...`)
                       throw stmtError
                     }
@@ -401,7 +464,8 @@ export async function POST(request: NextRequest) {
               console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath} using database connection fallback`)
             } catch (fallbackError: any) {
               console.error('[BACKUPS RESTORE] Database connection fallback also failed:', fallbackError)
-              throw new Error(`Both psql and database connection restore failed. psql error: ${psqlError.message}, fallback error: ${fallbackError.message}`)
+              const psqlMsg = psqlAvailable ? 'psql was available but failed' : 'psql was not available'
+              throw new Error(`Database restore failed: ${fallbackError.message}. ${psqlMsg}.`)
             }
           }
         }

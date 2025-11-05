@@ -95,16 +95,36 @@ export default function DataBackupsPage() {
     try {
       const fd = new FormData()
       fd.append('file', file)
+      console.log('[UI] Starting restore for file:', file.name)
       const res = await fetch('/api/backups/restore', { method: 'POST', body: fd, credentials: 'include' })
       const json = await res.json()
+      console.log('[UI] Restore response:', json)
+      
       if (json.success) {
-        toast({ title: 'Restore completed', description: 'Data and files have been restored.' })
+        toast({ title: 'Restore completed', description: json.message || 'Data and files have been restored.' })
+        fetchBackups() // Refresh the backup list
       } else {
-        toast({ title: 'Restore failed', description: json.error || 'Could not restore backup', variant: 'destructive' })
+        const errorMsg = json.error || 'Could not restore backup'
+        console.error('[UI] Restore failed:', errorMsg, json.details)
+        toast({ 
+          title: 'Restore failed', 
+          description: errorMsg + (json.details ? `\n\nDetails: ${json.details.substring(0, 200)}` : ''), 
+          variant: 'destructive',
+          duration: 10000 // Show for 10 seconds
+        })
       }
-    } catch {
-      toast({ title: 'Restore failed', description: 'Could not restore backup', variant: 'destructive' })
-    } finally { setRestoring(false); setStep("") }
+    } catch (error: any) {
+      console.error('[UI] Restore error:', error)
+      toast({ 
+        title: 'Restore failed', 
+        description: error?.message || 'Could not restore backup. Check server logs for details.', 
+        variant: 'destructive',
+        duration: 10000
+      })
+    } finally { 
+      setRestoring(false)
+      setStep("")
+    }
   }
 
   // If not authorized on initial load, do not show blocking message; header still renders

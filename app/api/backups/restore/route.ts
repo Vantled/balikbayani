@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
     ensureDir(extractDir)
 
     if (lower.endsWith('.zip')) {
-      // Extract zip via archiver's unzip is not available; use unzipper
-      const unzipper = await import('unzipper')
-      await new Promise<void>((resolve, reject) => {
-        fs.createReadStream(uploadPath)
-          .pipe(unzipper.Extract({ path: extractDir }))
-          .on('close', () => resolve())
-          .on('error', reject)
-      })
+      // Extract zip using adm-zip (already in dependencies)
+      try {
+        const AdmZip = (await import('adm-zip')).default as any
+        const zip = new AdmZip(uploadPath)
+        zip.extractAllTo(extractDir, true)
+      } catch (e) {
+        return NextResponse.json({ success: false, error: 'Failed to extract zip file' }, { status: 500 })
+      }
     } else if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
       const tarCmd = process.env.TAR_PATH && process.env.TAR_PATH.trim() !== '' ? process.env.TAR_PATH.trim() : 'tar'
       await run(tarCmd, ['-xzf', uploadPath, '-C', extractDir])

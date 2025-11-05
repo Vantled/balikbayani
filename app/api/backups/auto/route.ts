@@ -34,15 +34,24 @@ export async function POST(request: NextRequest) {
     const id = `${system}-auto-${yyyy}${mm}${dd}-${hh}${mi}${ampm}`
     const file = path.join(BACKUP_DIR, `${id}.sql`)
     // Simple logical backup: export all tables with data using INSERT statements
-    // Get all tables in public schema
+    // Get all tables in public schema (excluding system tables)
     const tablesResult = await db.query(`
       SELECT tablename 
       FROM pg_tables 
       WHERE schemaname = 'public' 
+      AND tablename NOT LIKE 'pg_%'
       ORDER BY tablename;
     `)
     
-    let backupContent = `-- BalikBayani logical backup (auto)\n-- Created at: ${now.toISOString()}\n-- Includes all tables from public schema\n\n`
+    const tableCount = tablesResult.rows.length
+    const tableNames = tablesResult.rows.map(r => r.tablename)
+    
+    console.log(`[BACKUP AUTO] Starting backup of ${tableCount} tables: ${tableNames.join(', ')}`)
+    
+    let backupContent = `-- BalikBayani logical backup (auto)\n-- Created at: ${now.toISOString()}\n-- Includes all ${tableCount} tables from public schema\n-- Tables: ${tableNames.join(', ')}\n\n`
+    
+    let exportedTables = 0
+    let totalRowsExported = 0
     
     // Export each table with its data
     for (const row of tablesResult.rows) {
@@ -90,15 +99,29 @@ export async function POST(request: NextRequest) {
             })
             backupContent += `INSERT INTO "${tableName}" (${columnList}) VALUES\n${values.join(',\n')};\n\n`
           }
+          
+          totalRowsExported += dataResult.rows.length
         }
       } else {
         backupContent += `-- No data in ${tableName}\n`
       }
+      
+      exportedTables++
     }
     
+    backupContent += `\n-- Backup Summary\n-- Total tables: ${exportedTables}\n-- Total rows exported: ${totalRowsExported}\n-- Backup completed at: ${now.toISOString()}\n`
+    
     fs.writeFileSync(file, backupContent, 'utf8')
-    console.log(`[BACKUPS] Auto backup created: ${id}.zip`)
-    return NextResponse.json({ success: true, id })
+    console.log(`[BACKUPS] Auto backup created: ${id}.sql (${exportedTables} tables, ${totalRowsExported} rows)`)
+    return NextResponse.json({ 
+      success: true, 
+      id,
+      tables: {
+        total: exportedTables,
+        names: tableNames,
+        rowsExported: totalRowsExported
+      }
+    })
   } catch (e) {
     console.error('Auto backup failed', e)
     return NextResponse.json({ success: false, error: 'Auto backup failed' }, { status: 500 })

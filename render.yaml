@@ -55,7 +55,7 @@ services:
           property: password
 
 # Managed Postgres database
-# In production, ssl is enabled by your app code when NODE_ENV=production
+# SSL is disabled by default. Enable via DB_SSL=true or DB_SSL_REQUIRED=true if needed
 # (see lib/database.ts ssl config)
 databases:
   - name: bb-postgres

@@ -89,7 +89,7 @@ export async function POST(
     }
 
     // If a confirmation document already exists and no override flag, return 409
-    const docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
+    let docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
     const existing = (docs as any[]).find(d => String((d as any).document_type) === 'confirmation')
     if (existing && !override) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Confirmation already exists', data: { existingId: existing.id } }, { status: 409 })
@@ -97,9 +97,9 @@ export async function POST(
     // If overriding, remove existing record before writing a new one
     if (existing && override) {
       try { await DatabaseService.deleteDocumentById((existing as any).id) } catch {}
+      // Refetch docs after deletion to get fresh data
+      docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
     }
-
-    const docs = await DatabaseService.getDocumentsByApplication(id, 'direct_hire')
     const common = buildDirectHireDocxData(application as any, docs as any)
     const report = await createReport({
       template,

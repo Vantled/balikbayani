@@ -59,10 +59,16 @@ npm run db:init-complete
 npm run db:init-complete-alt
 ```
 
-5. **Start development server:**
+5. **Start development server (for development only)**
 ```bash
 npm run dev
 ```
+5.5. **Start production server (for production, ahs better performance)**
+```powershell
+npm run build
+npm run start
+```
+
 
 6. **Access the application:**
 Open [http://localhost:3000](http://localhost:3000) in your browser.

@@ -42,7 +42,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     if (lower.endsWith('.zip')) {
       try {
-        const AdmZip = (await import('adm-zip')).default as any
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const AdmZip = require('adm-zip')
         const zip = new AdmZip(filePath)
         zip.extractAllTo(extractDir, true)
       } catch (e) {

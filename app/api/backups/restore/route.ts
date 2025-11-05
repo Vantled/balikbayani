@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
       // Extract zip using adm-zip (already in dependencies)
       console.log('[BACKUPS RESTORE] Extracting ZIP file...')
       try {
-        const AdmZip = (await import('adm-zip')).default as any
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const AdmZip = require('adm-zip')
         const zip = new AdmZip(uploadPath)
         zip.extractAllTo(extractDir, true)
         console.log('[BACKUPS RESTORE] ZIP file extracted successfully')
@@ -278,14 +279,22 @@ export async function POST(request: NextRequest) {
     
     console.log(`[BACKUPS RESTORE] ${message}`)
     
-    return NextResponse.json({ 
+    // Include restore summary in response for debugging
+    const responseData = { 
       success: true, 
       message: message,
       details: {
         databaseRestored: hadDumpSql,
-        uploadsRestored: uploadsRestored
+        uploadsRestored: uploadsRestored,
+        dumpSqlFound: hadDumpSql,
+        uploadsFound: uploadsRestored
       }
-    })
+    }
+    
+    // Log response data for debugging
+    console.log('[BACKUPS RESTORE] Response data:', JSON.stringify(responseData, null, 2))
+    
+    return NextResponse.json(responseData)
   } catch (e: any) {
     console.error('[BACKUPS RESTORE] Restore failed:', e)
     console.error('[BACKUPS RESTORE] Error stack:', e.stack)

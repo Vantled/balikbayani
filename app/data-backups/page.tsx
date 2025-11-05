@@ -101,7 +101,18 @@ export default function DataBackupsPage() {
       console.log('[UI] Restore response:', json)
       
       if (json.success) {
-        toast({ title: 'Restore completed', description: json.message || 'Data and files have been restored.' })
+        // Show detailed restore summary
+        const details = json.details || {}
+        const detailsMsg = details.databaseRestored 
+          ? `Database: ✅ Restored | Files: ${details.uploadsRestored ? '✅ Restored' : '❌ Not found'}`
+          : `Database: ❌ Skipped (no dump.sql) | Files: ${details.uploadsRestored ? '✅ Restored' : '❌ Not found'}`
+        
+        console.log('[UI] Restore completed:', json)
+        toast({ 
+          title: 'Restore completed', 
+          description: `${json.message || 'Data and files have been restored.'}\n\n${detailsMsg}`,
+          duration: 10000
+        })
         fetchBackups() // Refresh the backup list
       } else {
         const errorMsg = json.error || 'Could not restore backup'

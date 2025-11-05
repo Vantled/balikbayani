@@ -67,8 +67,28 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const AdmZip = require('adm-zip')
         const zip = new AdmZip(filePath)
+        
+        // List ZIP contents before extraction for debugging
+        const zipEntries = zip.getEntries()
+        console.log(`[BACKUPS RESTORE ID] ZIP file contains ${zipEntries.length} entries:`)
+        zipEntries.forEach((entry: any, idx: number) => {
+          console.log(`[BACKUPS RESTORE ID]   ${idx + 1}. ${entry.entryName} (${entry.isDirectory ? 'DIR' : 'FILE'})`)
+        })
+        
         zip.extractAllTo(extractDir, true)
         console.log('[BACKUPS RESTORE ID] ZIP file extracted successfully')
+        
+        // Immediately verify what was extracted
+        if (fs.existsSync(extractDir)) {
+          const immediateFiles = fs.readdirSync(extractDir)
+          console.log(`[BACKUPS RESTORE ID] Files immediately after extraction:`, immediateFiles)
+          
+          // Check for dump.sql and uploads immediately
+          const dumpSqlCheck = path.join(extractDir, 'dump.sql')
+          const uploadsCheck = path.join(extractDir, 'uploads')
+          console.log(`[BACKUPS RESTORE ID] dump.sql exists at root: ${fs.existsSync(dumpSqlCheck)}`)
+          console.log(`[BACKUPS RESTORE ID] uploads exists at root: ${fs.existsSync(uploadsCheck)}`)
+        }
       } catch (e: any) {
         console.error('[BACKUPS RESTORE ID] Failed to extract ZIP file:', e)
         return NextResponse.json({ success: false, error: `Failed to extract zip file: ${e.message || 'Unknown error'}` }, { status: 500 })
@@ -93,8 +113,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     // Restore uploads
     console.log('[BACKUPS RESTORE ID] Restoring uploads directory...')
     const uploadsDst = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads')
-    const uploadsSrc = path.join(extractDir, 'uploads')
-    if (fs.existsSync(uploadsSrc)) {
+    
+    // Check for uploads in multiple possible locations
+    const uploadsSrcCandidates = [
+      path.join(extractDir, 'uploads'),           // Root of extracted directory
+      path.join(extractDir, 'backup', 'uploads'), // In backup subdirectory
+    ]
+    
+    console.log(`[BACKUPS RESTORE ID] Checking for uploads directory in multiple locations:`)
+    uploadsSrcCandidates.forEach((candidate, idx) => {
+      console.log(`[BACKUPS RESTORE ID]   ${idx + 1}. ${candidate} - exists: ${fs.existsSync(candidate)}`)
+    })
+    
+    const uploadsSrc = uploadsSrcCandidates.find(p => fs.existsSync(p))
+    
+    if (uploadsSrc && fs.existsSync(uploadsSrc)) {
       console.log(`[BACKUPS RESTORE ID] Found uploads directory, copying from ${uploadsSrc} to ${uploadsDst}`)
       const copyRecursive = (src: string, dst: string) => {
         for (const entry of fs.readdirSync(src)) {
@@ -112,17 +145,87 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     // Restore DB if dump.sql exists
-    const dumpPath = path.join(extractDir, 'dump.sql')
-    console.log(`[BACKUPS RESTORE ID] Checking for dump.sql at: ${dumpPath}`)
-    console.log(`[BACKUPS RESTORE ID] dump.sql exists: ${fs.existsSync(dumpPath)}`)
+    // Check for dump.sql in multiple possible locations
+    const dumpPathCandidates = [
+      path.join(extractDir, 'dump.sql'),           // Root of extracted directory
+      path.join(extractDir, 'backup', 'dump.sql'), // In backup subdirectory
+      filePath.replace(/\.(zip|tar\.gz)$/i, '.sql') // Direct SQL file if backup was SQL
+    ]
     
-    // List all files in extractDir for debugging
+    console.log(`[BACKUPS RESTORE ID] Checking for dump.sql in multiple locations:`)
+    dumpPathCandidates.forEach((candidate, idx) => {
+      console.log(`[BACKUPS RESTORE ID]   ${idx + 1}. ${candidate} - exists: ${fs.existsSync(candidate)}`)
+    })
+    
+    // List all files in extractDir for debugging and search for dump.sql anywhere
+    let dumpPath: string | undefined = undefined
+    
     if (fs.existsSync(extractDir)) {
-      const files = fs.readdirSync(extractDir, { recursive: true })
-      console.log(`[BACKUPS RESTORE ID] Files in extractDir:`, files)
+      const listFilesRecursive = (dir: string, prefix = ''): { relative: string, absolute: string }[] => {
+        const files: { relative: string, absolute: string }[] = []
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true })
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name)
+            const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+            files.push({ relative: relativePath, absolute: fullPath })
+            if (entry.isDirectory()) {
+              files.push(...listFilesRecursive(fullPath, relativePath))
+            }
+          }
+        } catch (e) {
+          console.error(`[BACKUPS RESTORE ID] Error listing ${dir}:`, e)
+        }
+        return files
+      }
+      const files = listFilesRecursive(extractDir)
+      const fileNames = files.map(f => f.relative)
+      console.log(`[BACKUPS RESTORE ID] All files in extractDir (recursive):`, fileNames)
+      
+      // Look for dump.sql anywhere
+      const sqlFiles = files.filter(f => {
+        const lower = f.relative.toLowerCase()
+        return lower.includes('dump.sql') || (lower.endsWith('.sql') && !lower.includes('backup'))
+      })
+      
+      if (sqlFiles.length > 0) {
+        console.log(`[BACKUPS RESTORE ID] Found SQL files:`, sqlFiles.map(f => f.relative))
+        // Use the first SQL file found
+        dumpPath = sqlFiles[0].absolute
+        console.log(`[BACKUPS RESTORE ID] Using SQL file: ${dumpPath}`)
+      }
+      
+      // Also look for uploads directory anywhere
+      const uploadsDirs = files.filter(f => {
+        const lower = f.relative.toLowerCase()
+        return lower.includes('uploads') && fs.statSync(f.absolute).isDirectory()
+      })
+      
+      if (uploadsDirs.length > 0) {
+        console.log(`[BACKUPS RESTORE ID] Found uploads directories:`, uploadsDirs.map(f => f.relative))
+        // Add found uploads directories to candidates
+        uploadsDirs.forEach(uploadDir => {
+          if (!uploadsSrcCandidates.includes(uploadDir.absolute)) {
+            uploadsSrcCandidates.push(uploadDir.absolute)
+            console.log(`[BACKUPS RESTORE ID] Added uploads directory to candidates: ${uploadDir.absolute}`)
+          }
+        })
+      }
     }
     
-    if (fs.existsSync(dumpPath)) {
+    // If not found by searching, try candidate locations
+    if (!dumpPath) {
+      dumpPath = dumpPathCandidates.find(p => fs.existsSync(p))
+      if (dumpPath) {
+        console.log(`[BACKUPS RESTORE ID] Found dump.sql in candidate location: ${dumpPath}`)
+      }
+    }
+    
+    if (!dumpPath) {
+      console.warn('[BACKUPS RESTORE ID] WARNING: dump.sql not found in any location')
+    }
+    
+    if (dumpPath && fs.existsSync(dumpPath)) {
       const fileSize = fs.statSync(dumpPath).size
       console.log(`[BACKUPS RESTORE ID] Found dump.sql, size: ${fileSize} bytes`)
       
@@ -305,9 +408,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     // Verify what was actually restored
-    const dumpPathCheck = path.join(extractDir, 'dump.sql')
-    const hadDumpSql = fs.existsSync(dumpPathCheck)
-    const uploadsRestored = fs.existsSync(uploadsSrc)
+    const dumpPathCheck = dumpPath || path.join(extractDir, 'dump.sql')
+    const hadDumpSql = dumpPath ? fs.existsSync(dumpPath) : false
+    const uploadsRestored = uploadsSrc ? fs.existsSync(uploadsSrc) : false
     
     console.log('[BACKUPS RESTORE ID] Restore summary:')
     console.log(`[BACKUPS RESTORE ID] - dump.sql found in backup: ${hadDumpSql ? 'Yes' : 'No'}`)

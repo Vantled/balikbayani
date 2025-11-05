@@ -33,12 +33,70 @@ export async function POST(request: NextRequest) {
     const mi = pad(now.getMinutes())
     const id = `${system}-auto-${yyyy}${mm}${dd}-${hh}${mi}${ampm}`
     const file = path.join(BACKUP_DIR, `${id}.sql`)
-    const res = await db.query(`
-      SELECT string_agg(format('CREATE TABLE IF NOT EXISTS %I.%I AS TABLE %I.%I;', schemaname, tablename, schemaname, tablename), '\n') AS sql
-      FROM pg_tables WHERE schemaname = 'public';
+    // Simple logical backup: export all tables with data using INSERT statements
+    // Get all tables in public schema
+    const tablesResult = await db.query(`
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public' 
+      ORDER BY tablename;
     `)
-    const content = `-- BalikBayani logical backup (auto)\n-- Created at: ${now.toISOString()}\n\n${res.rows?.[0]?.sql || '-- no tables'}\n`
-    fs.writeFileSync(file, content, 'utf8')
+    
+    let backupContent = `-- BalikBayani logical backup (auto)\n-- Created at: ${now.toISOString()}\n-- Includes all tables from public schema\n\n`
+    
+    // Export each table with its data
+    for (const row of tablesResult.rows) {
+      const tableName = row.tablename
+      
+      // Get table structure
+      const structureResult = await db.query(`
+        SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position;
+      `, [tableName])
+      
+      // Get row count
+      const countResult = await db.query(`SELECT COUNT(*) as count FROM ${tableName}`)
+      const rowCount = parseInt(countResult.rows[0].count)
+      
+      backupContent += `\n-- Table: ${tableName} (${rowCount} rows)\n`
+      
+      if (rowCount > 0) {
+        // Export data using INSERT statements
+        const dataResult = await db.query(`SELECT * FROM ${tableName} ORDER BY (SELECT NULL)`)
+        
+        if (dataResult.rows.length > 0) {
+          // Build INSERT statements
+          const columns = structureResult.rows.map(col => col.column_name)
+          const columnList = columns.map(col => `"${col}"`).join(', ')
+          
+          backupContent += `\n-- Data for ${tableName}\n`
+          
+          // Insert in batches to avoid huge statements
+          const batchSize = 100
+          for (let i = 0; i < dataResult.rows.length; i += batchSize) {
+            const batch = dataResult.rows.slice(i, i + batchSize)
+            const values = batch.map(row => {
+              const vals = columns.map(col => {
+                const val = row[col]
+                if (val === null) return 'NULL'
+                if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`
+                if (val instanceof Date) return `'${val.toISOString()}'`
+                if (typeof val === 'object') return `'${JSON.stringify(val).replace(/'/g, "''")}'`
+                return String(val)
+              })
+              return `(${vals.join(', ')})`
+            })
+            backupContent += `INSERT INTO "${tableName}" (${columnList}) VALUES\n${values.join(',\n')};\n\n`
+          }
+        }
+      } else {
+        backupContent += `-- No data in ${tableName}\n`
+      }
+    }
+    
+    fs.writeFileSync(file, backupContent, 'utf8')
     console.log(`[BACKUPS] Auto backup created: ${id}.zip`)
     return NextResponse.json({ success: true, id })
   } catch (e) {

@@ -57,8 +57,11 @@ export default function LoginPage() {
       const result = await login(username, password)
       if (result.success) {
         const redirect = searchParams?.get("from") || "/dashboard"
-        // Navigate with success indicator
-        router.push(`${redirect}?loginSuccess=true`)
+        // Wait a bit for cookies to be set before navigating
+        // Use window.location instead of router.push to ensure cookies are available
+        await new Promise(resolve => setTimeout(resolve, 100))
+        // Use window.location.href to force a full page reload, ensuring cookies are available
+        window.location.href = `${redirect}?loginSuccess=true`
       } else {
         setError(result.error || "Invalid username or password.")
         toast({

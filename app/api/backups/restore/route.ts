@@ -149,7 +149,18 @@ export async function POST(request: NextRequest) {
         // For simple backups with INSERT statements, we can use the database connection directly
         // This avoids requiring psql to be installed on the new device
         const sqlContent = fs.readFileSync(dumpPath, 'utf8')
-        const isSimpleBackup = sqlContent.includes('-- BalikBayani logical backup') && sqlContent.includes('INSERT INTO')
+        console.log(`[BACKUPS RESTORE] SQL file preview (first 1000 chars): ${sqlContent.substring(0, 1000)}`)
+        
+        // Detect backup format - check for our simple backup markers
+        const isSimpleBackup = sqlContent.includes('-- BalikBayani logical backup') || 
+                               sqlContent.includes('INSERT INTO') ||
+                               (sqlContent.includes('CREATE TABLE') === false && sqlContent.length > 0)
+        
+        console.log(`[BACKUPS RESTORE] Backup format detection:`)
+        console.log(`[BACKUPS RESTORE] - Contains '-- BalikBayani logical backup': ${sqlContent.includes('-- BalikBayani logical backup')}`)
+        console.log(`[BACKUPS RESTORE] - Contains 'INSERT INTO': ${sqlContent.includes('INSERT INTO')}`)
+        console.log(`[BACKUPS RESTORE] - Contains 'CREATE TABLE': ${sqlContent.includes('CREATE TABLE')}`)
+        console.log(`[BACKUPS RESTORE] - Detected as simple backup: ${isSimpleBackup}`)
         
         if (isSimpleBackup) {
           // Simple backup with INSERT statements - execute directly via database connection
@@ -232,12 +243,65 @@ export async function POST(request: NextRequest) {
             throw new Error(`Database restore failed: ${errorMessage}${errorDetails}`)
           }
         } else {
-          // Full backup (pg_dump format) - use psql
-          console.log('[BACKUPS RESTORE] Detected full backup format (pg_dump), using psql')
+          // Full backup (pg_dump format) - try psql first, fallback to database connection
+          console.log('[BACKUPS RESTORE] Detected full backup format (pg_dump), trying psql first...')
           console.log('[BACKUPS RESTORE] Executing psql command...')
-          // Use single transaction to avoid partial state; allow clean statements in dump
-          await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
-          console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath}`)
+          
+          try {
+            // Use single transaction to avoid partial state; allow clean statements in dump
+            await run(psqlCmd, ['-v', 'ON_ERROR_STOP=1', '-h', host, '-p', port, '-U', userName, '-d', dbName, '-f', dumpPath], { ...process.env, PGPASSWORD: pass })
+            console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath} using psql`)
+          } catch (psqlError: any) {
+            console.warn('[BACKUPS RESTORE] psql failed, falling back to database connection:', psqlError.message)
+            console.log('[BACKUPS RESTORE] Attempting to execute SQL directly via database connection...')
+            
+            // Fallback: Try to execute SQL directly via database connection
+            try {
+              // Split SQL into statements
+              const statements = sqlContent
+                .split(';')
+                .map(s => s.trim())
+                .filter(s => s.length > 0 && !s.startsWith('--'))
+              
+              console.log(`[BACKUPS RESTORE] Parsed ${statements.length} SQL statements from pg_dump format`)
+              
+              if (statements.length === 0) {
+                throw new Error('No SQL statements found in backup file')
+              }
+              
+              // Execute statements in a transaction
+              await db.transaction(async (client) => {
+                let executedCount = 0
+                for (const statement of statements) {
+                  if (statement.trim()) {
+                    try {
+                      await client.query(statement)
+                      executedCount++
+                      if (executedCount % 100 === 0) {
+                        console.log(`[BACKUPS RESTORE] Executed ${executedCount}/${statements.length} statements...`)
+                      }
+                    } catch (stmtError: any) {
+                      // Skip errors for statements that might already exist (like CREATE EXTENSION)
+                      if (stmtError.code === '42P07' || stmtError.code === '42710') {
+                        console.log(`[BACKUPS RESTORE] Skipping statement (already exists): ${stmtError.code}`)
+                        executedCount++
+                        continue
+                      }
+                      console.error(`[BACKUPS RESTORE] Error executing statement ${executedCount + 1}/${statements.length}:`, stmtError.message)
+                      console.error(`[BACKUPS RESTORE] Statement was: ${statement.substring(0, 300)}...`)
+                      throw stmtError
+                    }
+                  }
+                }
+                console.log(`[BACKUPS RESTORE] Successfully executed ${executedCount}/${statements.length} statements`)
+              })
+              
+              console.log(`[BACKUPS RESTORE] DB restore completed from ${dumpPath} using database connection fallback`)
+            } catch (fallbackError: any) {
+              console.error('[BACKUPS RESTORE] Database connection fallback also failed:', fallbackError)
+              throw new Error(`Both psql and database connection restore failed. psql error: ${psqlError.message}, fallback error: ${fallbackError.message}`)
+            }
+          }
         }
       } catch (restoreError: any) {
         console.error('[BACKUPS RESTORE] Database restore failed:', restoreError)

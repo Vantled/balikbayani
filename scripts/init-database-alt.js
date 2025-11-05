@@ -627,7 +627,8 @@ async function initializeDatabase() {
       { file: 'migrations/remove_contact_number_from_job_fairs.sql', desc: 'Removing contact number from job fairs' },
       { file: 'migrations/add_dmw_staff_to_job_fair_monitoring.sql', desc: 'Adding DMW staff assigned field to job fair monitoring' },
       { file: 'migrations/create_system_reports_certificates_table.sql', desc: 'Creating system reports certificates table' },
-      { file: 'migrations/20251028_add_deleted_at_information_sheet.sql', desc: 'Adding deleted_at to information_sheet_records' }
+      { file: 'migrations/20251028_add_deleted_at_information_sheet.sql', desc: 'Adding deleted_at to information_sheet_records' },
+      { file: 'migrations/20250128_add_user_permissions.sql', desc: 'Creating user_permissions table' }
     ];
 
     for (const migration of migrations) {
@@ -763,7 +764,7 @@ async function initializeDatabase() {
     `);
 
     // Verify critical tables exist
-    const requiredTables = ['user_sessions', 'system_reports_certificates'];
+    const requiredTables = ['user_sessions', 'system_reports_certificates', 'user_permissions'];
     const existingTableNames = tables.map(t => t.table_name);
     const missingTables = requiredTables.filter(table => !existingTableNames.includes(table));
     

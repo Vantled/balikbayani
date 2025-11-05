@@ -2876,6 +2876,13 @@ export class DatabaseService {
       infoSheet: number
       total: number
     }
+    quarterToDate: {
+      directHire: number
+      clearance: number
+      govToGov: number
+      infoSheet: number
+      total: number
+    }
     yearToDate: {
       directHire: number
       clearance: number
@@ -2889,6 +2896,9 @@ export class DatabaseService {
       const monthEnd = new Date(year, month, 0, 23, 59, 59, 999)
       const yearStart = new Date(year, 0, 1, 0, 0, 0, 0)
       const yearEnd = new Date(year, month, 0, 23, 59, 59, 999)
+      const quarterStartMonth = Math.floor((month - 1) / 3) * 3
+      const quarterStart = new Date(year, quarterStartMonth, 1)
+      const quarterEnd = new Date(year, month, 0, 23, 59, 59, 999)
 
       const breakdown = await db.transaction(async (client) => {
         // Monthly counts
@@ -2913,6 +2923,31 @@ export class DatabaseService {
           client.query(
             'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
             [monthStart, monthEnd]
+          )
+        ])
+
+        // Quarter-to-date counts
+        const [
+          qDirectHire,
+          qClearance,
+          qGovToGov,
+          qInfoSheet
+        ] = await Promise.all([
+          client.query(
+            'SELECT COUNT(*) FROM direct_hire_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
+          ),
+          client.query(
+            'SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL AND created_at >= $1 AND created_at <= $2',
+            [quarterStart, quarterEnd]
           )
         ])
 
@@ -2952,6 +2987,17 @@ export class DatabaseService {
                  parseInt(monthlyInfoSheet.rows[0].count)
         }
 
+        const quarterToDate = {
+          directHire: parseInt(qDirectHire.rows[0].count),
+          clearance: parseInt(qClearance.rows[0].count),
+          govToGov: parseInt(qGovToGov.rows[0].count),
+          infoSheet: parseInt(qInfoSheet.rows[0].count),
+          total: parseInt(qDirectHire.rows[0].count) +
+                 parseInt(qClearance.rows[0].count) +
+                 parseInt(qGovToGov.rows[0].count) +
+                 parseInt(qInfoSheet.rows[0].count)
+        }
+
         const yearToDate = {
           directHire: parseInt(yearDirectHire.rows[0].count),
           clearance: parseInt(yearClearance.rows[0].count),
@@ -2963,7 +3009,7 @@ export class DatabaseService {
                  parseInt(yearInfoSheet.rows[0].count)
         }
 
-        return { monthly, yearToDate }
+        return { monthly, quarterToDate, yearToDate }
       })
 
       return breakdown
@@ -2983,7 +3029,7 @@ export class DatabaseService {
     file_path: string
     file_size: number
     mime_type: string
-    created_by: string
+    created_by: string | null
   }): Promise<any> {
     try {
       const { rows } = await db.query(
@@ -2996,6 +3042,22 @@ export class DatabaseService {
       return rows[0]
     } catch (error) {
       console.error('Error creating system report certificate:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get system report certificate by month/year
+   */
+  static async getSystemReportCertificateByMonthYear(month: number, year: number): Promise<any | null> {
+    try {
+      const { rows } = await db.query(
+        `SELECT * FROM system_reports_certificates WHERE month = $1 AND year = $2 LIMIT 1`,
+        [month, year]
+      )
+      return rows[0] || null
+    } catch (error) {
+      console.error('Error getting system report certificate by month/year:', error)
       throw error
     }
   }

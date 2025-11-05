@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { getUser, isAdmin } from "@/lib/auth"
-import { FileDown, Calendar, Trash2, Download as DownloadIcon } from "lucide-react"
+import { FileDown, Calendar, Trash2, Download as DownloadIcon, Eye } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface Certificate {
@@ -46,6 +46,7 @@ export default function SystemReportsPage() {
   const [certificateToDelete, setCertificateToDelete] = useState<Certificate | null>(null)
   const [deleteInput, setDeleteInput] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
 
   useEffect(() => {
     const user = getUser()
@@ -230,6 +231,24 @@ export default function SystemReportsPage() {
     return monthNames[monthNum - 1] || ""
   }
 
+  const handleOpenInWord = (cert: Certificate) => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const docUrl = `${origin}/api/system-reports/certificates/${cert.id}/file.docx`
+      const protocolUrl = `ms-word:ofe|u|${encodeURI(docUrl)}`
+      const iframe = document.createElement('iframe')
+      iframe.style.display = 'none'
+      iframe.width = '0'
+      iframe.height = '0'
+      document.body.appendChild(iframe)
+      iframe.src = protocolUrl
+      setTimeout(() => { try { document.body.removeChild(iframe) } catch {} }, 3000)
+    } catch (_e) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      window.open(`${origin}/api/system-reports/certificates/${cert.id}/open.docx?return=/system-reports`, '_blank')
+    }
+  }
+
   if (!mounted) {
     return null
   }
@@ -251,10 +270,10 @@ export default function SystemReportsPage() {
     )
   }
 
-  // Filter certificates based on search (client-side filtering)
+  // Filter certificates based on search only (client-side)
   const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const filtered = terms.length === 0 
-    ? certificates 
+  const filtered = terms.length === 0
+    ? certificates
     : certificates.filter(c => {
         const hay = `${c.file_name} ${getMonthName(c.month)} ${c.year} ${c.created_by_name || ''}`.toLowerCase()
         return terms.every(t => hay.includes(t))
@@ -273,22 +292,16 @@ export default function SystemReportsPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-[#1976D2]">System Reports</h1>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="month" className="text-sm">Month</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  id="month"
-                  type="month"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  className="pl-10 w-48"
-                />
-              </div>
-            </div>
+            {/* Search */}
+            <input
+              className="border rounded px-3 py-2 text-sm w-48 md:w-80"
+              placeholder="Search filename, month, year..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            />
             <Button
-              onClick={generateCertificate}
-              disabled={!month || generating}
+              onClick={() => setGenerateDialogOpen(true)}
+              disabled={generating}
               className="flex items-center gap-2"
             >
               <FileDown className="h-4 w-4" />
@@ -297,28 +310,55 @@ export default function SystemReportsPage() {
           </div>
         </div>
 
-        {/* Search and page size */}
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <input
-            className="border rounded px-3 py-2 text-sm w-full md:w-80"
-            placeholder="Search filename, month, year, or creator..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-          />
-          <div className="text-xs text-gray-600 flex items-center gap-2">
-            <span>Rows:</span>
-            <select 
-              className="border rounded px-2 py-1" 
-              value={pageSize} 
-              onChange={(e) => { setPageSize(Number(e.target.value) || 10); setPage(1) }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-        </div>
+        {/* Top pagination (outside table container) */}
+        {(() => {
+          const total = filtered.length
+          const totalPages = Math.max(1, Math.ceil(total / pageSize))
+          const curPage = Math.min(page, totalPages)
+          return total > 0 ? (
+            <div className="mb-3 flex items-center justify-between text-sm text-gray-600">
+              <div>Page {curPage} of {totalPages} ({total} certificates)</div>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const pages: (number | 'ellipsis')[] = []
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i)
+                  } else {
+                    let startPage = Math.max(1, curPage - 2)
+                    let endPage = Math.min(totalPages, startPage + 4)
+                    if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4)
+                    if (startPage > 1) {
+                      pages.push(1)
+                      if (startPage > 2) pages.push('ellipsis')
+                    }
+                    for (let i = startPage; i <= endPage; i++) pages.push(i)
+                    if (endPage < totalPages) {
+                      if (endPage < totalPages - 1) pages.push('ellipsis')
+                      pages.push(totalPages)
+                    }
+                  }
+                  return (
+                    <>
+                      {pages.map((p, idx) => p === 'ellipsis' ? (
+                        <span key={`e-${idx}`} className="px-2 text-gray-500">...</span>
+                      ) : (
+                        <Button
+                          key={p}
+                          variant={p === curPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setPage(p as number)}
+                          className="min-w-[40px] h-8"
+                        >
+                          {p}
+                        </Button>
+                      ))}
+                    </>
+                  )
+                })()}
+              </div>
+            </div>
+          ) : null
+        })()}
 
         {/* Certificates Table */}
         <div className="bg-white border rounded-md overflow-hidden">
@@ -348,9 +388,16 @@ export default function SystemReportsPage() {
                       {(cert.file_size / (1024 * 1024)).toFixed(2)} MB
                     </div>
                     <div className="col-span-2 text-center text-gray-500">
-                      {new Date(cert.created_at).toLocaleString()}
+                      {new Date(cert.created_at).toLocaleString([], { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </div>
                     <div className="col-span-2 text-center flex items-center justify-center gap-3">
+                      <button
+                        className="text-[#1976D2] inline-flex items-center rounded-sm p-1 hover:bg-gray-100"
+                        onClick={() => handleOpenInWord(cert)}
+                        title="Open in Word"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
                       <a
                         className="text-[#1976D2] inline-flex items-center rounded-sm p-1 hover:bg-gray-100"
                         href={`/api/system-reports/certificates/${cert.id}`}
@@ -373,54 +420,49 @@ export default function SystemReportsPage() {
                   </div>
                 ))}
               </div>
-              {/* Pagination */}
-              {total > 0 && (
-                <div className="px-4 py-3 flex items-center justify-between text-sm text-gray-600 border-t">
-                  <div>Page {curPage} of {totalPages} ({total} certificates)</div>
-                  <div className="flex items-center gap-1">
-                    {(() => {
-                      const pages: (number | 'ellipsis')[] = []
-                      if (totalPages <= 7) {
-                        for (let i = 1; i <= totalPages; i++) pages.push(i)
-                      } else {
-                        let startPage = Math.max(1, curPage - 2)
-                        let endPage = Math.min(totalPages, startPage + 4)
-                        if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4)
-                        if (startPage > 1) {
-                          pages.push(1)
-                          if (startPage > 2) pages.push('ellipsis')
-                        }
-                        for (let i = startPage; i <= endPage; i++) pages.push(i)
-                        if (endPage < totalPages) {
-                          if (endPage < totalPages - 1) pages.push('ellipsis')
-                          pages.push(totalPages)
-                        }
-                      }
-                      return (
-                        <>
-                          {pages.map((p, idx) => p === 'ellipsis' ? (
-                            <span key={`e-${idx}`} className="px-2 text-gray-500">...</span>
-                          ) : (
-                            <Button
-                              key={p}
-                              variant={p === curPage ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setPage(p as number)}
-                              className="min-w-[40px] h-8"
-                            >
-                              {p}
-                            </Button>
-                          ))}
-                        </>
-                      )
-                    })()}
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
       </main>
+
+      {/* Generate Certificate Dialog */}
+      <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Certificate</DialogTitle>
+            <DialogDescription>
+              Select the month and year to generate the utilization certificate for.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="gen-month" className="text-sm">Month/Year</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="gen-month"
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="pl-10 w-48"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setGenerateDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={async () => {
+                  await generateCertificate()
+                  setGenerateDialogOpen(false)
+                }}
+                disabled={!month || generating}
+              >
+                {generating ? 'Generating...' : 'Generate'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

@@ -1007,6 +1007,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                     <div className="font-medium">{selected.position}</div>
                   </div>
                   <div>
+                    <div className="text-gray-500">Employer:</div>
+                    <div className="font-medium">{(selected as any).employer || 'N/A'}</div>
+                  </div>
+                  <div>
                     <div className="text-gray-500">Salary (per month):</div>
                     <div className="font-medium">
                       {(() => {

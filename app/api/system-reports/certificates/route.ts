@@ -2,10 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { ApiResponse } from '@/lib/types'
+import { initSystemReportsScheduler } from '@/lib/schedulers/system-reports-scheduler'
 import { checkAdmin } from '@/lib/check-admin'
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
+    // Initialize lightweight scheduler (idempotent)
+    initSystemReportsScheduler()
     // Check admin access
     const { isAdmin: userIsAdmin } = await checkAdmin(request)
     if (!userIsAdmin) {

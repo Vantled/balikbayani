@@ -758,6 +758,7 @@ export default function BalikManggagawaPage() {
         { key: 'monthsYearsYears', label: 'Year(s)', required: true, inputType: 'number' },
         { key: 'monthsYearsMonths', label: 'Month(s)', required: true, inputType: 'number' },
         { key: 'employmentStartDate', label: 'Employment start date', required: true, inputType: 'date' },
+        { key: 'dateProcessed', label: 'Date Processed by the Employer', required: true, inputType: 'date' },
       ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
     }
     if (type === 'non_compliant_country') {
@@ -2041,14 +2042,16 @@ export default function BalikManggagawaPage() {
                         id="compliance-employmentDurationFrom"
                         type="date"
                         value={complianceFields['employmentDurationFrom'] || ''}
-                        max={todayIso}
                         onChange={(e) => {
                           const val = e.target.value
-                          if (val && val > todayIso) {
-                            setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: todayIso }))
-                            return
-                          }
-                          setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: val }))
+                          setComplianceFields(f => {
+                            const next = { ...f, ['employmentDurationFrom']: val }
+                            const until = next['employmentDurationUntil']
+                            if (val && until && val > until) {
+                              next['employmentDurationUntil'] = val
+                            }
+                            return next
+                          })
                         }}
                         className="w-full border rounded px-3 py-2 mt-1"
                       />
@@ -2059,14 +2062,14 @@ export default function BalikManggagawaPage() {
                         id="compliance-employmentDurationUntil"
                         type="date"
                         value={complianceFields['employmentDurationUntil'] || ''}
-                        max={todayIso}
+                        min={complianceFields['employmentDurationFrom'] || undefined}
                         onChange={(e) => {
                           const val = e.target.value
-                          if (val && val > todayIso) {
-                            setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: todayIso }))
-                            return
-                          }
-                          setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: val }))
+                          setComplianceFields(f => {
+                            const from = f['employmentDurationFrom'] || ''
+                            const nextVal = from && val && val < from ? from : val
+                            return { ...f, ['employmentDurationUntil']: nextVal }
+                          })
                         }}
                         className="w-full border rounded px-3 py-2 mt-1"
                       />
@@ -2136,14 +2139,16 @@ export default function BalikManggagawaPage() {
                         id="compliance-employmentDurationFrom"
                         type="date"
                         value={complianceFields['employmentDurationFrom'] || ''}
-                        max={todayIso}
                         onChange={(e) => {
                           const val = e.target.value
-                          if (val && val > todayIso) {
-                            setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: todayIso }))
-                            return
-                          }
-                          setComplianceFields(f => ({ ...f, ['employmentDurationFrom']: val }))
+                          setComplianceFields(f => {
+                            const next = { ...f, ['employmentDurationFrom']: val }
+                            const until = next['employmentDurationUntil']
+                            if (val && until && val > until) {
+                              next['employmentDurationUntil'] = val
+                            }
+                            return next
+                          })
                         }}
                         className="w-full border rounded px-3 py-2 mt-1"
                       />
@@ -2154,14 +2159,14 @@ export default function BalikManggagawaPage() {
                         id="compliance-employmentDurationUntil"
                         type="date"
                         value={complianceFields['employmentDurationUntil'] || ''}
-                        max={todayIso}
+                        min={complianceFields['employmentDurationFrom'] || undefined}
                         onChange={(e) => {
                           const val = e.target.value
-                          if (val && val > todayIso) {
-                            setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: todayIso }))
-                            return
-                          }
-                          setComplianceFields(f => ({ ...f, ['employmentDurationUntil']: val }))
+                          setComplianceFields(f => {
+                            const from = f['employmentDurationFrom'] || ''
+                            const nextVal = from && val && val < from ? from : val
+                            return { ...f, ['employmentDurationUntil']: nextVal }
+                          })
                         }}
                         className="w-full border rounded px-3 py-2 mt-1"
                       />
@@ -2649,6 +2654,8 @@ export default function BalikManggagawaPage() {
                         months_years: monthsYearsText,
                         employment_start_date: complianceFields['employmentStartDate'] || '',
                         employment_start_date_long: complianceFields['employmentStartDate'] ? toLongDate(complianceFields['employmentStartDate']) : '',
+                        processing_date: complianceFields['dateProcessed'] || '',
+                        processing_date_long: complianceFields['dateProcessed'] ? toLongDate(complianceFields['dateProcessed']) : '',
                       }
                     } else if (selectedComplianceType === 'seafarer_position') {
                       const fromDate = complianceFields['employmentDurationFrom'] || ''

@@ -109,30 +109,66 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
           console.log('[BACKUPS] Executing SQL directly via database connection (no psql required)')
           
           try {
-            // Split SQL into statements (handle INSERT statements that may span multiple lines)
-            const statements = sqlContent
-              .split(';')
-              .map(s => s.trim())
-              .filter(s => s.length > 0 && !s.startsWith('--'))
+            // Parse SQL statements properly - handle multi-line INSERT statements
+            // Split by semicolon followed by newline, but preserve multi-line statements
+            const lines = sqlContent.split('\n')
+            const statements: string[] = []
+            let currentStatement = ''
             
-            // Execute statements in a transaction
-            await db.query('BEGIN')
+            for (const line of lines) {
+              const trimmedLine = line.trim()
+              
+              // Skip comment lines
+              if (trimmedLine.startsWith('--') || trimmedLine.length === 0) {
+                continue
+              }
+              
+              currentStatement += (currentStatement ? '\n' : '') + line
+              
+              // If line ends with semicolon, it's a complete statement
+              if (trimmedLine.endsWith(';')) {
+                const statement = currentStatement.trim()
+                if (statement.length > 0) {
+                  statements.push(statement)
+                }
+                currentStatement = ''
+              }
+            }
             
-            try {
+            // Add any remaining statement
+            if (currentStatement.trim().length > 0) {
+              statements.push(currentStatement.trim())
+            }
+            
+            console.log(`[BACKUPS] Parsed ${statements.length} SQL statements`)
+            
+            // Execute statements in a transaction using the transaction helper
+            await db.transaction(async (client) => {
+              let executedCount = 0
               for (const statement of statements) {
                 if (statement.trim()) {
-                  await db.query(statement)
+                  try {
+                    await client.query(statement)
+                    executedCount++
+                    if (executedCount % 100 === 0) {
+                      console.log(`[BACKUPS] Executed ${executedCount} statements...`)
+                    }
+                  } catch (stmtError: any) {
+                    console.error(`[BACKUPS] Error executing statement ${executedCount + 1}:`, stmtError.message)
+                    console.error(`[BACKUPS] Statement was: ${statement.substring(0, 200)}...`)
+                    throw stmtError
+                  }
                 }
               }
-              await db.query('COMMIT')
-              console.log(`[BACKUPS] DB restore completed from ${dumpPath} (${statements.length} statements executed)`)
-            } catch (execError: any) {
-              await db.query('ROLLBACK')
-              throw execError
-            }
+              console.log(`[BACKUPS] Successfully executed ${executedCount} statements`)
+            })
+            
+            console.log(`[BACKUPS] DB restore completed from ${dumpPath}`)
           } catch (dbError: any) {
             console.error('[BACKUPS] Database restore via connection failed:', dbError)
-            throw new Error(`Database restore failed: ${dbError.message || 'Unknown error'}`)
+            const errorMessage = dbError.message || 'Unknown error'
+            const errorDetails = dbError.code ? ` (Error code: ${dbError.code})` : ''
+            throw new Error(`Database restore failed: ${errorMessage}${errorDetails}`)
           }
         } else {
           // Full backup (pg_dump format) - use psql

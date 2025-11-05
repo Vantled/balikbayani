@@ -625,7 +625,9 @@ async function initializeDatabase() {
       { file: 'migrations/update_peso_contacts_multiple_fields.sql', desc: 'Updating PESO contacts for multiple fields' },
       { file: 'migrations/update_pra_contacts_multiple_fields.sql', desc: 'Updating PRA contacts for multiple fields' },
       { file: 'migrations/remove_contact_number_from_job_fairs.sql', desc: 'Removing contact number from job fairs' },
-      { file: 'migrations/add_dmw_staff_to_job_fair_monitoring.sql', desc: 'Adding DMW staff assigned field to job fair monitoring' }
+      { file: 'migrations/add_dmw_staff_to_job_fair_monitoring.sql', desc: 'Adding DMW staff assigned field to job fair monitoring' },
+      { file: 'migrations/create_system_reports_certificates_table.sql', desc: 'Creating system reports certificates table' },
+      { file: 'migrations/20251028_add_deleted_at_information_sheet.sql', desc: 'Adding deleted_at to information_sheet_records' }
     ];
 
     for (const migration of migrations) {
@@ -760,8 +762,55 @@ async function initializeDatabase() {
       ORDER BY table_name
     `);
 
-    console.log(`✅ Database initialized successfully with ${tables.length} tables:`);
-    tables.forEach(table => {
+    // Verify critical tables exist
+    const requiredTables = ['user_sessions', 'system_reports_certificates'];
+    const existingTableNames = tables.map(t => t.table_name);
+    const missingTables = requiredTables.filter(table => !existingTableNames.includes(table));
+    
+    if (missingTables.length > 0) {
+      console.warn(`⚠️  Warning: Missing required tables: ${missingTables.join(', ')}`);
+      console.log('   Attempting to create missing tables...');
+      
+      // Create user_sessions if missing (it should be in schema.sql, but ensure it exists)
+      if (missingTables.includes('user_sessions')) {
+        try {
+          await db.query(`
+            CREATE TABLE IF NOT EXISTS user_sessions (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              session_token VARCHAR(255) UNIQUE NOT NULL,
+              ip_address INET,
+              user_agent TEXT,
+              expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          await db.query('CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(session_token)');
+          await db.query('CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)');
+          await db.query('CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at)');
+          console.log('   ✅ Created user_sessions table');
+        } catch (error) {
+          console.error(`   ❌ Failed to create user_sessions table: ${error.message}`);
+        }
+      }
+      
+      // system_reports_certificates should be created by the migration, but ensure it exists
+      if (missingTables.includes('system_reports_certificates')) {
+        console.warn('   ⚠️  system_reports_certificates should have been created by migration');
+        console.warn('   Please check if create_system_reports_certificates_table.sql was executed');
+      }
+    }
+
+    // Get updated table list
+    const { rows: updatedTables } = await db.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      ORDER BY table_name
+    `);
+
+    console.log(`✅ Database initialized successfully with ${updatedTables.length} tables:`);
+    updatedTables.forEach(table => {
       console.log(`   - ${table.table_name}`);
     });
 

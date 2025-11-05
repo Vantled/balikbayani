@@ -164,38 +164,6 @@ export interface BalikManggagawaClearance {
   updated_at: Date;
 }
 
-export interface BalikManggagawaProcessing {
-  id: string;
-  or_number: string;
-  name_of_worker: string;
-  sex: 'male' | 'female';
-  address: string;
-  destination: string;
-  clearance_type?: string;
-  clearance_id?: string;
-  personal_letter_file?: string;
-  valid_passport_file?: string;
-  work_visa_file?: string;
-  employment_contract_file?: string;
-  employment_certificate_file?: string;
-  last_arrival_email_file?: string;
-  flight_ticket_file?: string;
-  documents_completed?: boolean;
-  completed_at?: Date;
-  documents_submitted?: number;
-  counter_monitoring: CounterMonitoring[];
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface CounterMonitoring {
-  id: string;
-  processing_id: string;
-  counter_number: string;
-  time_in: Date[];
-  remarks: string;
-}
-
 export interface GovToGovApplication {
   id: string;
   last_name: string;

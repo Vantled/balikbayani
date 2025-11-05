@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
       `--if-exists`,
       `--no-owner`,
       `--no-privileges`,
+      `--exclude-table`, 'balik_manggagawa_processing',
+      `--exclude-table`, 'counter_monitoring',
       `-F`, 'p', // plain SQL
       `-f`, dumpPath,
     ]

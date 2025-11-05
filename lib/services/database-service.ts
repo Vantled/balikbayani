@@ -6,7 +6,6 @@ import {
   PermissionUpdateRequest,
   DirectHireApplication, 
   BalikManggagawaClearance,
-  BalikManggagawaProcessing,
   GovToGovApplication,
   InformationSheetRecord,
   JobFair,
@@ -644,11 +643,8 @@ export class DatabaseService {
     show_deleted_only?: boolean;
   }): Promise<PaginatedResponse<BalikManggagawaClearance>> {
     let query = `
-      SELECT c.*, p.personal_letter_file, p.valid_passport_file, p.work_visa_file,
-             p.employment_contract_file, p.employment_certificate_file, p.last_arrival_email_file,
-             p.flight_ticket_file, p.documents_completed, p.completed_at
+      SELECT c.*
       FROM balik_manggagawa_clearance c
-      LEFT JOIN balik_manggagawa_processing p ON c.id = p.clearance_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -803,11 +799,8 @@ export class DatabaseService {
 
   static async getBalikManggagawaClearanceById(id: string): Promise<BalikManggagawaClearance | null> {
     const { rows } = await db.query(`
-      SELECT c.*, p.personal_letter_file, p.valid_passport_file, p.work_visa_file,
-             p.employment_contract_file, p.employment_certificate_file, p.last_arrival_email_file,
-             p.flight_ticket_file, p.documents_completed, p.completed_at
+      SELECT c.*
       FROM balik_manggagawa_clearance c
-      LEFT JOIN balik_manggagawa_processing p ON c.id = p.clearance_id
       WHERE c.id = $1 AND c.deleted_at IS NULL
     `, [id]);
     return rows[0] || null;
@@ -970,9 +963,6 @@ export class DatabaseService {
     // First delete related documents
     await db.query('DELETE FROM documents WHERE application_id = $1 AND application_type = $2', [id, 'balik_manggagawa']);
     
-    // Delete related processing records
-    await db.query('DELETE FROM balik_manggagawa_processing WHERE clearance_id = $1', [id]);
-    
     // Then permanently delete the clearance
     const { rowCount } = await db.query('DELETE FROM balik_manggagawa_clearance WHERE id = $1', [id]);
     return (rowCount || 0) > 0;
@@ -1021,203 +1011,6 @@ export class DatabaseService {
         totalPages: Math.ceil(total / pagination.limit)
       }
     };
-  }
-
-  // Balik Manggagawa Processing
-  static async createProcessing(processingData: Omit<BalikManggagawaProcessing, 'id' | 'created_at' | 'updated_at'>): Promise<BalikManggagawaProcessing> {
-    const { rows } = await db.query(
-      'INSERT INTO balik_manggagawa_processing (or_number, name_of_worker, sex, address, destination) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [processingData.or_number, processingData.name_of_worker, processingData.sex, processingData.address, processingData.destination]
-    );
-    return rows[0];
-  }
-
-  static async createBalikManggagawaProcessing(processingData: {
-    nameOfWorker: string;
-    sex: 'male' | 'female';
-    address: string;
-    destination: string;
-    clearanceType?: string;
-    clearanceId?: string;
-  }): Promise<BalikManggagawaProcessing> {
-    // Generate OR number OR-YYYY-#### (daily incremental not required here)
-    const now = new Date();
-    const year = now.getFullYear();
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM balik_manggagawa_processing WHERE EXTRACT(YEAR FROM created_at) = $1', [year]);
-    const seq = String(parseInt(countRows[0].count) + 1).padStart(4, '0');
-    const orNumber = `OR-${year}-${seq}`;
-
-    const { rows } = await db.query(
-      'INSERT INTO balik_manggagawa_processing (or_number, name_of_worker, sex, address, destination, clearance_type, clearance_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [orNumber, processingData.nameOfWorker, processingData.sex, processingData.address, processingData.destination, processingData.clearanceType || null, processingData.clearanceId || null]
-    );
-    return rows[0];
-  }
-
-  static async getBalikManggagawaProcessingById(id: string): Promise<BalikManggagawaProcessing | null> {
-    const { rows } = await db.query(`
-      SELECT p.*, c.control_number as clearance_control_number, c.employer, c.salary, 
-             c.position, c.date_arrival, c.remarks
-      FROM balik_manggagawa_processing p
-      LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
-      WHERE p.id = $1
-    `, [id]);
-    return rows[0] || null;
-  }
-
-  static async updateBalikManggagawaProcessing(id: string, data: {
-    nameOfWorker?: string;
-    sex?: 'male' | 'female';
-    address?: string;
-    destination?: string;
-    personalLetterFile?: string;
-    validPassportFile?: string;
-    workVisaFile?: string;
-    employmentContractFile?: string;
-    employmentCertificateFile?: string;
-    lastArrivalEmailFile?: string;
-    flightTicketFile?: string;
-    documentsCompleted?: boolean;
-  }): Promise<BalikManggagawaProcessing | null> {
-    const { rows } = await db.query(
-      `UPDATE balik_manggagawa_processing SET 
-        name_of_worker = COALESCE($1, name_of_worker), 
-        sex = COALESCE($2, sex), 
-        address = COALESCE($3, address), 
-        destination = COALESCE($4, destination),
-        personal_letter_file = COALESCE($5, personal_letter_file),
-        valid_passport_file = COALESCE($6, valid_passport_file),
-        work_visa_file = COALESCE($7, work_visa_file),
-        employment_contract_file = COALESCE($8, employment_contract_file),
-        employment_certificate_file = COALESCE($9, employment_certificate_file),
-        last_arrival_email_file = COALESCE($10, last_arrival_email_file),
-        flight_ticket_file = COALESCE($11, flight_ticket_file),
-        documents_completed = COALESCE($12, documents_completed),
-        completed_at = CASE WHEN $12 = true THEN NOW() ELSE completed_at END,
-        updated_at = NOW() 
-       WHERE id = $13 RETURNING *`,
-      [
-        data.nameOfWorker, data.sex, data.address, data.destination,
-        data.personalLetterFile, data.validPassportFile, data.workVisaFile,
-        data.employmentContractFile, data.employmentCertificateFile,
-        data.lastArrivalEmailFile, data.flightTicketFile, data.documentsCompleted,
-        id
-      ]
-    );
-    return rows[0] || null;
-  }
-
-  static async deleteBalikManggagawaProcessing(id: string): Promise<boolean> {
-    const { rowCount } = await db.query('DELETE FROM balik_manggagawa_processing WHERE id = $1', [id]);
-    return (rowCount || 0) > 0;
-  }
-
-  static async getProcessingRecords(
-    pagination: PaginationOptions = { page: 1, limit: 10 },
-    filters?: { search?: string; types?: string; sexes?: string; dateFrom?: string; dateTo?: string; destination?: string; address?: string }
-  ): Promise<PaginatedResponse<BalikManggagawaProcessing>> {
-    let query = `
-      SELECT p.*, c.control_number as clearance_control_number,
-             CASE WHEN p.personal_letter_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.valid_passport_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.work_visa_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.employment_contract_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.employment_certificate_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.last_arrival_email_file IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN p.flight_ticket_file IS NOT NULL THEN 1 ELSE 0 END as documents_submitted
-      FROM balik_manggagawa_processing p
-      LEFT JOIN balik_manggagawa_clearance c ON p.clearance_id = c.id
-      WHERE (p.documents_completed = false OR p.documents_completed IS NULL)
-        AND p.clearance_type IN ('for_assessment_country', 'non_compliant_country', 'watchlisted_similar_name')
-    `;
-    const params: any[] = [];
-    let idx = 1;
-
-    if (filters?.search) {
-      query += ` AND (p.name_of_worker ILIKE $${idx} OR p.or_number ILIKE $${idx} OR p.destination ILIKE $${idx} OR p.address ILIKE $${idx})`;
-      params.push(`%${filters.search}%`);
-      idx++;
-    }
-
-    if (filters?.types) {
-      const types = String(filters.types).split(',').filter(Boolean)
-      if (types.length > 0) {
-        query += ` AND p.clearance_type = ANY($${idx}::text[])`;
-        params.push(types);
-        idx++;
-      }
-    }
-
-    if (filters?.sexes) {
-      const sexes = String(filters.sexes).split(',').filter(Boolean);
-      if (sexes.length > 0) {
-        query += ` AND p.sex = ANY($${idx}::text[])`;
-        params.push(sexes);
-        idx++;
-      }
-    }
-
-    if (filters?.dateFrom && filters?.dateTo) {
-      query += ` AND p.created_at::date BETWEEN $${idx} AND $${idx + 1}`;
-      params.push(filters.dateFrom, filters.dateTo);
-      idx += 2;
-    }
-
-    if (filters?.destination) {
-      query += ` AND p.destination ILIKE $${idx}`;
-      params.push(`%${filters.destination}%`);
-      idx++;
-    }
-
-    if (filters?.address) {
-      query += ` AND p.address ILIKE $${idx}`;
-      params.push(`%${filters.address}%`);
-      idx++;
-    }
-
-    // Count
-    const countQuery = `SELECT COUNT(*) FROM (${query}) q`;
-
-    // Pagination
-    query += ` ORDER BY p.created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`;
-    params.push(pagination.limit, (pagination.page - 1) * pagination.limit);
-
-    const { rows } = await db.query(query, params);
-    const { rows: countRows } = await db.query(countQuery, params.slice(0, params.length - 2));
-    const total = parseInt(countRows[0].count);
-
-    return {
-      data: rows,
-      pagination: {
-        page: pagination.page,
-        limit: pagination.limit,
-        total,
-        totalPages: Math.ceil(total / pagination.limit)
-      }
-    };
-  }
-
-  static async moveProcessingToClearance(processingId: string): Promise<boolean> {
-    try {
-      // Get the processing record
-      const processingRecord = await this.getBalikManggagawaProcessingById(processingId);
-      if (!processingRecord || !processingRecord.documents_completed) {
-        return false;
-      }
-
-      // Update the clearance record to mark it as completed
-      if (processingRecord.clearance_id) {
-        await db.query(
-          'UPDATE balik_manggagawa_clearance SET status = $1, updated_at = NOW() WHERE id = $2',
-          ['completed', processingRecord.clearance_id]
-        );
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error moving processing to clearance:', error);
-      return false;
-    }
   }
 
   // Gov to Gov Applications
@@ -2448,7 +2241,6 @@ export class DatabaseService {
         clearanceCount,
         clearanceMaleCount,
         clearanceFemaleCount,
-        processingCount,
         govToGovCount,
         infoSheetCount,
         pendingUsersCount
@@ -2459,7 +2251,6 @@ export class DatabaseService {
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'male'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM balik_manggagawa_clearance WHERE deleted_at IS NULL AND LOWER(sex) = 'female'${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
-        client.query(`SELECT COUNT(*) FROM balik_manggagawa_processing WHERE clearance_id IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM gov_to_gov_applications WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query(`SELECT COUNT(*) FROM information_sheet_records WHERE deleted_at IS NULL${dateFrom && dateTo ? ' AND created_at::date BETWEEN $1::date AND $2::date' : ''}`, dateFrom && dateTo ? [dateFrom, dateTo] : []),
         client.query('SELECT COUNT(*) FROM users WHERE is_approved = false')
@@ -2472,7 +2263,6 @@ export class DatabaseService {
         clearance: parseInt(clearanceCount.rows[0].count),
         clearanceMale: parseInt(clearanceMaleCount.rows[0].count),
         clearanceFemale: parseInt(clearanceFemaleCount.rows[0].count),
-        processing: parseInt(processingCount.rows[0].count),
         govToGov: parseInt(govToGovCount.rows[0].count),
         infoSheet: parseInt(infoSheetCount.rows[0].count),
         pendingUsers: parseInt(pendingUsersCount.rows[0].count)

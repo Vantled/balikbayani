@@ -84,8 +84,6 @@ The database includes the following main tables:
 
 ### Balik Manggagawa Module
 - **balik_manggagawa_clearance** - Clearance applications
-- **balik_manggagawa_processing** - Processing records
-- **counter_monitoring** - Counter monitoring data
 
 ### Gov to Gov Module
 - **gov_to_gov_applications** - Government to government applications
@@ -125,8 +123,6 @@ The database includes the following main tables:
 ### Balik Manggagawa
 - `GET /api/balik-manggagawa/clearance` - List clearances
 - `POST /api/balik-manggagawa/clearance` - Create clearance
-- `GET /api/balik-manggagawa/processing` - List processing records
-- `POST /api/balik-manggagawa/processing` - Create processing record
 
 ### Gov to Gov
 - `GET /api/gov-to-gov` - List applications

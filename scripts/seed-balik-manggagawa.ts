@@ -115,56 +115,8 @@ async function seedBalikManggagawaData() {
       }
     }
 
-    // Sample processing data
-    const processingData = [
-      {
-        nameOfWorker: 'Rosa Fernandez',
-        sex: 'female' as const,
-        address: 'Makati, Metro Manila',
-        destination: 'UAE',
-        clearanceType: 'for_assessment_country'
-      },
-      {
-        nameOfWorker: 'Carlos Rodriguez',
-        sex: 'male' as const,
-        address: 'Quezon City, Metro Manila',
-        destination: 'Qatar',
-        clearanceType: 'non_compliant_country'
-      },
-      {
-        nameOfWorker: 'Isabel Torres',
-        sex: 'female' as const,
-        address: 'Cebu City, Cebu',
-        destination: 'Kuwait',
-        clearanceType: 'watchlisted_similar_name'
-      },
-      {
-        nameOfWorker: 'Miguel Santos',
-        sex: 'male' as const,
-        address: 'Davao City, Davao del Sur',
-        destination: 'Saudi Arabia',
-        clearanceType: 'for_assessment_country'
-      },
-      {
-        nameOfWorker: 'Elena Gomez',
-        sex: 'female' as const,
-        address: 'Baguio City, Benguet',
-        destination: 'Bahrain',
-        clearanceType: 'non_compliant_country'
-      }
-    ];
-
-    // Create processing records
-    console.log('📝 Creating processing records...');
-    for (const data of processingData) {
-      const result = await DatabaseService.createBalikManggagawaProcessing(data);
-      if (result) {
-        console.log(`✅ Created processing record for ${data.nameOfWorker}`);
-      }
-    }
-
     console.log('🎉 Balik Manggagawa sample data seeded successfully!');
-    console.log(`📊 Created ${clearanceIds.length} clearance records and ${processingData.length} processing records`);
+    console.log(`📊 Created ${clearanceIds.length} clearance records`);
 
   } catch (error) {
     console.error('❌ Error seeding Balik Manggagawa data:', error);

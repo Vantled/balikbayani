@@ -350,25 +350,7 @@ async function seedBalikManggagawaData() {
     }
   ];
 
-  const processingData = [
-    {
-      nameOfWorker: 'Rosa Fernandez',
-      sex: 'female',
-      address: 'Makati, Metro Manila',
-      destination: 'UAE',
-      clearanceType: 'for_assessment_country'
-    },
-    {
-      nameOfWorker: 'Carlos Rodriguez',
-      sex: 'male',
-      address: 'Quezon City, Metro Manila',
-      destination: 'Qatar',
-      clearanceType: 'non_compliant_country'
-    }
-  ];
-
   let clearanceCreated = 0;
-  let processingCreated = 0;
 
   // Create clearance records
   for (const data of clearanceData) {
@@ -394,23 +376,8 @@ async function seedBalikManggagawaData() {
     }
   }
 
-  // Create processing records
-  for (const data of processingData) {
-    try {
-      await db.query(
-        `INSERT INTO balik_manggagawa_processing (
-          name_of_worker, sex, address, destination, clearance_type
-        ) VALUES ($1, $2, $3, $4, $5)`,
-        [data.nameOfWorker, data.sex, data.address, data.destination, data.clearanceType]
-      );
-      processingCreated++;
-    } catch (error) {
-      console.error(`❌ Error creating processing record for ${data.nameOfWorker}:`, error.message);
-    }
-  }
-
-  console.log(`✅ Balik Manggagawa data seeding completed: ${clearanceCreated} clearance records, ${processingCreated} processing records`);
-  return { clearanceCreated, processingCreated };
+  console.log(`✅ Balik Manggagawa data seeding completed: ${clearanceCreated} clearance records`);
+  return { clearanceCreated };
 }
 
 async function seedJobFairMonitoringData() {
@@ -640,12 +607,11 @@ async function initializeDatabase() {
       { file: 'lib/migrate-bm-clearance-extended.sql', desc: 'Extending balik manggagawa clearance fields' },
       { file: 'lib/migrate-bm-clearance-missing-fields.sql', desc: 'Adding missing fields to BM clearance' },
       { file: 'lib/migrate-bm-clearance-status.sql', desc: 'Adding status field to BM clearance' },
-      { file: 'lib/migrate-bm-processing-documents.sql', desc: 'Adding document tracking to BM processing' },
-      { file: 'lib/migrate-bm-processing-clearance-link.sql', desc: 'Adding clearance link to BM processing' },
       { file: 'lib/migrate-bm-clearance-narrative.sql', desc: 'Adding narrative fields to BM clearance' },
       { file: 'lib/migrate-add-employer.sql', desc: 'Adding employer field to direct hire' },
       { file: 'lib/migrate-status-checklist.sql', desc: 'Adding status checklist to direct hire' },
-      { file: 'lib/migrate-soft-delete.sql', desc: 'Adding soft delete functionality' }
+      { file: 'lib/migrate-soft-delete.sql', desc: 'Adding soft delete functionality' },
+      { file: 'migrations/drop_balik_manggagawa_processing.sql', desc: 'Dropping balik_manggagawa_processing and counter_monitoring tables' }
     ];
 
     for (const migration of libMigrations) {

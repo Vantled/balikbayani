@@ -96,29 +96,6 @@ CREATE TABLE balik_manggagawa_clearance (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Balik Manggagawa Processing
-CREATE TABLE balik_manggagawa_processing (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    or_number VARCHAR(50) UNIQUE NOT NULL,
-    name_of_worker VARCHAR(255) NOT NULL,
-    sex VARCHAR(10) NOT NULL CHECK (sex IN ('male', 'female')),
-    address TEXT NOT NULL,
-    destination VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Counter Monitoring
-CREATE TABLE counter_monitoring (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    processing_id UUID NOT NULL REFERENCES balik_manggagawa_processing(id) ON DELETE CASCADE,
-    counter_number VARCHAR(20) NOT NULL,
-    time_in TIMESTAMP WITH TIME ZONE[] NOT NULL,
-    remarks TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Gov to Gov Applications
 CREATE TABLE gov_to_gov_applications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -336,8 +313,6 @@ CREATE INDEX idx_clearance_control_number ON balik_manggagawa_clearance(control_
 CREATE INDEX idx_clearance_type ON balik_manggagawa_clearance(clearance_type);
 CREATE INDEX idx_clearance_created_at ON balik_manggagawa_clearance(created_at);
 
-CREATE INDEX idx_processing_or_number ON balik_manggagawa_processing(or_number);
-CREATE INDEX idx_processing_created_at ON balik_manggagawa_processing(created_at);
 
 CREATE INDEX idx_gov_to_gov_created_at ON gov_to_gov_applications(created_at);
 CREATE INDEX idx_gov_to_gov_sex ON gov_to_gov_applications(sex);
@@ -379,8 +354,6 @@ CREATE TRIGGER update_direct_hire_documents_updated_at BEFORE UPDATE ON direct_h
 CREATE TRIGGER update_personal_info_updated_at BEFORE UPDATE ON personal_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_employment_info_updated_at BEFORE UPDATE ON employment_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_balik_manggagawa_clearance_updated_at BEFORE UPDATE ON balik_manggagawa_clearance FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_balik_manggagawa_processing_updated_at BEFORE UPDATE ON balik_manggagawa_processing FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_counter_monitoring_updated_at BEFORE UPDATE ON counter_monitoring FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_gov_to_gov_applications_updated_at BEFORE UPDATE ON gov_to_gov_applications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_information_sheet_records_updated_at BEFORE UPDATE ON information_sheet_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_job_fairs_updated_at BEFORE UPDATE ON job_fairs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

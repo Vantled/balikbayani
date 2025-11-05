@@ -62,12 +62,13 @@ export async function POST(request: NextRequest) {
     const file = path.join(BACKUP_DIR, `${id}.sql`)
 
     // Simple logical backup: export all tables with data using INSERT statements
-    // Get all tables in public schema (excluding system tables)
+    // Get all tables in public schema (excluding system tables and deprecated tables)
     const tablesResult = await db.query(`
       SELECT tablename 
       FROM pg_tables 
       WHERE schemaname = 'public' 
       AND tablename NOT LIKE 'pg_%'
+      AND tablename NOT IN ('balik_manggagawa_processing', 'counter_monitoring')
       ORDER BY tablename;
     `)
     

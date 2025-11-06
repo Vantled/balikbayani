@@ -78,6 +78,7 @@ export default function GovToGovPage() {
     return () => clearTimeout(timeoutId)
   }, [search])
   const [formStep, setFormStep] = useState(1)
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
   const [formData, setFormData] = useState<any>({
     lastName: "",
     firstName: "",
@@ -101,6 +102,7 @@ export default function GovToGovPage() {
     remarks: "",
     dateReceived: "",
   })
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
 
   // Validate Basic Information step
   const validateBasicInfo = (notify: boolean) => {
@@ -384,7 +386,7 @@ export default function GovToGovPage() {
       </main>
       {/* Create/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { setModalOpen(v); if (!v) setEditingId(null) }}>
-        <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
+        <DialogContent onInteractOutside={(e)=> e.preventDefault()} className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-medium flex items-center">
               <FileText className="h-5 w-5 mr-2" />
@@ -416,20 +418,23 @@ export default function GovToGovPage() {
                   <div className="flex gap-4">
                     <div className="flex-1">
                       <Label className="text-sm font-medium">Last Name:</Label>
-                      <Input required className="mt-1" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: (e.target.value || '').toUpperCase() })} placeholder="Enter last name" />
+                      <Input required className={`mt-1 ${formErrors.lastName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.lastName} onChange={e => { setFormData({ ...formData, lastName: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, lastName: undefined as any })) }} placeholder="Enter last name" />
+                      {formErrors.lastName && (<div className="text-xs text-red-600 mt-1">{formErrors.lastName}</div>)}
                     </div>
                     <div className="flex-1">
                       <Label className="text-sm font-medium">First Name:</Label>
-                      <Input required className="mt-1" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: (e.target.value || '').toUpperCase() })} placeholder="Enter first name" />
+                      <Input required className={`mt-1 ${formErrors.firstName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.firstName} onChange={e => { setFormData({ ...formData, firstName: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, firstName: undefined as any })) }} placeholder="Enter first name" />
+                      {formErrors.firstName && (<div className="text-xs text-red-600 mt-1">{formErrors.firstName}</div>)}
                     </div>
                     <div className="flex-1">
                       <Label className="text-sm font-medium">Middle Name:</Label>
-                      <Input required className="mt-1" value={formData.middleName} onChange={e => setFormData({ ...formData, middleName: (e.target.value || '').toUpperCase() })} placeholder="Enter middle name" />
+                      <Input required className={`mt-1 ${formErrors.middleName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.middleName} onChange={e => { setFormData({ ...formData, middleName: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, middleName: undefined as any })) }} placeholder="Enter middle name" />
+                      {formErrors.middleName && (<div className="text-xs text-red-600 mt-1">{formErrors.middleName}</div>)}
                     </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium mb-2 block">Sex:</Label>
-                    <RadioGroup value={formData.sex} onValueChange={(v) => setFormData({ ...formData, sex: v })} className="flex space-x-6" aria-required="true">
+                    <RadioGroup value={formData.sex} onValueChange={(v) => { setFormData({ ...formData, sex: v }); setFormErrors(prev => ({ ...prev, sex: undefined as any })) }} className="flex space-x-6" aria-required="true">
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Male" id="sex-male" />
                         <Label htmlFor="sex-male">Male</Label>
@@ -439,18 +444,20 @@ export default function GovToGovPage() {
                         <Label htmlFor="sex-female">Female</Label>
                     </div>
                     </RadioGroup>
+                    {formErrors.sex && (<div className="text-xs text-red-600 mt-1">{formErrors.sex}</div>)}
                     </div>
                   <div>
                     <Label className="text-sm font-medium">Date of Birth:</Label>
-                    <Input required type="date" className="mt-1" value={formData.dob} onChange={e => setFormData({ ...formData, dob: e.target.value })} max={new Date().toISOString().split('T')[0]} />
+                    <Input required type="date" className={`mt-1 ${formErrors.dob ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.dob} onChange={e => { setFormData({ ...formData, dob: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, dob: undefined as any })) }} max={new Date().toISOString().split('T')[0]} />
+                    {formErrors.dob && (<div className="text-xs text-red-600 mt-1">{formErrors.dob}</div>)}
                   </div>
                   {/* Age removed per requirements */}
                   <div className="flex gap-4">
                     <div className="flex-1">
-                      <Label className="text-sm font-medium">Height (cm):</Label>
-                      <Input 
-                        required
-                        className="mt-1"
+                    <Label className="text-sm font-medium">Height (cm):</Label>
+                    <Input 
+                      required
+                      className={`mt-1 ${formErrors.height ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         type="number"
                         inputMode="decimal"
                         step="0.01"
@@ -459,15 +466,17 @@ export default function GovToGovPage() {
                           const raw = e.target.value
                           const sanitized = raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
                           setFormData({ ...formData, height: sanitized })
+                        if ((sanitized || '').trim()) setFormErrors(prev => ({ ...prev, height: undefined as any }))
                         }}
                         placeholder="e.g., 160"
                       />
+                      {formErrors.height && (<div className="text-xs text-red-600 mt-1">{formErrors.height}</div>)}
                     </div>
                     <div className="flex-1">
-                      <Label className="text-sm font-medium">Weight (kg):</Label>
-                      <Input 
-                        required
-                        className="mt-1"
+                    <Label className="text-sm font-medium">Weight (kg):</Label>
+                    <Input 
+                      required
+                      className={`mt-1 ${formErrors.weight ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         type="number"
                         inputMode="decimal"
                         step="0.01"
@@ -476,14 +485,16 @@ export default function GovToGovPage() {
                           const raw = e.target.value
                           const sanitized = raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
                           setFormData({ ...formData, weight: sanitized })
+                        if ((sanitized || '').trim()) setFormErrors(prev => ({ ...prev, weight: undefined as any }))
                         }}
                         placeholder="e.g., 55"
                       />
+                      {formErrors.weight && (<div className="text-xs text-red-600 mt-1">{formErrors.weight}</div>)}
                     </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Educational Attainment:</Label>
-                    <select required className="w-full border rounded px-3 py-2.5 text-sm mt-1 h-10" value={formData.education} onChange={e => setFormData({ ...formData, education: (e.target.value || '').toUpperCase() })}>
+                    <select required className={`w-full border rounded px-3 py-2.5 text-sm mt-1 h-10 ${formErrors.education ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.education} onChange={e => { setFormData({ ...formData, education: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, education: undefined as any })) }}>
                       <option value="">--</option>
                       <option value="COLLEGE GRADUATE OR HIGHER">COLLEGE GRADUATE OR HIGHER</option>
                       <option value="COLLEGE UNDERGRADUATE">COLLEGE UNDERGRADUATE</option>
@@ -494,24 +505,45 @@ export default function GovToGovPage() {
                       <option value="NO GRADE COMPLETED">NO GRADE COMPLETED</option>
                     </select>
                   </div>
+                  {formErrors.education && (<div className="text-xs text-red-600 mt-1">{formErrors.education}</div>)}
                   <div>
                     <Label className="text-sm font-medium">Present Address:</Label>
-                    <Input required className="mt-1" value={formData.address} onChange={e => setFormData({ ...formData, address: (e.target.value || '').toUpperCase() })} placeholder="Enter address" />
+                    <Input required className={`mt-1 ${formErrors.address ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.address} onChange={e => { setFormData({ ...formData, address: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, address: undefined as any })) }} placeholder="Enter address" />
+                    {formErrors.address && (<div className="text-xs text-red-600 mt-1">{formErrors.address}</div>)}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Email Address:</Label>
-                    <Input required className="mt-1" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} placeholder="name@example.com" onBlur={() => {
-                      const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || '')
-                      if (!emailValid && formData.email) {
-                        toast({ title: 'Invalid email', description: 'Please enter a valid email address.', variant: 'destructive' })
-                      }
-                    }} />
+                    <Input 
+                      required 
+                      className={`mt-1 ${formErrors.email ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
+                      type="email" 
+                      value={formData.email} 
+                      onChange={e => {
+                        const value = e.target.value
+                        setFormData({ ...formData, email: value })
+                        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '')) {
+                          setFormErrors(prev => ({ ...prev, email: undefined }))
+                        }
+                      }} 
+                      placeholder="name@example.com" 
+                      onBlur={() => {
+                        const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || '')
+                        if (!emailValid) {
+                          setFormErrors(prev => ({ ...prev, email: 'Please enter a valid email address.' }))
+                        } else {
+                          setFormErrors(prev => ({ ...prev, email: undefined }))
+                        }
+                      }} 
+                    />
+                    {formErrors.email && (
+                      <div className="text-xs text-red-600 mt-1">{formErrors.email}</div>
+                    )}
                     </div>
                   <div>
                     <Label className="text-sm font-medium">Cellphone No.:</Label>
                     <Input 
                       required
-                      className="mt-1" 
+                      className={`mt-1 ${formErrors.contact ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                       value={formData.contact}
                       inputMode="numeric"
                       pattern="^09\\d{9}$"
@@ -519,41 +551,46 @@ export default function GovToGovPage() {
                       onChange={e => {
                         const digits = (e.target.value || '').replace(/\D/g, '').slice(0, 11)
                         setFormData({ ...formData, contact: digits })
+                        if (/^09\d{9}$/.test(digits || '')) {
+                          setFormErrors(prev => ({ ...prev, contact: undefined }))
+                        }
                       }}
                       onBlur={() => {
                         const valid = /^09\d{9}$/.test(formData.contact || '')
-                        if (!valid && formData.contact) {
-                          toast({ title: 'Invalid cellphone number', description: 'Must start with 09 and be exactly 11 digits.', variant: 'destructive' })
+                        if (!valid) {
+                          setFormErrors(prev => ({ ...prev, contact: 'Must start with 09 and be exactly 11 digits.' }))
+                        } else {
+                          setFormErrors(prev => ({ ...prev, contact: undefined }))
                         }
                       }}
                       placeholder="09XXXXXXXXX" 
                     />
+                    {formErrors.contact && (
+                      <div className="text-xs text-red-600 mt-1">{formErrors.contact}</div>
+                    )}
                     </div>
                   <div className="flex justify-end pt-4">
                     <Button 
                       className="bg-[#1976D2] hover:bg-[#1565C0]" 
                       type="button"
-                      disabled={!(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || '')) || !(/^09\d{9}$/.test(formData.contact || ''))}
                       onClick={() => {
-                      const missing: string[] = []
                       const isEmpty = (v: any) => v === undefined || v === null || String(v).trim() === ''
                       const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || '')
                       const phoneValid = /^09\d{9}$/.test(formData.contact || '')
-                      if (isEmpty(formData.lastName)) missing.push('Last Name')
-                      if (isEmpty(formData.firstName)) missing.push('First Name')
-                      if (isEmpty(formData.middleName)) missing.push('Middle Name')
-                      if (isEmpty(formData.sex)) missing.push('Sex')
-                      if (isEmpty(formData.dob)) missing.push('Date of Birth')
-                      if (isEmpty(formData.height)) missing.push('Height')
-                      if (isEmpty(formData.weight)) missing.push('Weight')
-                      if (isEmpty(formData.education)) missing.push('Educational Attainment')
-                      if (isEmpty(formData.address)) missing.push('Present Address')
-                      if (!emailValid) missing.push('Valid Email Address')
-                      if (!phoneValid) missing.push('Valid Cellphone No.')
-                      if (missing.length > 0) {
-                        toast({ title: 'Missing required fields', description: `Please complete: ${missing[0]}`, variant: 'destructive' })
-                        return
-                      }
+                      const errors: { [key: string]: string } = {}
+                      if (isEmpty(formData.lastName)) errors.lastName = 'Last Name is required.'
+                      if (isEmpty(formData.firstName)) errors.firstName = 'First Name is required.'
+                      if (isEmpty(formData.middleName)) errors.middleName = 'Middle Name is required.'
+                      if (isEmpty(formData.sex)) errors.sex = 'Please select sex.'
+                      if (isEmpty(formData.dob)) errors.dob = 'Date of Birth is required.'
+                      if (isEmpty(formData.height)) errors.height = 'Height is required.'
+                      if (isEmpty(formData.weight)) errors.weight = 'Weight is required.'
+                      if (isEmpty(formData.education)) errors.education = 'Educational Attainment is required.'
+                      if (isEmpty(formData.address)) errors.address = 'Present Address is required.'
+                      if (!emailValid) errors.email = 'Please enter a valid email address.'
+                      if (!phoneValid) errors.contact = 'Must start with 09 and be exactly 11 digits.'
+                      setFormErrors(prev => ({ ...prev, ...errors }))
+                      if (Object.keys(errors).length > 0) return
                       setFormStep(2)
                     }}>Next</Button>
                   </div>
@@ -564,15 +601,17 @@ export default function GovToGovPage() {
                   {/* Other information fields */}
                   <div>
                     <Label className="text-sm font-medium">Passport Number:</Label>
-                    <Input required className="mt-1" value={formData.passportNo} onChange={e => setFormData({ ...formData, passportNo: (e.target.value || '').toUpperCase() })} />
+                    <Input required className={`mt-1 ${formErrors.passportNo ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.passportNo} onChange={e => { setFormData({ ...formData, passportNo: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, passportNo: undefined as any })) }} />
+                    {formErrors.passportNo && (<div className="text-xs text-red-600 mt-1">{formErrors.passportNo}</div>)}
                     </div>
                   <div>
                     <Label className="text-sm font-medium">Passport Validity:</Label>
-                    <Input required type="date" className="mt-1" value={formData.passportValidity} onChange={e => setFormData({ ...formData, passportValidity: e.target.value })} min={new Date().toISOString().split('T')[0]} />
+                    <Input required type="date" className={`mt-1 ${formErrors.passportValidity ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.passportValidity} onChange={e => { setFormData({ ...formData, passportValidity: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, passportValidity: undefined as any })) }} min={new Date().toISOString().split('T')[0]} />
+                    {formErrors.passportValidity && (<div className="text-xs text-red-600 mt-1">{formErrors.passportValidity}</div>)}
                     </div>
                   <div>
                     <Label className="text-sm font-medium">ID Presented:</Label>
-                    <select required className="w-full border rounded px-3 py-2.5 text-sm mt-1 h-10" value={formData.idPresented} onChange={e => setFormData({ ...formData, idPresented: e.target.value.toUpperCase() })}>
+                    <select required className={`w-full border rounded px-3 py-2.5 text-sm mt-1 h-10 ${formErrors.idPresented ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.idPresented} onChange={e => { setFormData({ ...formData, idPresented: e.target.value.toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, idPresented: undefined as any })) }}>
                       <option value="">--</option>
                       <option value="PASSPORT">Passport</option>
                       <option value="UMID">UMID</option>
@@ -580,14 +619,16 @@ export default function GovToGovPage() {
                       <option value="DRIVER'S LICENSE">Driver's License</option>
                       <option value="OTHERS">Others</option>
                       </select>
+                    {formErrors.idPresented && (<div className="text-xs text-red-600 mt-1">{formErrors.idPresented}</div>)}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">ID Number:</Label>
-                    <Input required className="mt-1" value={formData.idNumber} onChange={e => setFormData({ ...formData, idNumber: (e.target.value || '').toUpperCase() })} />
+                    <Input required className={`mt-1 ${formErrors.idNumber ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.idNumber} onChange={e => { setFormData({ ...formData, idNumber: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, idNumber: undefined as any })) }} />
+                    {formErrors.idNumber && (<div className="text-xs text-red-600 mt-1">{formErrors.idNumber}</div>)}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">With Taiwan Work Experience:</Label>
-                    <RadioGroup value={formData.withTaiwanExp} onValueChange={(v) => setFormData({ ...formData, withTaiwanExp: v })} className="mt-1 flex space-x-6">
+                    <RadioGroup value={formData.withTaiwanExp} onValueChange={(v) => { setFormData({ ...formData, withTaiwanExp: v }); setFormErrors(prev => ({ ...prev, withTaiwanExp: undefined as any })) }} className="mt-1 flex space-x-6">
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="YES" id="twexp-yes" />
                         <Label htmlFor="twexp-yes">Yes</Label>
@@ -606,13 +647,15 @@ export default function GovToGovPage() {
                           required
                           placeholder="COMPANY NAME"
                           value={formData.taiwanCompany || ''}
-                          onChange={e => setFormData({ ...formData, taiwanCompany: (e.target.value || '').toUpperCase() })}
+                          onChange={e => { setFormData({ ...formData, taiwanCompany: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, taiwanCompany: undefined as any })) }}
+                          className={`${formErrors.taiwanCompany ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         />
                         <select
                           required
                           className="w-full border rounded px-3 py-2.5 text-sm h-10"
                           value={formData.taiwanYearStarted || ''}
-                          onChange={e => setFormData({ ...formData, taiwanYearStarted: e.target.value })}
+                          onChange={e => { setFormData({ ...formData, taiwanYearStarted: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, taiwanYearStarted: undefined as any })) }}
+                          aria-invalid={!!formErrors.taiwanYearStarted}
                         >
                           <option value="">Year Started</option>
                           {Array.from({ length: 51 }, (_, i) => {
@@ -628,7 +671,8 @@ export default function GovToGovPage() {
                           required
                           className="w-full border rounded px-3 py-2.5 text-sm h-10"
                           value={formData.taiwanYearEnded || ''}
-                          onChange={e => setFormData({ ...formData, taiwanYearEnded: e.target.value })}
+                          onChange={e => { setFormData({ ...formData, taiwanYearEnded: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, taiwanYearEnded: undefined as any })) }}
+                          aria-invalid={!!formErrors.taiwanYearEnded}
                         >
                           <option value="">Year Ended</option>
                           {Array.from({ length: 51 }, (_, i) => {
@@ -641,11 +685,16 @@ export default function GovToGovPage() {
                           })}
                         </select>
                   </div>
+                    {(formErrors.taiwanCompany || formErrors.taiwanYearStarted || formErrors.taiwanYearEnded) && (
+                      <div className="text-xs text-red-600 mt-1">
+                        {formErrors.taiwanCompany || formErrors.taiwanYearStarted || formErrors.taiwanYearEnded}
+                      </div>
+                    )}
                     </div>
                   )}
                   <div>
                     <Label className="text-sm font-medium">With Job Experience (Aside from Taiwan):</Label>
-                    <RadioGroup value={formData.withJobExp} onValueChange={(v) => setFormData({ ...formData, withJobExp: v })} className="mt-1 flex space-x-6">
+                    <RadioGroup value={formData.withJobExp} onValueChange={(v) => { setFormData({ ...formData, withJobExp: v }); setFormErrors(prev => ({ ...prev, withJobExp: undefined as any })) }} className="mt-1 flex space-x-6">
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="YES" id="jobexp-yes" />
                         <Label htmlFor="jobexp-yes">Yes</Label>
@@ -664,13 +713,15 @@ export default function GovToGovPage() {
                           required
                           placeholder="COMPANY NAME"
                           value={formData.otherCompany || ''}
-                          onChange={e => setFormData({ ...formData, otherCompany: (e.target.value || '').toUpperCase() })}
+                          onChange={e => { setFormData({ ...formData, otherCompany: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, otherCompany: undefined as any })) }}
+                          className={`${formErrors.otherCompany ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         />
                         <select
                           required
                           className="w-full border rounded px-3 py-2.5 text-sm h-10"
                           value={formData.otherYearStarted || ''}
-                          onChange={e => setFormData({ ...formData, otherYearStarted: e.target.value })}
+                          onChange={e => { setFormData({ ...formData, otherYearStarted: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, otherYearStarted: undefined as any })) }}
+                          aria-invalid={!!formErrors.otherYearStarted}
                         >
                           <option value="">Year Started</option>
                           {Array.from({ length: 51 }, (_, i) => {
@@ -686,7 +737,8 @@ export default function GovToGovPage() {
                           required
                           className="w-full border rounded px-3 py-2.5 text-sm h-10"
                           value={formData.otherYearEnded || ''}
-                          onChange={e => setFormData({ ...formData, otherYearEnded: e.target.value })}
+                          onChange={e => { setFormData({ ...formData, otherYearEnded: e.target.value }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, otherYearEnded: undefined as any })) }}
+                          aria-invalid={!!formErrors.otherYearEnded}
                         >
                           <option value="">Year Ended</option>
                           {Array.from({ length: 51 }, (_, i) => {
@@ -699,6 +751,11 @@ export default function GovToGovPage() {
                           })}
                         </select>
                   </div>
+                    {(formErrors.otherCompany || formErrors.otherYearStarted || formErrors.otherYearEnded) && (
+                      <div className="text-xs text-red-600 mt-1">
+                        {formErrors.otherCompany || formErrors.otherYearStarted || formErrors.otherYearEnded}
+                      </div>
+                    )}
                     </div>
                   )}
                   <div>
@@ -708,84 +765,42 @@ export default function GovToGovPage() {
                   <div className="flex justify-between pt-4">
                     <Button variant="outline" type="button" onClick={() => setFormStep(1)}>Previous</Button>
                     <Button className="bg-[#1976D2] hover:bg-[#1565C0]" type="button" onClick={async () => {
-                      const missing: string[] = []
                       const isEmpty = (v: any) => v === undefined || v === null || String(v).trim() === ''
                       const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || '')
                       const phoneValid = /^09\d{9}$/.test(formData.contact || '')
-                      if (isEmpty(formData.lastName)) missing.push('Last Name')
-                      if (isEmpty(formData.firstName)) missing.push('First Name')
-                      if (isEmpty(formData.middleName)) missing.push('Middle Name')
-                      if (isEmpty(formData.sex)) missing.push('Sex')
-                      if (isEmpty(formData.dob)) missing.push('Date of Birth')
-                      if (isEmpty(formData.height)) missing.push('Height')
-                      if (isEmpty(formData.weight)) missing.push('Weight')
-                      if (isEmpty(formData.education)) missing.push('Educational Attainment')
-                      if (isEmpty(formData.address)) missing.push('Present Address')
-                      if (!emailValid) missing.push('Valid Email Address')
-                      if (!phoneValid) missing.push('Valid Cellphone No.')
-                      if (isEmpty(formData.passportNo)) missing.push('Passport Number')
-                      if (isEmpty(formData.passportValidity)) missing.push('Passport Validity')
-                      if (isEmpty(formData.idPresented)) missing.push('ID Presented')
-                      if (isEmpty(formData.idNumber)) missing.push('ID Number')
-                      if (isEmpty(formData.withTaiwanExp)) missing.push('With Taiwan Work Experience')
+                      const errors: { [key: string]: string } = {}
+                      if (isEmpty(formData.lastName)) errors.lastName = 'Last Name is required.'
+                      if (isEmpty(formData.firstName)) errors.firstName = 'First Name is required.'
+                      if (isEmpty(formData.middleName)) errors.middleName = 'Middle Name is required.'
+                      if (isEmpty(formData.sex)) errors.sex = 'Please select sex.'
+                      if (isEmpty(formData.dob)) errors.dob = 'Date of Birth is required.'
+                      if (isEmpty(formData.height)) errors.height = 'Height is required.'
+                      if (isEmpty(formData.weight)) errors.weight = 'Weight is required.'
+                      if (isEmpty(formData.education)) errors.education = 'Educational Attainment is required.'
+                      if (isEmpty(formData.address)) errors.address = 'Present Address is required.'
+                      if (!emailValid) errors.email = 'Please enter a valid email address.'
+                      if (!phoneValid) errors.contact = 'Must start with 09 and be exactly 11 digits.'
+                      if (isEmpty(formData.passportNo)) errors.passportNo = 'Passport Number is required.'
+                      if (isEmpty(formData.passportValidity)) errors.passportValidity = 'Passport Validity is required.'
+                      if (isEmpty(formData.idPresented)) errors.idPresented = 'ID Presented is required.'
+                      if (isEmpty(formData.idNumber)) errors.idNumber = 'ID Number is required.'
+                      if (isEmpty(formData.withTaiwanExp)) errors.withTaiwanExp = 'Please choose Yes/No.'
                       if (formData.withTaiwanExp === 'YES') {
-                        if (isEmpty(formData.taiwanCompany)) missing.push('Taiwan Company Name')
-                        if (isEmpty(formData.taiwanYearStarted)) missing.push('Taiwan Year Started')
-                        if (isEmpty(formData.taiwanYearEnded)) missing.push('Taiwan Year Ended')
+                        if (isEmpty(formData.taiwanCompany)) errors.taiwanCompany = 'Company name is required.'
+                        if (isEmpty(formData.taiwanYearStarted)) errors.taiwanYearStarted = 'Year started is required.'
+                        if (isEmpty(formData.taiwanYearEnded)) errors.taiwanYearEnded = 'Year ended is required.'
                       }
-                      if (isEmpty(formData.withJobExp)) missing.push('With Job Experience (Aside from Taiwan)')
+                      if (isEmpty(formData.withJobExp)) errors.withJobExp = 'Please choose Yes/No.'
                       if (formData.withJobExp === 'YES') {
-                        if (isEmpty(formData.otherCompany)) missing.push('Other Company Name')
-                        if (isEmpty(formData.otherYearStarted)) missing.push('Other Year Started')
-                        if (isEmpty(formData.otherYearEnded)) missing.push('Other Year Ended')
+                        if (isEmpty(formData.otherCompany)) errors.otherCompany = 'Company name is required.'
+                        if (isEmpty(formData.otherYearStarted)) errors.otherYearStarted = 'Year started is required.'
+                        if (isEmpty(formData.otherYearEnded)) errors.otherYearEnded = 'Year ended is required.'
                       }
 
-                      if (missing.length > 0) {
-                        toast({ title: 'Missing required fields', description: `Please complete: ${missing[0]}` , variant: 'destructive'})
-                        return
-                      }
-                      // Build payload for API
-                      const payload = {
-                        last_name: formData.lastName,
-                        first_name: formData.firstName,
-                        middle_name: formData.middleName,
-                        sex: String(formData.sex).toLowerCase(),
-                        date_of_birth: formData.dob,
-                        height: Number(formData.height || 0),
-                        weight: Number(formData.weight || 0),
-                        educational_attainment: formData.education,
-                        present_address: formData.address,
-                        email_address: formData.email,
-                        contact_number: formData.contact,
-                        passport_number: formData.passportNo,
-                        passport_validity: formData.passportValidity,
-                        id_presented: formData.idPresented,
-                        id_number: formData.idNumber,
-                        with_taiwan_work_experience: formData.withTaiwanExp === 'YES',
-                        with_job_experience: formData.withJobExp === 'YES',
-                        // Metadata for future extension (server can ignore extras)
-                        taiwan_company: formData.taiwanCompany || '',
-                        taiwan_year_started: formData.taiwanYearStarted || '',
-                        taiwan_year_ended: formData.taiwanYearEnded || '',
-                        other_company: formData.otherCompany || '',
-                        other_year_started: formData.otherYearStarted || '',
-                        other_year_ended: formData.otherYearEnded || '',
-                        remarks: formData.remarks || '',
-                      }
-                      let res
-                      if (editingId) {
-                        res = await update(editingId, payload)
-                      } else {
-                        res = await create(payload)
-                      }
-                      if (res?.success) {
-                      setModalOpen(false)
-                        await refresh()
-                      }
-                      toast({
-                        title: editingId ? 'Applicant updated successfully!' : 'Applicant created successfully!',
-                        description: editingId ? 'The Gov-to-Gov applicant has been updated.' : 'The new Gov-to-Gov applicant has been added to the system.',
-                      })
+                      setFormErrors(prev => ({ ...prev, ...errors }))
+                      if (Object.keys(errors).length > 0) return
+                      // Open confirm dialog instead of immediate create
+                      setCreateConfirmOpen(true)
                     }}>{editingId ? 'Save' : 'Create'}</Button>
                   </div>
                 </form>
@@ -794,6 +809,64 @@ export default function GovToGovPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Confirm Create Dialog */}
+      <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editingId ? 'Confirm Save' : 'Confirm Create'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {editingId ? 'Save changes to this applicant?' : 'Create this new Gov-to-Gov applicant?'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCreateConfirmOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              setCreateConfirmOpen(false)
+              const payload = {
+                last_name: formData.lastName,
+                first_name: formData.firstName,
+                middle_name: formData.middleName,
+                sex: String(formData.sex).toLowerCase(),
+                date_of_birth: formData.dob,
+                height: Number(formData.height || 0),
+                weight: Number(formData.weight || 0),
+                educational_attainment: formData.education,
+                present_address: formData.address,
+                email_address: formData.email,
+                contact_number: formData.contact,
+                passport_number: formData.passportNo,
+                passport_validity: formData.passportValidity,
+                id_presented: formData.idPresented,
+                id_number: formData.idNumber,
+                with_taiwan_work_experience: formData.withTaiwanExp === 'YES',
+                with_job_experience: formData.withJobExp === 'YES',
+                // Metadata for future extension
+                taiwan_company: formData.taiwanCompany || '',
+                taiwan_year_started: formData.taiwanYearStarted || '',
+                taiwan_year_ended: formData.taiwanYearEnded || '',
+                other_company: formData.otherCompany || '',
+                other_year_started: formData.otherYearStarted || '',
+                other_year_ended: formData.otherYearEnded || '',
+                remarks: formData.remarks || '',
+              } as any
+              let res
+              if (editingId) {
+                res = await update(editingId, payload)
+              } else {
+                res = await create(payload)
+              }
+              if (res?.success) {
+                setModalOpen(false)
+                await refresh()
+              }
+              toast({
+                title: editingId ? 'Applicant updated successfully!' : 'Applicant created successfully!',
+                description: editingId ? 'The Gov-to-Gov applicant has been updated.' : 'The new Gov-to-Gov applicant has been added to the system.',
+              })
+            }}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* View Modal */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">

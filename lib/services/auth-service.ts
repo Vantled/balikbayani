@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../database';
+import { DatabaseService } from './database-service';
 import { User } from '../types';
 
 export interface LoginResult {
@@ -150,6 +151,25 @@ export class AuthService {
       );
 
       const user = result.rows[0];
+      
+      // Grant default permissions to new users
+      try {
+        const defaultPermissions = [
+          'dashboard',
+          'direct_hire',
+          'balik_manggagawa',
+          'gov_to_gov',
+          'information_sheet',
+          'monitoring',
+          'job_fairs',
+          'data_backups'
+        ].map(key => ({ permission_key: key, granted: true }));
+
+        await DatabaseService.updateUserPermissions(user.id, defaultPermissions, userData.createdBy);
+      } catch (permErr) {
+        // Do not fail user creation if permissions seeding fails; log for follow-up
+        console.error('Failed to seed default permissions for new user:', permErr);
+      }
       
       // Log user creation
       await this.logAuditEvent(userData.createdBy, 'USER_CREATED', 'users', user.id, null, { role: userData.role });

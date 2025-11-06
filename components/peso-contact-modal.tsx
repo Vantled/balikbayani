@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X, FileText, Loader2, Plus, Trash2 } from "lucide-react"
 import { PesoContact } from "@/lib/types"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
 interface PesoContactModalProps {
   open: boolean
@@ -221,6 +222,7 @@ export default function PesoContactModal({ open, onClose, initialData = null, on
     clearFieldError(`contact_${index}`)
   }
 
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -305,7 +307,7 @@ export default function PesoContactModal({ open, onClose, initialData = null, on
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={(e)=> { if (!initialData) { e.preventDefault(); setConfirmOpen(true); return } handleSubmit(e) }} className="space-y-6">
             {/* Basic Information */}
             <div className="space-y-4">
               {/* Province */}
@@ -536,6 +538,20 @@ export default function PesoContactModal({ open, onClose, initialData = null, on
           </form>
         </div>
       </div>
+      {!initialData && (
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Create</AlertDialogTitle>
+              <AlertDialogDescription>Create this new PESO Contact?</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmOpen(false)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={async ()=> { setConfirmOpen(false); await handleSubmit({ preventDefault: ()=>{} } as any) }} className="bg-blue-600 hover:bg-blue-700 text-white">Confirm</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   )
 }

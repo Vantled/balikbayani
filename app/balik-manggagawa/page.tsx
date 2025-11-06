@@ -653,6 +653,7 @@ export default function BalikManggagawaPage() {
   })
   const [controlPreview, setControlPreview] = useState("")
   const [creating, setCreating] = useState(false)
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
   const [usdDisplay, setUsdDisplay] = useState<string>("")
   const [viewOpen, setViewOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -1185,7 +1186,7 @@ export default function BalikManggagawaPage() {
 
       {/* Create BM Clearance Modal */}
       <Dialog open={isCreateOpen} onOpenChange={(o)=> { setIsCreateOpen(o); if (!o) { setFormData({ nameOfWorker: "", sex: "", employer: "", destination: "", salary: "", position: "", job_type: "", salaryCurrency: "" }); setControlPreview("") } }}>
-        <DialogContent className="p-0 overflow-hidden max-w-2xl w-[95vw]">
+        <DialogContent onInteractOutside={(e)=> e.preventDefault()} className="p-0 overflow-hidden max-w-2xl w-[95vw]">
           <DialogTitle className="sr-only">Create BM Application</DialogTitle>
           <div className="bg-[#1976D2] text-white px-6 py-4">
             <h2 className="text-lg font-semibold">Create BM Application</h2>
@@ -1306,42 +1307,58 @@ export default function BalikManggagawaPage() {
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button variant="outline" onClick={()=> setIsCreateOpen(false)}>Cancel</Button>
-              <Button className="bg-[#1976D2] text-white" disabled={creating} onClick={async ()=>{
-                if (!formData.nameOfWorker || !formData.sex || !formData.destination || !formData.position) {
-                  toast({ title: 'Missing fields', description: 'Please complete required fields.', variant: 'destructive' });
-                  return;
-                }
-                setCreating(true)
-                // Persist salary in USD; backend currently expects a number
-                const numericSalary = formData.salary !== '' ? Number(formData.salary) : 0
-                const salaryUsd = formData.salaryCurrency && numericSalary
-                  ? (formData.salaryCurrency === 'USD' ? numericSalary : Number((await getUSDEquivalentAsync(numericSalary, formData.salaryCurrency)).replace(/[^0-9.]/g, '')))
-                  : numericSalary
-                const payload = {
-                  nameOfWorker: formData.nameOfWorker,
-                  sex: formData.sex as 'male' | 'female',
-                  employer: formData.employer,
-                  destination: formData.destination,
-                  salary: salaryUsd,
-                  rawSalary: numericSalary,
-                  position: formData.position || undefined,
-                  // Optionally send additional context for future support
-                  jobType: formData.job_type || undefined,
-                  salaryCurrency: formData.salaryCurrency || undefined,
-                }
-                const res = await createClearance(payload)
-                setCreating(false)
-                if ((res as any)?.success) {
-                  toast({ title: 'Created', description: 'BM clearance created successfully.' })
-                  setIsCreateOpen(false)
-                } else {
-                  toast({ title: 'Error', description: (res as any)?.error || 'Failed to create', variant: 'destructive' })
-                }
-              }}>Create</Button>
+              <Button className="bg-[#1976D2] text-white" disabled={creating} onClick={()=> setCreateConfirmOpen(true)}>Create</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Create Dialog - BM */}
+      <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Create</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create this new BM application for <strong>{formData.nameOfWorker || 'this worker'}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCreateConfirmOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async ()=>{
+              if (!formData.nameOfWorker || !formData.sex || !formData.destination || !formData.position) {
+                setCreateConfirmOpen(false)
+                toast({ title: 'Missing fields', description: 'Please complete required fields.', variant: 'destructive' });
+                return;
+              }
+              setCreateConfirmOpen(false)
+              setCreating(true)
+              const numericSalary = formData.salary !== '' ? Number(formData.salary) : 0
+              const salaryUsd = formData.salaryCurrency && numericSalary
+                ? (formData.salaryCurrency === 'USD' ? numericSalary : Number((await getUSDEquivalentAsync(numericSalary, formData.salaryCurrency)).replace(/[^0-9.]/g, '')))
+                : numericSalary
+              const payload = {
+                nameOfWorker: formData.nameOfWorker,
+                sex: formData.sex as 'male' | 'female',
+                employer: formData.employer,
+                destination: formData.destination,
+                salary: salaryUsd,
+                rawSalary: numericSalary,
+                position: formData.position || undefined,
+                jobType: formData.job_type || undefined,
+                salaryCurrency: formData.salaryCurrency || undefined,
+              }
+              const res = await createClearance(payload)
+              setCreating(false)
+              if ((res as any)?.success) {
+                toast({ title: 'Created', description: 'BM clearance created successfully.' })
+                setIsCreateOpen(false)
+              } else {
+                toast({ title: 'Error', description: (res as any)?.error || 'Failed to create', variant: 'destructive' })
+              }
+            }} className="bg-blue-600 hover:bg-blue-700 text-white">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* View Modal */}
       <Dialog open={viewOpen} onOpenChange={(o)=> { setViewOpen(o); if (!o) setSelected(null) }}>

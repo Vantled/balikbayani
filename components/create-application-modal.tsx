@@ -122,6 +122,7 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   // Confirmation dialog states
   const [draftConfirmOpen, setDraftConfirmOpen] = useState(false)
   const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false)
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
 
   // Custom close handler for update confirmation modal
   const handleCloseUpdateModal = () => {
@@ -1842,8 +1843,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                         // Show confirmation modal for editing
                         setUpdateConfirmOpen(true)
                       } else {
-                        // Direct create for new applications
-                        handleCreateApplication()
+                        // Confirm before creating new applications
+                        setCreateConfirmOpen(true)
                       }
                     }}
                        disabled={loading || getMissingFields(formData, docMetadata, docFiles).length > 0}
@@ -1945,6 +1946,22 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
             >
               Confirm Update
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Create Confirmation Dialog */}
+      <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Application Creation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to create a new Direct Hire application for <strong>{formData.name || 'this worker'}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCreateConfirmOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { setCreateConfirmOpen(false); await handleCreateApplication() }} className="bg-blue-600 hover:bg-blue-700 text-white">Confirm Create</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

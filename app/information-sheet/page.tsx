@@ -17,7 +17,10 @@ import PermissionGuard from "@/components/permission-guard"
 import { uploadToS3 } from "@/lib/s3-client"
 import ProcessingStatusCard from "@/components/processing-status-card";
 
-const initialRecords = [
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null)
+
+  const initialRecords = [
   {
     familyName: "Reyes",
     firstName: "Maria",
@@ -140,6 +143,7 @@ const initialRecords = [
 ]
 
 export default function InformationSheetPage() {
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
   // Handle login success toast
   useLoginSuccessToast()
   
@@ -631,7 +635,7 @@ export default function InformationSheetPage() {
       </main>
       {/* Create Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
+        <DialogContent onInteractOutside={(e)=> e.preventDefault()} className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">Information Sheet Fill Out Form</DialogTitle>
             <DialogClose asChild>
@@ -791,15 +795,9 @@ export default function InformationSheetPage() {
                     documents_others: formData.documents === 'Others' ? formData.documentsOther : undefined,
                     // removed fields are omitted by backend defaults
                   } as any
-                  const res = await fetch('/api/information-sheet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-                  const json = await res.json()
-                  if (json?.success) {
-                    setModalOpen(false)
-                    await fetchRecords({ page: pagination.page, limit: pagination.limit, search })
-                    toast({ title: 'Information sheet request created!', description: 'Your request has been submitted successfully.' })
-                  } else {
-                    toast({ title: 'Failed to create', description: json?.error || 'Please try again.', variant: 'destructive' as any })
-                  }
+                  // open confirm dialog before posting
+                  setPendingPayload(payload as any)
+                  setCreateConfirmOpen(true)
                 }}>Create</Button>
               </div>
             </form>
@@ -807,6 +805,34 @@ export default function InformationSheetPage() {
         </DialogContent>
       </Dialog>
       {/* View Modal */}
+
+      {/* Confirm Create Dialog */}
+      <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Create</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create this new Information Sheet request?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCreateConfirmOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              setCreateConfirmOpen(false)
+              const payload = pendingPayload || {}
+              const res = await fetch('/api/information-sheet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+              const json = await res.json()
+              if (json?.success) {
+                setModalOpen(false)
+                await fetchRecords({ page: pagination.page, limit: pagination.limit, search })
+                toast({ title: 'Information sheet request created!', description: 'Your request has been submitted successfully.' })
+              } else {
+                toast({ title: 'Failed to create', description: json?.error || 'Please try again.', variant: 'destructive' as any })
+              }
+            }}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent className="max-w-2xl w-full p-0 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
           <div className="bg-[#1976D2] text-white px-8 py-4 flex items-center justify-between">

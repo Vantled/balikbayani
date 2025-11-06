@@ -1,5 +1,6 @@
 // components/job-fair-monitoring-modal.tsx
 import { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,8 @@ export default function JobFairMonitoringModal({
   const { pastJobFairs, fetchPastJobFairs, loading: pastJobFairsLoading } = usePastJobFairs();
   const hasFetchedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const [usedJobFairs, setUsedJobFairs] = useState<Set<string>>(new Set());
+  const [loadingUsedJobFairs, setLoadingUsedJobFairs] = useState(false);
   
   const [formData, setFormData] = useState({
     selectedJobFairId: '',
@@ -43,18 +46,110 @@ export default function JobFairMonitoringModal({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Only fetch past job fairs once when modal opens for creating new record
+  // Fetch used job fairs (existing monitoring records) to filter them out
+  // Requirements:
+  // 1. Job fair must be on the @list page (handled by usePastJobFairs)
+  // 2. Job fair must have already passed (handled by getPastJobFairs API - DATE(date) <= CURRENT_DATE)
+  // 3. Job fair must not have been picked before (filtered out here by comparing date + venue)
+  // Always refetch when opening for creating to ensure we have the latest data
   useEffect(() => {
-    if (open && !editingRecord && !hasFetchedRef.current) {
-      fetchPastJobFairs();
+    if (open && !editingRecord) {
+      const fetchUsedJobFairs = async () => {
+        setLoadingUsedJobFairs(true);
+        setHasLoadedUsedJobFairs(false);
+        try {
+          // Small delay to ensure any recently created records are committed to the database
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Fetch all non-deleted monitoring records (they're filtered by default)
+          // This gives us the list of job fairs that have already been evaluated
+          const response = await fetch('/api/job-fair-monitoring?limit=1000&page=1');
+          if (response.ok) {
+            const data = await response.json();
+            const monitoringRecords = data.data || [];
+            
+            // Create a set of used job fair identifiers (date + venue)
+            // Normalize dates to YYYY-MM-DD format - API now returns dates as strings
+            // and venues to uppercase trimmed
+            const used = new Set<string>();
+            monitoringRecords.forEach((record: JobFairMonitoring) => {
+              let dateStr: string;
+              try {
+                // API now returns dates as strings in YYYY-MM-DD format
+                if (typeof record.date_of_job_fair === 'string') {
+                  // Extract date part directly from string
+                  if (record.date_of_job_fair.includes('T')) {
+                    // ISO format: extract date part before 'T'
+                    dateStr = record.date_of_job_fair.split('T')[0];
+                  } else if (record.date_of_job_fair.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    // Already in YYYY-MM-DD format - use directly
+                    dateStr = record.date_of_job_fair;
+                  } else {
+                    // Parse and use local timezone (not UTC)
+                    const date = new Date(record.date_of_job_fair);
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    dateStr = `${year}-${month}-${day}`;
+                  }
+                } else if (record.date_of_job_fair instanceof Date) {
+                  // Fallback: if it's a Date object, use local timezone methods
+                  const year = record.date_of_job_fair.getFullYear();
+                  const month = String(record.date_of_job_fair.getMonth() + 1).padStart(2, '0');
+                  const day = String(record.date_of_job_fair.getDate()).padStart(2, '0');
+                  dateStr = `${year}-${month}-${day}`;
+                } else {
+                  // Fallback: use local timezone
+                  const date = new Date(record.date_of_job_fair);
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  dateStr = `${year}-${month}-${day}`;
+                }
+              } catch (e) {
+                console.error('Error normalizing monitoring record date:', record.date_of_job_fair, e);
+                return; // Skip this record if we can't parse the date
+              }
+              
+              const venue = (record.venue || '').trim().toUpperCase();
+              const key = `${dateStr}|${venue}`;
+              used.add(key);
+            });
+            setUsedJobFairs(used);
+            setHasLoadedUsedJobFairs(true); // Mark as loaded after successful fetch
+          }
+        } catch (error) {
+          console.error('Error fetching used job fairs:', error);
+        } finally {
+          setLoadingUsedJobFairs(false);
+        }
+      };
+      
+      fetchUsedJobFairs();
+    } else if (!open) {
+      // Reset when modal closes - this ensures fresh data on next open
+      setUsedJobFairs(new Set());
+      setHasLoadedUsedJobFairs(false);
+    }
+  }, [open, editingRecord]);
+
+  // Fetch past job fairs when modal opens for creating new record
+  // Always refetch to get the latest job fairs (including newly created ones)
+  useEffect(() => {
+    if (open && !editingRecord) {
+      // Always refetch to ensure we have the latest data
+      fetchPastJobFairs(1, 50, '');
       hasFetchedRef.current = true;
     }
-  }, [open, editingRecord, fetchPastJobFairs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingRecord]); // Don't include fetchPastJobFairs to avoid infinite loop
 
   // Reset the fetch flag when modal closes
   useEffect(() => {
     if (!open) {
       hasFetchedRef.current = false;
+      // Don't reset usedJobFairs here - let it reset in the other useEffect
+      // This way if modal reopens quickly, we still have the data
     }
   }, [open]);
 
@@ -101,8 +196,138 @@ export default function JobFairMonitoringModal({
     setErrors({});
   }, [editingRecord, open]);
 
+  // Track if we've loaded used job fairs at least once
+  const [hasLoadedUsedJobFairs, setHasLoadedUsedJobFairs] = useState(false);
+  
+  // Update flag when loading completes
+  useEffect(() => {
+    if (!loadingUsedJobFairs && open && !editingRecord) {
+      setHasLoadedUsedJobFairs(true);
+    }
+  }, [loadingUsedJobFairs, open, editingRecord]);
+
+  // Filter out job fairs that are already used in monitoring records
+  // Only filter when creating (not editing) and when we have loaded the used job fairs
+  const availableJobFairs = React.useMemo(() => {
+    if (editingRecord) return pastJobFairs; // Show all when editing
+    
+    // Wait until we've loaded used job fairs at least once before filtering
+    if (loadingUsedJobFairs || !hasLoadedUsedJobFairs) {
+      // If we haven't loaded yet, return empty array to prevent selection
+      return [];
+    }
+    
+    // Filter out used job fairs
+    const filtered = pastJobFairs.filter((jobFair) => {
+      // Normalize date to YYYY-MM-DD format - API returns dates as strings
+      // This must match the normalization used for monitoring records
+      let dateStr: string;
+      try {
+        // API now returns dates as strings in YYYY-MM-DD format
+        if (typeof jobFair.date === 'string') {
+          // If it's a string, extract date part directly
+          if (jobFair.date.includes('T')) {
+            // ISO format: extract date part before 'T'
+            dateStr = jobFair.date.split('T')[0];
+          } else if (jobFair.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Already in YYYY-MM-DD format - use directly
+            dateStr = jobFair.date;
+          } else {
+            // Parse and use local timezone (not UTC)
+            const date = new Date(jobFair.date);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          }
+        } else if (jobFair.date instanceof Date) {
+          // Fallback: if it's a Date object, use local timezone methods
+          const year = jobFair.date.getFullYear();
+          const month = String(jobFair.date.getMonth() + 1).padStart(2, '0');
+          const day = String(jobFair.date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          // Fallback: use local timezone
+          const date = new Date(jobFair.date);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        }
+      } catch (e) {
+        console.error('Error normalizing job fair date:', jobFair.date, e);
+        return true; // Include if we can't parse the date
+      }
+      
+      // Normalize venue to uppercase trimmed
+      const venue = (jobFair.venue || '').trim().toUpperCase();
+      const key = `${dateStr}|${venue}`;
+      
+      const isUsed = usedJobFairs.has(key);
+      return !isUsed;
+    });
+    
+    return filtered;
+  }, [pastJobFairs, usedJobFairs, loadingUsedJobFairs, editingRecord, hasLoadedUsedJobFairs]);
+
   const handleJobFairSelection = (jobFairId: string) => {
-    const selectedJobFair = pastJobFairs.find(jf => jf.id === jobFairId);
+    // Use availableJobFairs when creating, pastJobFairs when editing
+    const jobFairsList = editingRecord ? pastJobFairs : availableJobFairs;
+    const selectedJobFair = jobFairsList.find(jf => jf.id === jobFairId);
+    
+    if (!selectedJobFair) {
+      // Job fair not found in available list - this shouldn't happen, but prevent it
+      console.warn('Selected job fair not found in available list:', jobFairId);
+      return;
+    }
+    
+    // Double-check that the job fair is not used (when creating)
+    // Use the same date normalization as in the filter (local timezone, not UTC)
+    if (!editingRecord && hasLoadedUsedJobFairs) {
+      let dateStr: string;
+      try {
+        if (selectedJobFair.date instanceof Date) {
+          // Use local timezone methods to extract date part (not UTC)
+          const year = selectedJobFair.date.getFullYear();
+          const month = String(selectedJobFair.date.getMonth() + 1).padStart(2, '0');
+          const day = String(selectedJobFair.date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else if (typeof selectedJobFair.date === 'string') {
+          if (selectedJobFair.date.includes('T')) {
+            dateStr = selectedJobFair.date.split('T')[0];
+          } else if (selectedJobFair.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            dateStr = selectedJobFair.date;
+          } else {
+            const date = new Date(selectedJobFair.date);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          }
+        } else {
+          const date = new Date(selectedJobFair.date);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        }
+      } catch (e) {
+        console.error('Error normalizing date in handleJobFairSelection:', e);
+        return;
+      }
+      
+      const venue = (selectedJobFair.venue || '').trim().toUpperCase();
+      const key = `${dateStr}|${venue}`;
+      
+      if (usedJobFairs.has(key)) {
+        setErrors(prev => ({
+          ...prev,
+          selectedJobFairId: 'This job fair has already been used in a previous monitoring record.'
+        }));
+        return;
+      }
+    }
+    
     if (selectedJobFair) {
       setFormData(prev => ({
         ...prev,
@@ -186,8 +411,64 @@ export default function JobFairMonitoringModal({
       dmw_staff_assigned: dmwStaffAssigned
     };
 
-    await onSubmit(monitoringData);
-    onOpenChange(false);
+    try {
+      await onSubmit(monitoringData);
+      
+      // If creating (not editing), add the newly created record to usedJobFairs immediately
+      // Use the actual form data (date and venue) that was submitted, not the selected job fair
+      // Do this BEFORE closing the modal so the update doesn't get lost
+      if (!editingRecord && formData.date_of_job_fair && formData.venue) {
+        try {
+          // Extract date part from form data (should be YYYY-MM-DD format from date input)
+          // Use same normalization as elsewhere (local timezone, not UTC)
+          let date: string;
+          if (typeof formData.date_of_job_fair === 'string') {
+            if (formData.date_of_job_fair.includes('T')) {
+              date = formData.date_of_job_fair.split('T')[0];
+            } else if (formData.date_of_job_fair.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // Already in YYYY-MM-DD format - use directly
+              date = formData.date_of_job_fair;
+            } else {
+              // Parse and use local timezone (not UTC)
+              const dateObj = new Date(formData.date_of_job_fair);
+              const year = dateObj.getFullYear();
+              const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+              const day = String(dateObj.getDate()).padStart(2, '0');
+              date = `${year}-${month}-${day}`;
+            }
+          } else {
+            // Use local timezone (not UTC)
+            const dateObj = new Date(formData.date_of_job_fair);
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            date = `${year}-${month}-${day}`;
+          }
+          const venue = formData.venue.trim().toUpperCase();
+          const key = `${date}|${venue}`;
+          
+          // Add to used job fairs set
+          setUsedJobFairs(prev => {
+            const newSet = new Set(prev);
+            newSet.add(key);
+            return newSet;
+          });
+          
+          // Also update the hasLoadedUsedJobFairs flag so the filter applies immediately
+          setHasLoadedUsedJobFairs(true);
+        } catch (e) {
+          console.error('Error adding newly created job fair to used set:', e);
+        }
+      }
+      
+      // Small delay to ensure state updates are processed before closing
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 100);
+    } catch (error) {
+      console.error('Error submitting monitoring data:', error);
+      // Don't close modal on error
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -256,33 +537,87 @@ export default function JobFairMonitoringModal({
                <div>
                  <Label className="text-sm font-medium">Select Job Fair:</Label>
                  <Select
+                   key={`job-fair-select-${usedJobFairs.size}-${hasLoadedUsedJobFairs}`}
                    value={formData.selectedJobFairId}
                    onValueChange={handleJobFairSelection}
-                   disabled={pastJobFairsLoading}
+                   disabled={pastJobFairsLoading || loadingUsedJobFairs || !hasLoadedUsedJobFairs}
                  >
                    <SelectTrigger className={`mt-1 ${errors.selectedJobFairId ? 'border-red-500 focus:border-red-500' : ''}`}>
-                     <SelectValue placeholder={pastJobFairsLoading ? "Loading job fairs..." : "Choose a past job fair"} />
+                     <SelectValue placeholder={(pastJobFairsLoading || loadingUsedJobFairs || !hasLoadedUsedJobFairs) ? "Loading..." : "Choose a past job fair"} />
                    </SelectTrigger>
                    <SelectContent className="z-[70]">
-                     {pastJobFairs.length === 0 ? (
+                     {availableJobFairs.length === 0 ? (
                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                         No past job fairs found
+                         {pastJobFairs.length === 0 
+                           ? "No past job fairs found" 
+                           : loadingUsedJobFairs || !hasLoadedUsedJobFairs
+                           ? "Loading available job fairs..."
+                           : "All available job fairs have been used"}
                        </div>
                      ) : (
-                       pastJobFairs.map((jobFair) => (
-                         <SelectItem key={jobFair.id} value={jobFair.id}>
-                           {formatJobFairOption(jobFair)}
-                         </SelectItem>
-                       ))
+                       <>
+                         {availableJobFairs
+                           .filter((jobFair) => {
+                             // Double-check this job fair isn't used before rendering
+                             if (editingRecord) return true;
+                             
+                             // Use same normalization as in availableJobFairs filter (local timezone)
+                             let dateStr: string;
+                             try {
+                               if (jobFair.date instanceof Date) {
+                                 // Use local timezone methods to extract date part (not UTC)
+                                 const year = jobFair.date.getFullYear();
+                                 const month = String(jobFair.date.getMonth() + 1).padStart(2, '0');
+                                 const day = String(jobFair.date.getDate()).padStart(2, '0');
+                                 dateStr = `${year}-${month}-${day}`;
+                               } else if (typeof jobFair.date === 'string') {
+                                 if (jobFair.date.includes('T')) {
+                                   dateStr = jobFair.date.split('T')[0];
+                                 } else if (jobFair.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                   dateStr = jobFair.date;
+                                 } else {
+                                   const date = new Date(jobFair.date);
+                                   const year = date.getFullYear();
+                                   const month = String(date.getMonth() + 1).padStart(2, '0');
+                                   const day = String(date.getDate()).padStart(2, '0');
+                                   dateStr = `${year}-${month}-${day}`;
+                                 }
+                               } else {
+                                 const date = new Date(jobFair.date);
+                                 const year = date.getFullYear();
+                                 const month = String(date.getMonth() + 1).padStart(2, '0');
+                                 const day = String(date.getDate()).padStart(2, '0');
+                                 dateStr = `${year}-${month}-${day}`;
+                               }
+                             } catch (e) {
+                               console.error('Error normalizing date in render filter:', e);
+                               return true; // Include if we can't parse
+                             }
+                             const venue = (jobFair.venue || '').trim().toUpperCase();
+                             const key = `${dateStr}|${venue}`;
+                             
+                            if (usedJobFairs.has(key)) {
+                              return false; // Don't render used job fairs
+                            }
+                             return true;
+                           })
+                           .map((jobFair) => (
+                             <SelectItem key={jobFair.id} value={jobFair.id}>
+                               {formatJobFairOption(jobFair)}
+                             </SelectItem>
+                           ))}
+                       </>
                      )}
                    </SelectContent>
                  </Select>
                 {errors.selectedJobFairId && (
                   <p className="text-xs text-red-500 mt-1">{errors.selectedJobFairId}</p>
                 )}
-                {pastJobFairs.length === 0 && !pastJobFairsLoading && (
+                {availableJobFairs.length === 0 && !pastJobFairsLoading && !loadingUsedJobFairs && (
                   <p className="text-xs text-orange-500 mt-1">
-                    No past job fairs found. Please add job fairs with dates in the past first.
+                    {pastJobFairs.length === 0
+                      ? "No past job fairs found. Please add job fairs with dates in the past first."
+                      : "All available job fairs have already been used in previous monitoring records."}
                   </p>
                 )}
               </div>

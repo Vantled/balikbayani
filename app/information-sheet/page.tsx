@@ -17,10 +17,7 @@ import PermissionGuard from "@/components/permission-guard"
 import { uploadToS3 } from "@/lib/s3-client"
 import ProcessingStatusCard from "@/components/processing-status-card";
 
-  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
-  const [pendingPayload, setPendingPayload] = useState<any | null>(null)
-
-  const initialRecords = [
+const initialRecords = [
   {
     familyName: "Reyes",
     firstName: "Maria",
@@ -144,6 +141,7 @@ import ProcessingStatusCard from "@/components/processing-status-card";
 
 export default function InformationSheetPage() {
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null)
   // Handle login success toast
   useLoginSuccessToast()
   

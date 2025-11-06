@@ -1527,7 +1527,12 @@ export class DatabaseService {
   }
 
   static async getJobFairById(id: string): Promise<JobFair | null> {
-    const { rows } = await db.query('SELECT * FROM job_fairs WHERE id = $1', [id]);
+    // Format date as string to avoid timezone issues
+    // Use TO_CHAR to get the date as a string in YYYY-MM-DD format
+    const { rows } = await db.query(
+      'SELECT id, TO_CHAR(date, \'YYYY-MM-DD\') as date_str, date, venue, office_head, is_rescheduled, deleted_at, created_at, updated_at FROM job_fairs WHERE id = $1',
+      [id]
+    );
     if (!rows[0]) return null;
     
     // Get contacts for this job fair
@@ -1542,8 +1547,33 @@ export class DatabaseService {
       [id]
     );
     
+    // Use the date string directly to create a Date object in local timezone
+    // Parse the date string (YYYY-MM-DD) and create a Date object at local midnight
+    // This avoids timezone shifts
+    const dateStr = rows[0].date_str || rows[0].date;
+    let dateObj: Date;
+    if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // Parse YYYY-MM-DD string as local date (not UTC)
+      const [year, month, day] = dateStr.split('-').map(Number);
+      dateObj = new Date(year, month - 1, day); // month is 0-indexed, creates date at local midnight
+    } else if (dateStr instanceof Date) {
+      // If it's already a Date object, extract the date part and create a new Date at local midnight
+      const year = dateStr.getFullYear();
+      const month = dateStr.getMonth();
+      const day = dateStr.getDate();
+      dateObj = new Date(year, month, day); // Create at local midnight
+    } else {
+      // Fallback: try to parse it
+      const date = new Date(dateStr);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const day = date.getDate();
+      dateObj = new Date(year, month, day); // Create at local midnight
+    }
+    
     return {
       ...rows[0],
+      date: dateObj,
       is_rescheduled: rows[0].is_rescheduled || false, // Default to false if column doesn't exist
       contacts: contactRows,
       emails: emailRows
@@ -1556,10 +1586,18 @@ export class DatabaseService {
       await client.query('BEGIN');
       
       // Get the original job fair to check if date changed
-      const { rows: originalJobFair } = await client.query('SELECT date FROM job_fairs WHERE id = $1', [id]);
+      // Format date as string to compare correctly
+      const { rows: originalJobFair } = await client.query('SELECT TO_CHAR(date, \'YYYY-MM-DD\') as date FROM job_fairs WHERE id = $1', [id]);
       
       // Check if the date has changed (indicating rescheduling)
-      const isRescheduled = originalJobFair[0] && originalJobFair[0].date.getTime() !== new Date(jobFairData.date).getTime();
+      // Compare date strings to avoid timezone issues
+      const originalDateStr = originalJobFair[0]?.date;
+      const newDateStr = typeof jobFairData.date === 'string' 
+        ? jobFairData.date 
+        : jobFairData.date instanceof Date
+        ? jobFairData.date.toISOString().split('T')[0]
+        : new Date(jobFairData.date).toISOString().split('T')[0];
+      const isRescheduled = originalJobFair[0] && originalDateStr !== newDateStr;
       
       // Update job fair - handle case where is_rescheduled column might not exist yet
       let rows;
@@ -1639,8 +1677,10 @@ export class DatabaseService {
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Only get job fairs that are in the past and not deleted
-    let whereConditions: string[] = ['date < CURRENT_DATE', 'deleted_at IS NULL'];
+    // Only get job fairs that are in the past or today and not deleted
+    // Use DATE() to ensure we're comparing dates correctly (not timestamps)
+    // Use <= to include today's date
+    let whereConditions: string[] = ['DATE(date) <= CURRENT_DATE', 'deleted_at IS NULL'];
 
     if (pagination.search && pagination.search.trim()) {
       whereConditions.push(`(venue ILIKE $${paramIndex} OR office_head ILIKE $${paramIndex})`);

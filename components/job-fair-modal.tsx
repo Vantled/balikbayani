@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { X, FileText, Loader2, Plus, Trash2 } from "lucide-react"
 import { JobFair, JobFairContact } from "@/lib/types"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
 
 interface JobFairModalProps {
   open: boolean
@@ -25,6 +26,7 @@ const CONTACT_CATEGORIES = [
 export default function JobFairModal({ open, onClose, initialData = null, onSuccess }: JobFairModalProps) {
   const [loading, setLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
+  const { toast } = useToast()
   
   const [formData, setFormData] = useState({
     date: "",
@@ -41,9 +43,58 @@ export default function JobFairModal({ open, onClose, initialData = null, onSucc
   // Prefill form when editing
   useEffect(() => {
     if (initialData) {
+      // Fix date handling to avoid timezone issues
+      // The API returns date as a string "YYYY-MM-DD", so use it directly
+      let dateStr = "";
+      try {
+        if (typeof initialData.date === 'string') {
+          // If it's a string, extract date part directly
+          if (initialData.date.includes('T')) {
+            // ISO format: extract date part before 'T'
+            dateStr = initialData.date.split('T')[0];
+          } else if (initialData.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Already in YYYY-MM-DD format - use it directly
+            dateStr = initialData.date;
+          } else {
+            // Try to parse as date string
+            const date = new Date(initialData.date);
+            if (!isNaN(date.getTime())) {
+              // Parse as local date to avoid timezone shifts
+              const year = date.getFullYear();
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const day = String(date.getDate()).padStart(2, '0');
+              dateStr = `${year}-${month}-${day}`;
+            } else {
+              dateStr = "";
+            }
+          }
+        } else if (initialData.date instanceof Date) {
+          // If it's a Date object, extract date part using local timezone
+          // This handles cases where JSON parsing converted the string to a Date
+          const year = initialData.date.getFullYear();
+          const month = String(initialData.date.getMonth() + 1).padStart(2, '0');
+          const day = String(initialData.date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          // Fallback: try to parse it
+          const date = new Date(initialData.date);
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          } else {
+            dateStr = "";
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing date in edit mode:', e);
+        dateStr = "";
+      }
+      
       setFormData({
-        date: new Date(initialData.date).toISOString().split('T')[0],
-        venue: initialData.venue,
+        date: dateStr,
+        venue: initialData.venue || "",
         office_head: initialData.office_head || ""
       })
       setEmails((initialData as any).emails?.map((e: any)=> e.email_address) || [""])
@@ -56,19 +107,24 @@ export default function JobFairModal({ open, onClose, initialData = null, onSucc
       setCustomCategories([""])
     }
     setValidationErrors({})
+    setMounted(false) // Reset mounted state
     const t = requestAnimationFrame(()=> setMounted(true))
     return ()=> cancelAnimationFrame(t)
-  }, [initialData])
+  }, [initialData, open]) // Add 'open' to dependencies to reset when modal opens
 
-  // Trigger enter animation when opened
+  // Trigger enter animation when opened and reset form when closed
   useEffect(() => {
     if (open) {
       const t = requestAnimationFrame(() => setMounted(true))
       return () => cancelAnimationFrame(t)
     } else {
       setMounted(false)
+      // Reset form when modal closes
+      if (!initialData) {
+        clearForm()
+      }
     }
-  }, [open])
+  }, [open, initialData])
 
   const validateForm = (): boolean => {
     const errors: {[k: string]: string} = {}
@@ -170,8 +226,16 @@ export default function JobFairModal({ open, onClose, initialData = null, onSucc
         return { contact_category: finalCategory, contact_number: number }
       })
 
+      // Ensure date is sent as a proper date string (YYYY-MM-DD format)
+      // The date input already gives us YYYY-MM-DD, so we can use it directly
+      // But we need to ensure it's sent as a date string, not a Date object
+      const dateValue = formData.date.trim();
+      if (!dateValue) {
+        throw new Error('Date is required');
+      }
+      
       const jobFairData = {
-        date: new Date(formData.date),
+        date: dateValue, // Send as YYYY-MM-DD string, let the API convert it
         venue: formData.venue.trim(),
         office_head: formData.office_head.trim(),
         emails: emails.filter(email => email.trim()).map(email => ({ email_address: email.trim() })),
@@ -193,10 +257,68 @@ export default function JobFairModal({ open, onClose, initialData = null, onSucc
         throw new Error(errorData.error || `Failed to ${initialData ? 'update' : 'create'} job fair`)
       }
 
+      // Format date for display
+      let displayDate = dateValue
+      try {
+        const dateObj = new Date(dateValue + 'T00:00:00')
+        if (!isNaN(dateObj.getTime())) {
+          displayDate = dateObj.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        }
+      } catch (e) {
+        // Use raw date value if formatting fails
+      }
+
+      // Build details string
+      const emailCount = emails.filter(e => e.trim()).length
+      const contactCount = parsedContacts.length
+      const details: string[] = []
+      
+      if (emailCount > 0) {
+        details.push(`${emailCount} email${emailCount !== 1 ? 's' : ''}`)
+      }
+      if (contactCount > 0) {
+        details.push(`${contactCount} contact${contactCount !== 1 ? 's' : ''}`)
+      }
+      
+      const detailsText = details.length > 0 ? ` with ${details.join(' and ')}` : ''
+
+      // Show detailed success toast
+      toast({
+        title: initialData ? "Job Fair Updated Successfully" : "Job Fair Created Successfully",
+        description: `${initialData ? 'Updated' : 'Created'} job fair at "${formData.venue.trim()}" scheduled for ${displayDate}${detailsText}.`,
+      })
+
       await onSuccess?.()
       onClose()
     } catch (error) {
       console.error('Error saving job fair:', error)
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred'
+      
+      // Show detailed error toast
+      const venueInfo = formData.venue.trim() ? ` for "${formData.venue.trim()}"` : ''
+      
+      let dateInfo = ''
+      if (formData.date) {
+        try {
+          const dateObj = new Date(formData.date + 'T00:00:00')
+          if (!isNaN(dateObj.getTime())) {
+            dateInfo = ` scheduled for ${dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
+          }
+        } catch (e) {
+          // Use raw date if formatting fails
+          dateInfo = ` scheduled for ${formData.date}`
+        }
+      }
+      
+      toast({
+        title: `Failed to ${initialData ? 'Update' : 'Create'} Job Fair`,
+        description: `Unable to ${initialData ? 'update' : 'create'} job fair${venueInfo}${dateInfo}. ${errorMessage}`,
+        variant: "destructive"
+      })
     } finally {
       setLoading(false)
     }

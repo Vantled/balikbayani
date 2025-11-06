@@ -1,4 +1,4 @@
-// app/api/job-fairs/export/route.ts
+// app/api/pra-contacts/export/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { AuthService } from '@/lib/services/auth-service';
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
 
     // Get all data for export (no pagination)
-    const result = await DatabaseService.getJobFairs({ 
+    const result = await DatabaseService.getPraContacts({ 
       page: 1, 
       limit: 10000,
       search,
@@ -32,24 +32,25 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform data for Excel export
-    const excelData = result.data.map(record => ({
-      date: record.date ? new Date(record.date).toLocaleDateString() : '',
-      venue: record.venue || '',
-      office_head: record.office_head || '',
-      email_addresses: record.emails && record.emails.length > 0 
-        ? record.emails.map((email: any) => email.email_address).join('; ')
+    const excelData = result.data.map(contact => ({
+      name_of_pras: contact.name_of_pras || '',
+      pra_contact_person: contact.pra_contact_person || '',
+      office_head: contact.office_head || '',
+      email: contact.email || '',
+      contact_number: contact.contact_number || '',
+      emails: contact.emails && contact.emails.length > 0 
+        ? contact.emails.map((e: any) => e.email_address).join('; ')
         : '',
-      contact_numbers: record.contacts && record.contacts.length > 0 
-        ? record.contacts.map((contact: any) => `${contact.contact_category}: ${contact.contact_number}`).join('; ')
+      contacts: contact.contacts && contact.contacts.length > 0
+        ? contact.contacts.map((c: any) => `${c.contact_category}: ${c.contact_number}`).join('; ')
         : '',
-      is_rescheduled: record.is_rescheduled ? 'Yes' : 'No',
-      created_at: record.created_at ? new Date(record.created_at).toLocaleDateString() : '',
-      updated_at: record.updated_at ? new Date(record.updated_at).toLocaleDateString() : '',
+      created_at: contact.created_at ? new Date(contact.created_at).toLocaleDateString() : '',
+      updated_at: contact.updated_at ? new Date(contact.updated_at).toLocaleDateString() : '',
     }));
 
     // Export to Excel using template
     const excelBuffer = await exportToExcel({
-      templateName: 'job fairs.xlsx',
+      templateName: 'pra contacts.xlsx',
       data: excelData,
       startRow: 2,
     });
@@ -57,14 +58,15 @@ export async function GET(request: NextRequest) {
     return new NextResponse(excelBuffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="job-fairs.xlsx"',
+        'Content-Disposition': 'attachment; filename="pra-contacts.xlsx"',
       },
     });
   } catch (error) {
-    console.error('Error exporting job fairs:', error);
+    console.error('Error exporting PRA contacts:', error);
     return NextResponse.json(
-      { error: 'Failed to export job fairs data' },
+      { error: 'Failed to export PRA contacts data' },
       { status: 500 }
     );
   }
 }
+

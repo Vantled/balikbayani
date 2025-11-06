@@ -22,6 +22,7 @@ import JobFairFilterPanel from "@/components/job-fair-filter-panel"
 import { JobFair } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 import PermissionGuard from "@/components/permission-guard"
+import { toast } from "sonner"
 
 export default function JobFairsListPage() {
   // Handle login success toast
@@ -162,39 +163,34 @@ export default function JobFairsListPage() {
     return "Monitoring List"
   }
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async () => {
     try {
-      const exportFormat = format === 'excel' ? 'csv' : 'json';
-      const url = `/api/job-fairs/export?format=${exportFormat}&search=${encodeURIComponent(search)}&showDeletedOnly=${showDeletedOnly}`;
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (showDeletedOnly) params.append('showDeletedOnly', 'true');
       
-      if (format === 'excel') {
-        // Download CSV file
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = 'job-fairs.csv';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-      } else {
-        // Download JSON file
-        const response = await fetch(url);
-        const data = await response.json();
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = 'job-fairs.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-      }
+      // Download Excel file
+      const response = await fetch(`/api/job-fairs/export?${params.toString()}`);
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'job-fairs.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      toast.success('Export successful', {
+        description: 'Job fairs data exported to Excel',
+      });
     } catch (error) {
       console.error('Export failed:', error);
+      toast.error('Export failed', {
+        description: 'Failed to export job fairs data',
+      });
     }
   }
 
@@ -235,9 +231,6 @@ export default function JobFairsListPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                    Export as PDF
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport('excel')}>
                     Export as Excel
                   </DropdownMenuItem>

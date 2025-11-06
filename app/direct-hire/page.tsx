@@ -11,7 +11,8 @@ import CreateApplicationModal from "@/components/create-application-modal"
 import Header from "@/components/shared/header"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 import PermissionGuard from "@/components/permission-guard"
-import ProcessingStatusCard from "@/components/processing-status-card";
+import ProcessingStatusCard from "@/components/processing-status-card"
+import { toast } from "sonner"
 
 export default function DirectHirePage() {
   // Handle login success toast
@@ -103,8 +104,38 @@ export default function DirectHirePage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  try {
+                    const params = new URLSearchParams();
+                    if (search) params.append('search', search);
+                    if (panelQuery) params.append('filterQuery', panelQuery);
+                    if (showDeletedOnly) params.append('include_deleted', 'true');
+                    if (showFinishedOnly) params.append('include_finished', 'true');
+                    if (showProcessingOnly) params.append('include_processing', 'true');
+                    
+                    const response = await fetch(`/api/direct-hire/export?${params.toString()}`);
+                    if (!response.ok) throw new Error('Export failed');
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'direct-hire.xlsx';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    
+                    toast.success('Export successful', {
+                      description: 'Direct hire data exported to Excel',
+                    });
+                  } catch (error) {
+                    console.error('Export failed:', error);
+                    toast.error('Export failed', {
+                      description: 'Failed to export direct hire data',
+                    });
+                  }
+                }}>Export as Excel</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 

@@ -10,7 +10,6 @@
     "render:start": "npm run render:migrate && npm run start",
     "lint": "next lint",
     "install-deps": "npm install --legacy-peer-deps",
-    
     "db:init": "tsx lib/init-db.ts",
     "db:init-complete": "node scripts/init-database.js --reset",
     "db:init-complete-alt": "node scripts/init-database-alt.js",
@@ -23,12 +22,10 @@
     "db:set-superadmin-password": "tsx lib/set-superadmin-password.ts",
     "db:migrate-info-soft-delete": "tsx scripts/migrate-info-sheet-soft-delete.ts",
     "db:update-admin-names": "tsx lib/update-admin-names.ts",
-    
     "db:seed-peso": "tsx scripts/seed-peso-contacts.ts",
     "db:seed-pra": "tsx scripts/seed-pra-contacts.ts",
     "db:seed-bm": "tsx scripts/seed-balik-manggagawa.ts",
     "db:cleanup-users": "tsx scripts/cleanup-users.ts",
-    
     "debug:session": "tsx lib/debug-session.ts",
     "test:complete-auth": "tsx lib/test-complete-auth.ts",
     "test:user-management": "tsx lib/test-user-management.ts",
@@ -68,6 +65,8 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
+    "adm-zip": "^0.5.12",
+    "archiver": "^5.3.2",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.1",
@@ -78,6 +77,7 @@
     "docx-templates": "^4.14.1",
     "dotenv": "^16.4.5",
     "embla-carousel-react": "8.5.1",
+    "exceljs": "^4.4.0",
     "form-data": "^4.0.4",
     "input-otp": "1.4.1",
     "js-cookie": "^3.0.5",
@@ -97,12 +97,11 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "tar": "^6.2.0",
     "uuid": "^9.0.1",
     "vaul": "^0.9.9",
-    "zod": "^3.24.1",
-    "adm-zip": "^0.5.12",
-    "archiver": "^5.3.2",
-    "tar": "^6.2.0"
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

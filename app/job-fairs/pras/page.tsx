@@ -465,8 +465,38 @@ export default function PraContactsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                  <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                  <DropdownMenuItem onClick={async () => {
+                    try {
+                      const params = new URLSearchParams();
+                      if (search) params.append('search', search);
+                      if (showDeletedOnly) params.append('showDeletedOnly', 'true');
+                      
+                      const response = await fetch(`/api/pra-contacts/export?${params.toString()}`);
+                      if (!response.ok) throw new Error('Export failed');
+                      
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'pra-contacts.xlsx';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                      
+                      toast({
+                        title: "Export successful",
+                        description: "PRA contacts exported to Excel",
+                      });
+                    } catch (error) {
+                      console.error('Export failed:', error);
+                      toast({
+                        title: "Export failed",
+                        description: "Failed to export PRA contacts",
+                        variant: "destructive",
+                      });
+                    }
+                  }}>Export as Excel</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={handleCreate}>

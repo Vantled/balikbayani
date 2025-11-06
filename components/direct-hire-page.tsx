@@ -80,21 +80,35 @@ export default function DirectHirePage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem
-                  onClick={() => {
-                    toast.success("PDF Export successful", {
-                      icon: <BadgeCheck className="h-5 w-5 text-green-600" />,
-                      duration: 3000,
-                    })
-                  }}
-                >
-                  Export as PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    toast.success("Excel Export successful", {
-                      icon: <FileDown className="h-5 w-5 text-green-600" />,
-                      duration: 3000,
-                    })
+                  onClick={async () => {
+                    try {
+                      const params = new URLSearchParams();
+                      // Note: This component may need to access search/filter state from parent
+                      // For now, export all data
+                      
+                      const response = await fetch(`/api/direct-hire/export?${params.toString()}`);
+                      if (!response.ok) throw new Error('Export failed');
+                      
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'direct-hire.xlsx';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                      
+                      toast.success("Excel Export successful", {
+                        icon: <FileDown className="h-5 w-5 text-green-600" />,
+                        duration: 3000,
+                      });
+                    } catch (error) {
+                      console.error('Export failed:', error);
+                      toast.error("Export failed", {
+                        duration: 3000,
+                      });
+                    }
                   }}
                 >
                   Export as Excel

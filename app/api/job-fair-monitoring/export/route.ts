@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { AuthService } from '@/lib/services/auth-service';
+import { exportToExcel } from '@/lib/excel-export-service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'excel';
     const search = searchParams.get('search') || '';
     const filter = searchParams.get('filter') || '';
     const showDeletedOnly = searchParams.get('showDeletedOnly') === 'true';
@@ -27,28 +27,38 @@ export async function GET(request: NextRequest) {
     // Get all data for export (no pagination)
     const result = await DatabaseService.getJobFairMonitoring({ 
       page: 1, 
-      limit: 1000, // Large limit to get all data
+      limit: 10000,
       search,
       filter,
       showDeletedOnly
     });
 
-    if (format === 'csv') {
-      const csvData = generateCSV(result.data);
-      return new NextResponse(csvData, {
-        headers: {
-          'Content-Type': 'text/csv',
-          'Content-Disposition': 'attachment; filename="job-fair-monitoring.csv"',
-        },
-      });
-    } else {
-      // Default to JSON format
-      return NextResponse.json({
-        data: result.data,
-        exportDate: new Date().toISOString(),
-        totalRecords: result.data.length
-      });
-    }
+    // Transform data for Excel export
+    const excelData = result.data.map(record => ({
+      date_of_job_fair: record.date_of_job_fair ? new Date(record.date_of_job_fair).toLocaleDateString() : '',
+      venue: record.venue || '',
+      no_of_invited_agencies: record.no_of_invited_agencies || 0,
+      no_of_agencies_with_jfa: record.no_of_agencies_with_jfa || 0,
+      male_applicants: record.male_applicants || 0,
+      female_applicants: record.female_applicants || 0,
+      total_applicants: record.total_applicants || 0,
+      dmw_staff_assigned: record.dmw_staff_assigned || '',
+      created_at: record.created_at ? new Date(record.created_at).toLocaleDateString() : '',
+    }));
+
+    // Export to Excel using template
+    const excelBuffer = await exportToExcel({
+      templateName: 'job fair monitoring.xlsx',
+      data: excelData,
+      startRow: 2,
+    });
+
+    return new NextResponse(excelBuffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="job-fair-monitoring.xlsx"',
+      },
+    });
   } catch (error) {
     console.error('Error exporting job fair monitoring:', error);
     return NextResponse.json(
@@ -56,42 +66,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function generateCSV(data: any[]): string {
-  const headers = [
-    'Date of Job Fair',
-    'Venue',
-    'No. of Invited Agencies',
-    'No. of Agencies with JFA',
-    'Male Applicants',
-    'Female Applicants',
-    'Total Applicants',
-    'Created At',
-    'Updated At'
-  ];
-
-  const csvRows = [headers.join(',')];
-
-  for (const record of data) {
-    const row = [
-      formatDate(record.date_of_job_fair),
-      `"${record.venue}"`,
-      record.no_of_invited_agencies,
-      record.no_of_agencies_with_jfa,
-      record.male_applicants,
-      record.female_applicants,
-      record.total_applicants,
-      formatDate(record.created_at),
-      formatDate(record.updated_at)
-    ];
-    csvRows.push(row.join(','));
-  }
-
-  return csvRows.join('\n');
-}
-
-function formatDate(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toISOString().split('T')[0];
 }

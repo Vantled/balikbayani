@@ -27,6 +27,7 @@ import JobFairMonitoringFilterPanel from "@/components/job-fair-monitoring-filte
 import { JobFairMonitoring } from "@/lib/types"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 import PermissionGuard from "@/components/permission-guard"
+import { toast } from "sonner"
 
 export default function MonitoringSummaryPage() {
   // Handle login success toast
@@ -153,12 +154,9 @@ export default function MonitoringSummaryPage() {
     setPanelQuery("")
   }
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async () => {
     try {
-      const exportFormat = format === 'excel' ? 'csv' : 'json';
-      const params = new URLSearchParams({
-        format: exportFormat
-      });
+      const params = new URLSearchParams();
       
       if (search) {
         params.append('search', search);
@@ -172,36 +170,28 @@ export default function MonitoringSummaryPage() {
         params.append('showDeletedOnly', 'true');
       }
       
-      const url = `/api/job-fair-monitoring/export?${params.toString()}`;
+      // Download Excel file
+      const response = await fetch(`/api/job-fair-monitoring/export?${params.toString()}`);
+      if (!response.ok) throw new Error('Export failed');
       
-      if (format === 'excel') {
-        // Download CSV file
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = 'job-fair-monitoring.csv';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-      } else {
-        // Download JSON file
-        const response = await fetch(url);
-        const data = await response.json();
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = 'job-fair-monitoring.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-      }
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'job-fair-monitoring.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      toast.success('Export successful', {
+        description: 'Job fair monitoring data exported to Excel',
+      });
     } catch (error) {
       console.error('Export failed:', error);
+      toast.error('Export failed', {
+        description: 'Failed to export job fair monitoring data',
+      });
     }
   }
 
@@ -240,9 +230,6 @@ export default function MonitoringSummaryPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                    Export as PDF
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport('excel')}>
                     Export as Excel
                   </DropdownMenuItem>

@@ -350,8 +350,50 @@ export default function InformationSheetPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                      <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          const params = new URLSearchParams();
+                          if (search) params.append('search', search);
+                          if (appliedFilters.purpose) params.append('purpose', appliedFilters.purpose);
+                          if (appliedFilters.worker_category) params.append('worker_category', appliedFilters.worker_category);
+                          if (appliedFilters.sex) params.append('sex', appliedFilters.sex);
+                          if (appliedFilters.jobsite) params.append('jobsite', appliedFilters.jobsite);
+                          if (appliedFilters.requested_record) params.append('requested_record', appliedFilters.requested_record);
+                          if (appliedFilters.date_from) params.append('date_from', appliedFilters.date_from);
+                          if (appliedFilters.date_to) params.append('date_to', appliedFilters.date_to);
+                          if (includeDeleted) params.append('include_deleted', 'true');
+                          if (!includeActive) params.append('include_active', 'false');
+                          
+                          const response = await fetch(`/api/information-sheet/export?${params.toString()}`);
+                          if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+                            throw new Error(errorData.error || 'Export failed');
+                          }
+                          
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = 'information-sheet.xlsx';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                          
+                          toast({
+                            title: "Export successful",
+                            description: "Information sheet exported to Excel",
+                          });
+                        } catch (error) {
+                          console.error('Export failed:', error);
+                          const errorMessage = error instanceof Error ? error.message : 'Failed to export information sheet';
+                          toast({
+                            title: "Export failed",
+                            description: errorMessage,
+                            variant: "destructive",
+                          });
+                        }
+                      }}>Export as Excel</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={() => setModalOpen(true)}>

@@ -174,12 +174,11 @@ export default function GovToGovPage() {
                       <div className="text-sm font-medium mb-1">Educational Attainment</div>
                       <select className="w-full border rounded px-2 py-1 text-sm" value={educationFilter} onChange={e=>setEducationFilter(e.target.value)}>
                         <option value="">All</option>
-                        <option value="ELEMENTARY">Elementary</option>
-                        <option value="HIGH SCHOOL">High School</option>
-                        <option value="SENIOR HIGH SCHOOL">Senior High School</option>
-                        <option value="VOCATIONAL">Vocational</option>
-                        <option value="COLLEGE">College</option>
-                        <option value="POST GRADUATE">Post Graduate</option>
+                        <option value="POST GRADUATE">POST GRADUATE</option>
+                        <option value="COLLEGE GRADUATE">COLLEGE GRADUATE</option>
+                        <option value="VOCATIONAL GRADUATE">VOCATIONAL GRADUATE</option>
+                        <option value="COLLEGE LEVEL">COLLEGE LEVEL</option>
+                        <option value="HIGH SCHOOL GRADUATE">HIGH SCHOOL GRADUATE</option>
                       </select>
                     </div>
                     {/* Taiwan Work Experience */}
@@ -265,8 +264,44 @@ export default function GovToGovPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem>Export as Excel</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  try {
+                    const params = new URLSearchParams();
+                    if (search) params.append('search', search);
+                    if (appliedFilters.sex) params.append('sex', appliedFilters.sex);
+                    if (appliedFilters.educational_attainment) params.append('educational_attainment', appliedFilters.educational_attainment);
+                    if (appliedFilters.with_taiwan_work_experience !== undefined) params.append('with_taiwan_work_experience', String(appliedFilters.with_taiwan_work_experience));
+                    if (appliedFilters.date_from) params.append('date_from', appliedFilters.date_from);
+                    if (appliedFilters.date_to) params.append('date_to', appliedFilters.date_to);
+                    if (showDeletedOnly) params.append('include_deleted', 'true');
+                    if (!includeActive) params.append('include_active', 'false');
+                    
+                    const response = await fetch(`/api/gov-to-gov/export?${params.toString()}`);
+                    if (!response.ok) throw new Error('Export failed');
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'gov-to-gov.xlsx';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    
+                    toast({
+                      title: "Export successful",
+                      description: "Gov-to-Gov data exported to Excel",
+                    });
+                  } catch (error) {
+                    console.error('Export failed:', error);
+                    toast({
+                      title: "Export failed",
+                      description: "Failed to export gov-to-gov data",
+                      variant: "destructive",
+                    });
+                  }
+                }}>Export as Excel</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button className="bg-[#1976D2] hover:bg-[#1565C0] h-9 text-white flex items-center gap-2" onClick={() => { setModalOpen(true); setFormStep(1); setFormData({ lastName: '', firstName: '', middleName: '', sex: '', dob: '', height: '', weight: '', education: '', address: '', email: '', contact: '', passportNo: '', passportValidity: '', idPresented: '', idNumber: '', withTaiwanExp: '', taiwanExpDetails: '', withJobExp: '', jobExpDetails: '', remarks: '', dateReceived: '' }) }}>
@@ -496,13 +531,11 @@ export default function GovToGovPage() {
                     <Label className="text-sm font-medium">Educational Attainment:</Label>
                     <select required className={`w-full border rounded px-3 py-2.5 text-sm mt-1 h-10 ${formErrors.education ? 'border-red-500 focus-visible:ring-red-500' : ''}`} value={formData.education} onChange={e => { setFormData({ ...formData, education: (e.target.value || '').toUpperCase() }); if ((e.target.value || '').trim()) setFormErrors(prev => ({ ...prev, education: undefined as any })) }}>
                       <option value="">--</option>
-                      <option value="COLLEGE GRADUATE OR HIGHER">COLLEGE GRADUATE OR HIGHER</option>
-                      <option value="COLLEGE UNDERGRADUATE">COLLEGE UNDERGRADUATE</option>
+                      <option value="POST GRADUATE">POST GRADUATE</option>
+                      <option value="COLLEGE GRADUATE">COLLEGE GRADUATE</option>
+                      <option value="VOCATIONAL GRADUATE">VOCATIONAL GRADUATE</option>
+                      <option value="COLLEGE LEVEL">COLLEGE LEVEL</option>
                       <option value="HIGH SCHOOL GRADUATE">HIGH SCHOOL GRADUATE</option>
-                      <option value="HIGH SCHOOL UNDERGRADUATE">HIGH SCHOOL UNDERGRADUATE</option>
-                      <option value="ELEMENTARY GRADUATE">ELEMENTARY GRADUATE</option>
-                      <option value="ELEMENTARY UNDERGRADUATE">ELEMENTARY UNDERGRADUATE</option>
-                      <option value="NO GRADE COMPLETED">NO GRADE COMPLETED</option>
                     </select>
                   </div>
                   {formErrors.education && (<div className="text-xs text-red-600 mt-1">{formErrors.education}</div>)}
@@ -850,6 +883,9 @@ export default function GovToGovPage() {
                 remarks: formData.remarks || '',
               } as any
               let res
+              const applicantName = `${formData.firstName} ${formData.lastName}${formData.middleName ? ` ${formData.middleName}` : ''}`.trim().toUpperCase()
+              const passportNumber = formData.passportNo?.toUpperCase() || 'N/A'
+              
               if (editingId) {
                 res = await update(editingId, payload)
               } else {
@@ -858,11 +894,28 @@ export default function GovToGovPage() {
               if (res?.success) {
                 setModalOpen(false)
                 await refresh()
+                
+                const timestamp = new Date().toLocaleString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric',
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })
+                
+                toast({
+                  title: editingId ? 'Applicant updated successfully!' : 'Applicant created successfully!',
+                  description: editingId 
+                    ? `Updated: ${applicantName}\nPassport: ${passportNumber}\nUpdated at ${timestamp}`
+                    : `Created: ${applicantName}\nPassport: ${passportNumber}\nEducational Attainment: ${formData.education}\nCreated at ${timestamp}`,
+                })
+              } else {
+                toast({
+                  title: editingId ? 'Update failed' : 'Create failed',
+                  description: res?.error || 'Unable to save application',
+                  variant: 'destructive',
+                })
               }
-              toast({
-                title: editingId ? 'Applicant updated successfully!' : 'Applicant created successfully!',
-                description: editingId ? 'The Gov-to-Gov applicant has been updated.' : 'The new Gov-to-Gov applicant has been added to the system.',
-              })
             }}>Confirm</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1149,12 +1202,31 @@ export default function GovToGovPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={async () => {
               if (!selected) return
+              
+              const applicantName = `${selected?.first_name} ${selected?.last_name}${selected?.middle_name ? ` ${selected?.middle_name}` : ''}`.trim().toUpperCase()
+              const passportNumber = selected?.passport_number?.toUpperCase() || 'N/A'
+              
               const res = await remove(selected.id)
               if (res?.success) {
-                toast({ title: 'Deleted', description: 'Application has been deleted.' })
+                const timestamp = new Date().toLocaleString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric',
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })
+                
+                toast({ 
+                  title: 'Application deleted', 
+                  description: `Deleted: ${applicantName}\nPassport: ${passportNumber}\nDeleted at ${timestamp}`,
+                })
                 await refresh()
               } else {
-                toast({ title: 'Delete failed', description: res?.error || 'Unable to delete', variant: 'destructive' })
+                toast({ 
+                  title: 'Delete failed', 
+                  description: res?.error || 'Unable to delete application',
+                  variant: 'destructive' 
+                })
               }
               setDeleteConfirmOpen(false)
             }}>Delete</AlertDialogAction>
@@ -1191,12 +1263,31 @@ export default function GovToGovPage() {
               className="bg-green-600 hover:bg-green-700"
               onClick={async () => {
                 if (!selected) return
+                
+                const applicantName = `${selected?.first_name} ${selected?.last_name}${selected?.middle_name ? ` ${selected?.middle_name}` : ''}`.trim().toUpperCase()
+                const passportNumber = selected?.passport_number?.toUpperCase() || 'N/A'
+                
                 const res = await fetch(`/api/gov-to-gov/${selected.id}/restore`, { method: 'PUT' })
                 if (res.ok) {
-                  toast({ title: 'Application restored', description: 'Application has been restored successfully' })
+                  const timestamp = new Date().toLocaleString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric',
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })
+                  
+                  toast({ 
+                    title: 'Application restored', 
+                    description: `Restored: ${applicantName}\nPassport: ${passportNumber}\nApplication is now active again\nRestored at ${timestamp}`,
+                  })
                   await refresh()
                 } else {
-                  toast({ title: 'Restore failed', description: 'Unable to restore application', variant: 'destructive' })
+                  toast({ 
+                    title: 'Restore failed', 
+                    description: 'Unable to restore application',
+                    variant: 'destructive' 
+                  })
                 }
                 setRestoreConfirmText("")
                 setRestoreConfirmOpen(false)
@@ -1246,12 +1337,31 @@ export default function GovToGovPage() {
               className="bg-red-500 hover:bg-red-600 text-white"
               onClick={async () => {
                 if (!applicationToDelete) return
+                
+                const applicantName = `${applicationToDelete?.first_name} ${applicationToDelete?.last_name}${applicationToDelete?.middle_name ? ` ${applicationToDelete?.middle_name}` : ''}`.trim().toUpperCase()
+                const passportNumber = applicationToDelete?.passport_number?.toUpperCase() || 'N/A'
+                
                 const res = await fetch(`/api/gov-to-gov/${applicationToDelete.id}/permanent-delete`, { method: 'DELETE' })
                 if (res.ok) {
-                  toast({ title: 'Permanently deleted', description: 'Application has been permanently removed' })
+                  const timestamp = new Date().toLocaleString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric',
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })
+                  
+                  toast({ 
+                    title: 'Application permanently deleted', 
+                    description: `Permanently deleted: ${applicantName}\nPassport: ${passportNumber}\nAll data has been permanently removed\nDeleted at ${timestamp}`,
+                  })
                   await refresh()
                 } else {
-                  toast({ title: 'Delete failed', description: 'Unable to permanently delete', variant: 'destructive' })
+                  toast({ 
+                    title: 'Delete failed', 
+                    description: 'Unable to permanently delete application',
+                    variant: 'destructive' 
+                  })
                 }
                 setPermanentDeleteConfirmText("")
                 setApplicationToDelete(null)

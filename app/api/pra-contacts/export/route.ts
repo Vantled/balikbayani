@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { AuthService } from '@/lib/services/auth-service';
-import { exportToExcel } from '@/lib/excel-export-service';
+import ExcelJS from 'exceljs';
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,31 +31,88 @@ export async function GET(request: NextRequest) {
       showDeletedOnly
     });
 
-    // Transform data for Excel export
-    const excelData = result.data.map(contact => ({
-      name_of_pras: contact.name_of_pras || '',
-      pra_contact_person: contact.pra_contact_person || '',
-      office_head: contact.office_head || '',
-      email: contact.email || '',
-      contact_number: contact.contact_number || '',
-      emails: contact.emails && contact.emails.length > 0 
-        ? contact.emails.map((e: any) => e.email_address).join('; ')
-        : '',
-      contacts: contact.contacts && contact.contacts.length > 0
-        ? contact.contacts.map((c: any) => `${c.contact_category}: ${c.contact_number}`).join('; ')
-        : '',
-      created_at: contact.created_at ? new Date(contact.created_at).toLocaleDateString() : '',
-      updated_at: contact.updated_at ? new Date(contact.updated_at).toLocaleDateString() : '',
-    }));
+    // Create a new workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('PRA Contacts');
 
-    // Export to Excel using template
-    const excelBuffer = await exportToExcel({
-      templateName: 'pra contacts.xlsx',
-      data: excelData,
-      startRow: 2,
+    // Define headers
+    const headers = [
+      'Name of PRAs',
+      'PRA Contact Person/s',
+      'Office Head',
+      'Email Address(es)',
+      'Contact Number(s)'
+    ];
+
+    // Set header row with styling
+    const headerRow = worksheet.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1976D2' }
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.height = 25;
+
+    // Style header cells
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
     });
 
-    return new NextResponse(excelBuffer, {
+    // Add data rows
+    result.data.forEach((contact) => {
+      const emails = contact.emails && contact.emails.length > 0
+        ? contact.emails.map((email: any) => email.email_address).join('; ')
+        : (contact.email || 'No emails');
+      
+      const contacts = contact.contacts && contact.contacts.length > 0
+        ? contact.contacts.map((contactInfo: any) => `${contactInfo.contact_category}: ${contactInfo.contact_number}`).join('; ')
+        : (contact.contact_number || 'No contacts');
+
+      const row = worksheet.addRow([
+        contact.name_of_pras || '',
+        contact.pra_contact_person || '',
+        contact.office_head || '',
+        emails,
+        contacts
+      ]);
+
+      // Style data rows
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        cell.alignment = { vertical: 'middle' };
+      });
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      if (column.eachCell) {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: false }, (cell) => {
+          const cellValue = cell.value ? String(cell.value) : '';
+          if (cellValue.length > maxLength) {
+            maxLength = cellValue.length;
+          }
+        });
+        column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+      }
+    });
+
+    // Generate buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+    
+    return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="pra-contacts.xlsx"',
@@ -63,8 +120,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error exporting PRA contacts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to export PRA contacts';
     return NextResponse.json(
-      { error: 'Failed to export PRA contacts data' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

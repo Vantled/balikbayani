@@ -171,7 +171,10 @@ export default function JobFairsListPage() {
       
       // Download Excel file
       const response = await fetch(`/api/job-fairs/export?${params.toString()}`);
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(errorData.error || 'Export failed');
+      }
       
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -188,8 +191,9 @@ export default function JobFairsListPage() {
       });
     } catch (error) {
       console.error('Export failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export job fairs data';
       toast.error('Export failed', {
-        description: 'Failed to export job fairs data',
+        description: errorMessage,
       });
     }
   }
@@ -231,7 +235,7 @@ export default function JobFairsListPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => handleExport('excel')}>
+                  <DropdownMenuItem onClick={handleExport}>
                     Export as Excel
                   </DropdownMenuItem>
                 </DropdownMenuContent>

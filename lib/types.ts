@@ -265,6 +265,7 @@ export interface JobFair {
   venue: string;
   office_head: string;
   is_rescheduled: boolean;
+  original_date?: Date | null;
   deleted_at?: Date | null;
   emails?: JobFairEmail[];
   contacts?: JobFairContact[];

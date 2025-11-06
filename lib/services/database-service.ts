@@ -1530,7 +1530,7 @@ export class DatabaseService {
     // Format date as string to avoid timezone issues
     // Use TO_CHAR to get the date as a string in YYYY-MM-DD format
     const { rows } = await db.query(
-      'SELECT id, TO_CHAR(date, \'YYYY-MM-DD\') as date_str, date, venue, office_head, is_rescheduled, deleted_at, created_at, updated_at FROM job_fairs WHERE id = $1',
+      'SELECT id, TO_CHAR(date, \'YYYY-MM-DD\') as date_str, date, TO_CHAR(original_date, \'YYYY-MM-DD\') as original_date_str, original_date, venue, office_head, is_rescheduled, deleted_at, created_at, updated_at FROM job_fairs WHERE id = $1',
       [id]
     );
     if (!rows[0]) return null;
@@ -1547,33 +1547,33 @@ export class DatabaseService {
       [id]
     );
     
+    // Helper function to parse date string to Date object
+    const parseDate = (dateStr: any): Date | null => {
+      if (!dateStr) return null;
+      if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      } else if (dateStr instanceof Date) {
+        const year = dateStr.getFullYear();
+        const month = dateStr.getMonth();
+        const day = dateStr.getDate();
+        return new Date(year, month, day);
+      }
+      return null;
+    };
+    
     // Use the date string directly to create a Date object in local timezone
-    // Parse the date string (YYYY-MM-DD) and create a Date object at local midnight
-    // This avoids timezone shifts
     const dateStr = rows[0].date_str || rows[0].date;
-    let dateObj: Date;
-    if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      // Parse YYYY-MM-DD string as local date (not UTC)
-      const [year, month, day] = dateStr.split('-').map(Number);
-      dateObj = new Date(year, month - 1, day); // month is 0-indexed, creates date at local midnight
-    } else if (dateStr instanceof Date) {
-      // If it's already a Date object, extract the date part and create a new Date at local midnight
-      const year = dateStr.getFullYear();
-      const month = dateStr.getMonth();
-      const day = dateStr.getDate();
-      dateObj = new Date(year, month, day); // Create at local midnight
-    } else {
-      // Fallback: try to parse it
-      const date = new Date(dateStr);
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      const day = date.getDate();
-      dateObj = new Date(year, month, day); // Create at local midnight
-    }
+    const dateObj = parseDate(dateStr) || new Date();
+    
+    // Parse original_date if it exists
+    const originalDateStr = rows[0].original_date_str || rows[0].original_date;
+    const originalDateObj = parseDate(originalDateStr);
     
     return {
       ...rows[0],
       date: dateObj,
+      original_date: originalDateObj,
       is_rescheduled: rows[0].is_rescheduled || false, // Default to false if column doesn't exist
       contacts: contactRows,
       emails: emailRows
@@ -1587,7 +1587,7 @@ export class DatabaseService {
       
       // Get the original job fair to check if date changed
       // Format date as string to compare correctly
-      const { rows: originalJobFair } = await client.query('SELECT TO_CHAR(date, \'YYYY-MM-DD\') as date FROM job_fairs WHERE id = $1', [id]);
+      const { rows: originalJobFair } = await client.query('SELECT TO_CHAR(date, \'YYYY-MM-DD\') as date, original_date FROM job_fairs WHERE id = $1', [id]);
       
       // Check if the date has changed (indicating rescheduling)
       // Compare date strings to avoid timezone issues
@@ -1599,22 +1599,41 @@ export class DatabaseService {
         : new Date(jobFairData.date).toISOString().split('T')[0];
       const isRescheduled = originalJobFair[0] && originalDateStr !== newDateStr;
       
-      // Update job fair - handle case where is_rescheduled column might not exist yet
+      // If rescheduling and original_date is not set, save the original date
+      let originalDateToSave = originalJobFair[0]?.original_date;
+      if (isRescheduled && !originalDateToSave) {
+        originalDateToSave = originalDateStr;
+      }
+      
+      // Update job fair - handle case where is_rescheduled or original_date columns might not exist yet
       let rows;
       try {
         const result = await client.query(
-          'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, is_rescheduled = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
-          [jobFairData.date, jobFairData.venue, jobFairData.office_head, isRescheduled, id]
+          'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, is_rescheduled = $4, original_date = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
+          [jobFairData.date, jobFairData.venue, jobFairData.office_head, isRescheduled, originalDateToSave, id]
         );
         rows = result.rows;
       } catch (error: any) {
-        // If is_rescheduled column doesn't exist, try without it
-        if (error.message && error.message.includes('is_rescheduled')) {
-          const result = await client.query(
-            'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
-            [jobFairData.date, jobFairData.venue, jobFairData.office_head, id]
-          );
-          rows = result.rows;
+        // If is_rescheduled or original_date columns don't exist, try without them
+        if (error.message && (error.message.includes('is_rescheduled') || error.message.includes('original_date'))) {
+          try {
+            const result = await client.query(
+              'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, is_rescheduled = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+              [jobFairData.date, jobFairData.venue, jobFairData.office_head, isRescheduled, id]
+            );
+            rows = result.rows;
+          } catch (innerError: any) {
+            // If is_rescheduled doesn't exist either, try without it
+            if (innerError.message && innerError.message.includes('is_rescheduled')) {
+              const result = await client.query(
+                'UPDATE job_fairs SET date = $1, venue = $2, office_head = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
+                [jobFairData.date, jobFairData.venue, jobFairData.office_head, id]
+              );
+              rows = result.rows;
+            } else {
+              throw innerError;
+            }
+          }
         } else {
           throw error;
         }

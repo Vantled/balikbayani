@@ -127,6 +127,7 @@ async function initializeDatabase() {
       { file: 'migrations/add_deleted_at_to_job_fairs.sql', desc: 'Adding soft delete to job fairs' },
       { file: 'migrations/add_deleted_at_to_pra_contacts.sql', desc: 'Adding soft delete to PRA contacts' },
       { file: 'migrations/add_rescheduled_field.sql', desc: 'Adding rescheduled field to job fairs' },
+      { file: 'migrations/add_original_date_to_job_fairs.sql', desc: 'Adding original_date field to job fairs' },
       { file: 'migrations/update_job_fairs_contacts.sql', desc: 'Updating job fairs contacts structure' },
       { file: 'migrations/update_peso_contacts_multiple_fields.sql', desc: 'Updating PESO contacts for multiple fields' },
       { file: 'migrations/update_pra_contacts_multiple_fields.sql', desc: 'Updating PRA contacts for multiple fields' },

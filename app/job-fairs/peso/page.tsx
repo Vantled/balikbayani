@@ -382,7 +382,10 @@ export default function PesoContactsPage() {
       
       // Download Excel file
       const response = await fetch(`/api/peso-contacts/export?${params.toString()}`);
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(errorData.error || 'Export failed');
+      }
       
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -399,8 +402,9 @@ export default function PesoContactsPage() {
       });
     } catch (error) {
       console.error('Export failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export PESO contacts data';
       sonnerToast.error('Export failed', {
-        description: 'Failed to export PESO contacts data',
+        description: errorMessage,
       });
     }
   }
@@ -608,7 +612,7 @@ export default function PesoContactsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => handleExport('excel')}>
+                  <DropdownMenuItem onClick={handleExport}>
                     Export as Excel
                   </DropdownMenuItem>
                 </DropdownMenuContent>

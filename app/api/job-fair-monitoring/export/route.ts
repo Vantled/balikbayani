@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { AuthService } from '@/lib/services/auth-service';
-import { exportToExcel } from '@/lib/excel-export-service';
+import ExcelJS from 'exceljs';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,27 +33,94 @@ export async function GET(request: NextRequest) {
       showDeletedOnly
     });
 
-    // Transform data for Excel export
-    const excelData = result.data.map(record => ({
-      date_of_job_fair: record.date_of_job_fair ? new Date(record.date_of_job_fair).toLocaleDateString() : '',
-      venue: record.venue || '',
-      no_of_invited_agencies: record.no_of_invited_agencies || 0,
-      no_of_agencies_with_jfa: record.no_of_agencies_with_jfa || 0,
-      male_applicants: record.male_applicants || 0,
-      female_applicants: record.female_applicants || 0,
-      total_applicants: record.total_applicants || 0,
-      dmw_staff_assigned: record.dmw_staff_assigned || '',
-      created_at: record.created_at ? new Date(record.created_at).toLocaleDateString() : '',
-    }));
+    // Create a new workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Job Fair Monitoring');
 
-    // Export to Excel using template
-    const excelBuffer = await exportToExcel({
-      templateName: 'job fair monitoring.xlsx',
-      data: excelData,
-      startRow: 2,
+    // Define headers
+    const headers = [
+      'Date of Job Fair',
+      'Venue',
+      'Male(Applicants)',
+      'Female(Applicants)',
+      'Total(Applicants)',
+      'DMW Staff Assigned'
+    ];
+
+    // Set header row with styling
+    const headerRow = worksheet.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1976D2' }
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.height = 25;
+
+    // Style header cells
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
     });
 
-    return new NextResponse(excelBuffer, {
+    // Format date helper
+    const formatDate = (date: Date | string | null | undefined): string => {
+      if (!date) return '';
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return '';
+      return dateObj.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    };
+
+    // Add data rows
+    result.data.forEach((record) => {
+      const row = worksheet.addRow([
+        formatDate(record.date_of_job_fair),
+        record.venue || '',
+        record.male_applicants || 0,
+        record.female_applicants || 0,
+        record.total_applicants || 0,
+        record.dmw_staff_assigned || ''
+      ]);
+
+      // Style data rows
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        cell.alignment = { vertical: 'middle' };
+      });
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      if (column.eachCell) {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: false }, (cell) => {
+          const cellValue = cell.value ? String(cell.value) : '';
+          if (cellValue.length > maxLength) {
+            maxLength = cellValue.length;
+          }
+        });
+        column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+      }
+    });
+
+    // Generate buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+    
+    return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="job-fair-monitoring.xlsx"',
@@ -61,8 +128,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error exporting job fair monitoring:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to export job fair monitoring';
     return NextResponse.json(
-      { error: 'Failed to export job fair monitoring data' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

@@ -472,7 +472,10 @@ export default function PraContactsPage() {
                       if (showDeletedOnly) params.append('showDeletedOnly', 'true');
                       
                       const response = await fetch(`/api/pra-contacts/export?${params.toString()}`);
-                      if (!response.ok) throw new Error('Export failed');
+                      if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+                        throw new Error(errorData.error || 'Export failed');
+                      }
                       
                       const blob = await response.blob();
                       const url = window.URL.createObjectURL(blob);
@@ -490,9 +493,10 @@ export default function PraContactsPage() {
                       });
                     } catch (error) {
                       console.error('Export failed:', error);
+                      const errorMessage = error instanceof Error ? error.message : 'Failed to export PRA contacts';
                       toast({
                         title: "Export failed",
-                        description: "Failed to export PRA contacts",
+                        description: errorMessage,
                         variant: "destructive",
                       });
                     }

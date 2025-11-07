@@ -19,6 +19,8 @@ export interface FormData {
   pe_pcg_city: string
   others_text: string
   verified_date: string
+  time_received: string
+  time_released: string
 }
 
 export interface DocMetadata {

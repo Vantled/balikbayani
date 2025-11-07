@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { ApiResponse } from '@/lib/types';
+import { recordAuditLog } from '@/lib/server/audit-logger';
+import { serializeBalikManggagawaClearance } from '@/lib/server/serializers/balik-manggagawa';
+import { extractChangedValues } from '@/lib/utils/objectDiff';
 
 export async function GET(
   request: NextRequest,
@@ -107,6 +110,15 @@ export async function PUT(
       return NextResponse.json(response, { status: 400 });
     }
 
+    const existing = await DatabaseService.getBalikManggagawaClearanceById(id);
+    if (!existing) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Clearance not found'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+
     // Update clearance record
     const normalize = (v: any) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) ? null : v;
     const clearance = await DatabaseService.updateBalikManggagawaClearance(id, {
@@ -142,6 +154,20 @@ export async function PUT(
       return NextResponse.json(response, { status: 404 });
     }
 
+    const before = serializeBalikManggagawaClearance(existing);
+    const after = serializeBalikManggagawaClearance(clearance);
+    const { oldValues, newValues } = extractChangedValues(before, after, { ignoreKeys: ['id'] });
+
+    if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
+      await recordAuditLog(request, {
+        action: 'update',
+        tableName: 'balik_manggagawa_clearance',
+        recordId: id,
+        oldValues,
+        newValues,
+      });
+    }
+
     const response: ApiResponse = {
       success: true,
       data: clearance,
@@ -168,6 +194,15 @@ export async function DELETE(
   try {
     const { id } = await params;
     
+    const existing = await DatabaseService.getBalikManggagawaClearanceById(id);
+    if (!existing) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Clearance not found'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+    
     const success = await DatabaseService.deleteBalikManggagawaClearance(id);
     
     if (!success) {
@@ -177,6 +212,15 @@ export async function DELETE(
       };
       return NextResponse.json(response, { status: 404 });
     }
+
+    const before = serializeBalikManggagawaClearance(existing);
+    await recordAuditLog(request, {
+      action: 'delete',
+      tableName: 'balik_manggagawa_clearance',
+      recordId: id,
+      oldValues: before,
+      newValues: { deleted_at: new Date().toISOString() },
+    });
 
     const response: ApiResponse = {
       success: true,
@@ -238,6 +282,12 @@ export async function PATCH(
       }
 
       // If metadata for template fields was provided, persist relevant fields on the clearance record
+      const existing = await DatabaseService.getBalikManggagawaClearanceById(id);
+      if (!existing) {
+        const response: ApiResponse = { success: false, error: 'Clearance not found' };
+        return NextResponse.json(response, { status: 404 });
+      }
+
       const updated = await DatabaseService.updateBalikManggagawaStatus(id, {
         status: status ?? null,
         clearanceType: clearanceType ?? null,
@@ -260,6 +310,29 @@ export async function PATCH(
       if (!updated) {
         const response: ApiResponse = { success: false, error: 'Clearance not found' };
         return NextResponse.json(response, { status: 404 });
+      }
+      const before = serializeBalikManggagawaClearance(existing);
+      const after = serializeBalikManggagawaClearance(updated);
+      const { oldValues, newValues } = extractChangedValues(before, after, { ignoreKeys: ['id'] });
+
+      if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
+        // Determine specific action based on status change
+        let auditAction = 'update';
+        if (status === 'for_clearance' && existing.status !== 'for_clearance') {
+          auditAction = 'for_compliance';
+        } else if (status === 'approved' && existing.status !== 'approved') {
+          auditAction = 'approved';
+        } else if (status === 'rejected' && existing.status !== 'rejected') {
+          auditAction = 'rejected';
+        }
+
+        await recordAuditLog(request, {
+          action: auditAction,
+          tableName: 'balik_manggagawa_clearance',
+          recordId: id,
+          oldValues: auditAction !== 'update' ? { status: existing.status } : oldValues,
+          newValues: auditAction !== 'update' ? { status: status } : newValues,
+        });
       }
       const response: ApiResponse = { success: true, data: updated, message: 'Status updated successfully' };
       return NextResponse.json(response);

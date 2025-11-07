@@ -16,6 +16,7 @@ import FilterPanel from "@/components/filter-panel"
 import PermissionGuard from "@/components/permission-guard"
 import { uploadToS3 } from "@/lib/s3-client"
 import ProcessingStatusCard from "@/components/processing-status-card";
+import { TransactionHistory } from "@/components/transaction-history"
 
 const initialRecords = [
   {
@@ -173,6 +174,8 @@ export default function InformationSheetPage() {
     requestedRecord: "",
     documents: "",
     documentsOther: "",
+    time_received: "",
+    time_released: "",
   })
   const [selected, setSelected] = useState<any>(null)
   const [viewOpen, setViewOpen] = useState(false)
@@ -193,6 +196,7 @@ export default function InformationSheetPage() {
   const [docToDelete, setDocToDelete] = useState<any>(null)
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [restoreConfirmText, setRestoreConfirmText] = useState("")
+  const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
   
 
   // Fetch via hook - only when search text or applied filters change
@@ -216,6 +220,24 @@ export default function InformationSheetPage() {
     }
     load()
   }, [viewOpen, selected])
+
+  // Prefill time_received and time_released when form opens
+  useEffect(() => {
+    if (modalOpen) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      setFormData(prev => ({
+        ...prev,
+        time_received: prev.time_received || localDateTime,
+        time_released: prev.time_released || localDateTime
+      }));
+    }
+  }, [modalOpen])
 
   return (
     <PermissionGuard permission="information_sheet" fallback={<div className="min-h-screen bg-[#eaf3fc]"><Header /></div>}>
@@ -814,6 +836,27 @@ export default function InformationSheetPage() {
                   />
                 )}
               </div>
+              {/* Time Received and Time Released */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Time Received:</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    value={formData.time_received}
+                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time Released:</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    value={formData.time_released}
+                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
+                  />
+                </div>
+              </div>
               
               <div className="flex justify-end gap-2 mt-6">
                 <Button variant="outline" className="px-6" type="button" onClick={() => setModalOpen(false)}>
@@ -833,6 +876,8 @@ export default function InformationSheetPage() {
                     requested_record: formData.requestedRecord?.toLowerCase().replaceAll(' ', '_'),
                     documents_presented: formData.documents ? [formData.documents] : [],
                     documents_others: formData.documents === 'Others' ? formData.documentsOther : undefined,
+                    time_received: formData.time_received || null,
+                    time_released: formData.time_released || null,
                     // removed fields are omitted by backend defaults
                   } as any
                   // open confirm dialog before posting
@@ -977,6 +1022,7 @@ export default function InformationSheetPage() {
                                         setEditingDocumentId(null)
                                         setEditDocName("")
                                         setDocuments(prev => prev.map((d:any)=> d.id===doc.id ? { ...d, document_type: editDocName.trim() } : d ))
+                                        setDocumentsRefreshTrigger(prev => prev + 1)
                                         toast({ title: 'Document updated', description: 'Document name has been updated' })
                                       } else {
                                         toast({ title: 'Update failed', description: json?.error || 'Please try again.', variant: 'destructive' as any })
@@ -995,6 +1041,7 @@ export default function InformationSheetPage() {
                                     setEditingDocumentId(null)
                                     setEditDocName("")
                                     setDocuments(prev => prev.map((d:any)=> d.id===doc.id ? { ...d, document_type: editDocName.trim() } : d ))
+                                    setDocumentsRefreshTrigger(prev => prev + 1)
                                     toast({ title: 'Document updated', description: 'Document name has been updated' })
                                   } else {
                                     toast({ title: 'Update failed', description: json?.error || 'Please try again.', variant: 'destructive' as any })
@@ -1041,6 +1088,15 @@ export default function InformationSheetPage() {
                   ))}
                 </div>
               </div>
+              <hr className="my-4" />
+              {/* Transaction History */}
+              <div className="mb-6">
+                <TransactionHistory
+                  applicationType="information-sheet"
+                  recordId={selected?.id ?? null}
+                  refreshKey={documentsRefreshTrigger}
+                />
+              </div>
             </div>
           )}
         </DialogContent>
@@ -1071,6 +1127,7 @@ export default function InformationSheetPage() {
               const json = await res.json()
               if (json?.success) {
                 setDocuments(prev => prev.filter((d:any) => d.id !== docToDelete.id))
+                setDocumentsRefreshTrigger(prev => prev + 1)
                 setDeleteDocConfirmOpen(false)
                 setDocToDelete(null)
                 toast({ title: 'Document deleted', description: 'The document has been removed' })
@@ -1167,6 +1224,7 @@ export default function InformationSheetPage() {
                     const r = await fetch(`/api/documents?applicationId=${selected.id}&applicationType=information_sheet`)
                     const j = await r.json()
                     if (j?.success) setDocuments(j.data)
+                    setDocumentsRefreshTrigger(prev => prev + 1)
                     toast({ title: 'Document uploaded', description: 'Document has been uploaded successfully' })
                   } else {
                     toast({ title: 'Upload Error', description: json?.error || 'Upload failed', variant: 'destructive' as any })

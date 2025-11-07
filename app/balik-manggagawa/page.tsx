@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2, ChevronUp, FileCheck, CheckCircle, XCircle } from "lucide-react"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
+import TransactionHistory from "@/components/transaction-history"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogClose, DialogHeader } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -650,6 +651,8 @@ export default function BalikManggagawaPage() {
     position: "",
     job_type: "" as 'household' | 'professional' | '',
     salaryCurrency: "" as Currency | '',
+    time_received: "",
+    time_released: "",
   })
   const [controlPreview, setControlPreview] = useState("")
   const [creating, setCreating] = useState(false)
@@ -813,6 +816,24 @@ export default function BalikManggagawaPage() {
     window.addEventListener('refresh:balik_manggagawa' as any, handler as any)
     return () => window.removeEventListener('refresh:balik_manggagawa' as any, handler as any)
   }, [fetchClearances, getCurrentFilters])
+
+  // Prefill time_received and time_released when form opens
+  useEffect(() => {
+    if (isCreateOpen) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      setFormData(prev => ({
+        ...prev,
+        time_received: prev.time_received || localDateTime,
+        time_released: prev.time_released || localDateTime
+      }));
+    }
+  }, [isCreateOpen])
 
   
   useEffect(() => {
@@ -1185,7 +1206,7 @@ export default function BalikManggagawaPage() {
       </main>
 
       {/* Create BM Clearance Modal */}
-      <Dialog open={isCreateOpen} onOpenChange={(o)=> { setIsCreateOpen(o); if (!o) { setFormData({ nameOfWorker: "", sex: "", employer: "", destination: "", salary: "", position: "", job_type: "", salaryCurrency: "" }); setControlPreview("") } }}>
+      <Dialog open={isCreateOpen} onOpenChange={(o)=> { setIsCreateOpen(o); if (!o) { setFormData({ nameOfWorker: "", sex: "", employer: "", destination: "", salary: "", position: "", job_type: "", salaryCurrency: "", time_received: "", time_released: "" }); setControlPreview("") } }}>
         <DialogContent onInteractOutside={(e)=> e.preventDefault()} className="p-0 overflow-hidden max-w-2xl w-[95vw]">
           <DialogTitle className="sr-only">Create BM Application</DialogTitle>
           <div className="bg-[#1976D2] text-white px-6 py-4">
@@ -1303,6 +1324,27 @@ export default function BalikManggagawaPage() {
                   </div>
                 )}
               </div>
+              {/* Time Received and Time Released */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Time Received:</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.time_received}
+                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Time Released:</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.time_released}
+                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -1346,6 +1388,8 @@ export default function BalikManggagawaPage() {
                 position: formData.position || undefined,
                 jobType: formData.job_type || undefined,
                 salaryCurrency: formData.salaryCurrency || undefined,
+                time_received: formData.time_received || undefined,
+                time_released: formData.time_released || undefined,
               }
               const res = await createClearance(payload)
               setCreating(false)
@@ -1436,6 +1480,13 @@ export default function BalikManggagawaPage() {
                 refreshTrigger={documentsRefreshTrigger}
                 applicationStatus={selected?.status}
               />
+              <div className="mt-6">
+                <TransactionHistory
+                  applicationType="balik-manggagawa"
+                  recordId={selected?.id ?? null}
+                  refreshKey={documentsRefreshTrigger}
+                />
+              </div>
             </div>
           </div>
           {/* Status Action Buttons - Sticky Footer */}

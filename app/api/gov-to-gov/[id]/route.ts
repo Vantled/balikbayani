@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { ApiResponse } from '@/lib/types'
+import { recordAuditLog } from '@/lib/server/audit-logger'
+import { extractChangedValues } from '@/lib/utils/objectDiff'
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,6 +22,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params
     const body = await request.json()
+    
+    // Get existing application for audit logging
+    const existing = await DatabaseService.getGovToGovApplications({}, { page: 1, limit: 1 })
+    const existingApplication = (existing.data as any[]).find((r: any) => r.id === id)
+    if (!existingApplication) {
+      return NextResponse.json({ success: false, error: 'Not found' } as ApiResponse, { status: 404 })
+    }
     
     // Only update fields that are provided in the request body
     const updatePayload: any = {}
@@ -53,11 +62,48 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.date_received_by_region !== undefined) updatePayload.date_received_by_region = body.date_received_by_region ? new Date(body.date_received_by_region) : null
     if (body.date_card_released !== undefined) updatePayload.date_card_released = body.date_card_released ? new Date(body.date_card_released) : null
     if (body.remarks !== undefined) updatePayload.remarks = (body.remarks || '').toUpperCase() || null
+    if (body.time_received !== undefined) updatePayload.time_received = body.time_received || null
+    if (body.time_released !== undefined) updatePayload.time_released = body.time_released || null
 
     const updated = await DatabaseService.updateGovToGovApplication(id, updatePayload)
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Not found' } as ApiResponse, { status: 404 })
     }
+    
+    // Record audit log for update
+    const before = { ...existingApplication };
+    const after = { ...updated };
+    const { oldValues, newValues } = extractChangedValues(before, after, { ignoreKeys: ['id'] });
+    
+    if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
+      // Determine specific action based on field changes
+      let auditAction = 'update';
+      
+      // Check if card was released (date_card_released was null/undefined and now has a value)
+      const wasCardReleased = newValues.date_card_released && 
+        (!oldValues.date_card_released || oldValues.date_card_released === null) && 
+        (!existingApplication.date_card_released || existingApplication.date_card_released === null);
+      
+      // Check if received by region (date_received_by_region was null/undefined and now has a value)
+      const wasReceivedByRegion = newValues.date_received_by_region && 
+        (!oldValues.date_received_by_region || oldValues.date_received_by_region === null) && 
+        (!existingApplication.date_received_by_region || existingApplication.date_received_by_region === null);
+      
+      if (wasCardReleased) {
+        auditAction = 'release_card';
+      } else if (wasReceivedByRegion) {
+        auditAction = 'received_by_region';
+      }
+      
+      await recordAuditLog(request, {
+        action: auditAction,
+        tableName: 'gov_to_gov_applications',
+        recordId: id,
+        oldValues: auditAction !== 'update' ? { [auditAction === 'release_card' ? 'date_card_released' : 'date_received_by_region']: existingApplication[auditAction === 'release_card' ? 'date_card_released' : 'date_received_by_region'] } : oldValues,
+        newValues: auditAction !== 'update' ? { [auditAction === 'release_card' ? 'date_card_released' : 'date_received_by_region']: updated[auditAction === 'release_card' ? 'date_card_released' : 'date_received_by_region'] } : newValues,
+      });
+    }
+    
     return NextResponse.json({ success: true, data: updated } as ApiResponse)
   } catch (error) {
     console.error('Error updating gov-to-gov application:', error)
@@ -65,13 +111,30 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    
+    // Get existing application for audit logging
+    const existing = await DatabaseService.getGovToGovApplications({}, { page: 1, limit: 1 })
+    const existingApplication = (existing.data as any[]).find((r: any) => r.id === id)
+    
     const deleted = await DatabaseService.softDeleteGovToGovApplication(id)
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Not found' } as ApiResponse, { status: 404 })
     }
+    
+    // Record audit log for delete
+    if (existingApplication) {
+      await recordAuditLog(request, {
+        action: 'delete',
+        tableName: 'gov_to_gov_applications',
+        recordId: id,
+        oldValues: { control_number: existingApplication.control_number },
+        newValues: null,
+      });
+    }
+    
     return NextResponse.json({ success: true, data: deleted, message: 'Application soft deleted' } as ApiResponse)
   } catch (error) {
     console.error('Error soft deleting gov-to-gov application:', error)

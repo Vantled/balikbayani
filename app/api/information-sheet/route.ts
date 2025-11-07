@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { ApiResponse } from '@/lib/types';
+import { recordAuditLog } from '@/lib/server/audit-logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -110,13 +111,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const payload = {
       ...body,
-      time_received: body.time_received ?? new Date(),
-      time_released: body.time_released ?? new Date(),
+      time_received: body.time_received || null,
+      time_released: body.time_released || null,
       total_pct: body.total_pct ?? 100,
       remarks: body.remarks ?? null,
       remarks_others: body.remarks_others ?? null,
     };
     const created = await DatabaseService.createInformationSheetRecord(payload);
+    
+    await recordAuditLog(request, {
+      action: 'create',
+      tableName: 'information_sheet_records',
+      recordId: created.id,
+      newValues: {
+        control_number: created.control_number,
+      },
+    });
+    
     const response: ApiResponse = { success: true, data: created };
     return NextResponse.json(response, { status: 201 });
   } catch (error) {

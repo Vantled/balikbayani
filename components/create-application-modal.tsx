@@ -107,6 +107,8 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     pe_pcg_city: "",
     others_text: "",
     verified_date: "",
+    time_received: "",
+    time_released: "",
   })
 
   // Tile navigation state
@@ -278,6 +280,24 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     return () => cancelAnimationFrame(t)
   }, []);
 
+  // Prefill time_received and time_released when form opens (for new applications only)
+  useEffect(() => {
+    if (mounted && !applicationId && !initialData) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      setFormData(prev => ({
+        ...prev,
+        time_received: prev.time_received || localDateTime,
+        time_released: prev.time_released || localDateTime
+      }));
+    }
+  }, [mounted, applicationId, initialData]);
+
   // Prefill form when editing a draft (only once per application id)
   const prefillKey = applicationId || (initialData as any)?.id || null
   const prefilledRef = React.useRef<string | null>(null)
@@ -346,6 +366,24 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                 pe_pcg_city: confirmationMeta.pe_pcg_city || '',
                 others_text: confirmationMeta.others_text || '',
                 verified_date: confirmationMeta.verified_date || '',
+                time_received: application.time_received ? (() => {
+                  const date = new Date(application.time_received);
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+                })() : '',
+                time_released: application.time_released ? (() => {
+                  const date = new Date(application.time_released);
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+                })() : '',
                 // @ts-expect-error track raw_salary internally for comparison when present
                 raw_salary: rawSalaryNumber || undefined
               }
@@ -1820,6 +1858,28 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                    </div>
                  </div>
                </div>
+
+              {/* Time Received and Time Released */}
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Time Received:</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.time_received}
+                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
+                    className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Time Released:</Label>
+                  <Input
+                    type="datetime-local"
+                    value={formData.time_released}
+                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
+                    className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
 
                {/* Navigation buttons for Form 3 */}
                <div className="flex justify-between pt-6">

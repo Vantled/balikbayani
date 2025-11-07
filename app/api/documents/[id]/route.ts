@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import FileUploadService from '@/lib/file-upload';
 import { ApiResponse } from '@/lib/types';
+import type { Document as ApplicationDocument } from '@/lib/types';
+import { recordDocumentAudit } from '@/lib/server/document-audit';
+import { serializeDocument } from '@/lib/server/serializers/document';
 
 export async function PUT(
   request: NextRequest,
@@ -47,9 +50,26 @@ export async function PUT(
       return NextResponse.json(response, { status: 404 });
     }
 
+    const updatedDocument = rows[0] as ApplicationDocument;
+
+    await recordDocumentAudit(request, 'update', updatedDocument, {
+      oldValues: {
+        document_name: document.document_type,
+      },
+      newValues: {
+        document_name: updatedDocument.document_type,
+      },
+      applicationOldValues: {
+        document_name: document.document_type,
+      },
+      applicationNewValues: {
+        document_name: updatedDocument.document_type,
+      },
+    });
+
     const response: ApiResponse = {
       success: true,
-      data: rows[0],
+      data: updatedDocument,
       message: 'Document name updated successfully'
     };
 
@@ -109,9 +129,30 @@ export async function PATCH(
       return NextResponse.json(response, { status: 404 });
     }
 
+    const updatedDocument = rows[0] as ApplicationDocument;
+
+    await recordDocumentAudit(request, 'update', updatedDocument, {
+      oldValues: {
+        document_name: document.document_type,
+        meta: document.meta ?? null,
+      },
+      newValues: {
+        document_name: updatedDocument.document_type,
+        meta: updatedDocument.meta ?? meta,
+      },
+      applicationOldValues: {
+        document_name: document.document_type,
+        meta: document.meta ?? null,
+      },
+      applicationNewValues: {
+        document_name: updatedDocument.document_type,
+        meta: updatedDocument.meta ?? meta,
+      },
+    });
+
     const response: ApiResponse = {
       success: true,
-      data: rows[0],
+      data: updatedDocument,
       message: 'Document metadata updated successfully'
     };
 
@@ -167,6 +208,21 @@ export async function DELETE(
       };
       return NextResponse.json(response, { status: 404 });
     }
+
+    await recordDocumentAudit(request, 'delete', document as ApplicationDocument, {
+      oldValues: serializeDocument(document),
+      newValues: {
+        document_name: document.document_type,
+        deleted: true,
+      },
+      applicationOldValues: {
+        document_name: document.document_type,
+      },
+      applicationNewValues: {
+        document_name: document.document_type,
+        deleted: true,
+      },
+    });
 
     const response: ApiResponse = {
       success: true,

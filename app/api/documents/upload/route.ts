@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import FileUploadService from '@/lib/file-upload';
 import { ApiResponse } from '@/lib/types';
+import { recordDocumentAudit } from '@/lib/server/document-audit';
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
@@ -60,6 +61,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       mime_type: uploadedFile.mimeType,
       // optional metadata
       meta
+    });
+
+    await recordDocumentAudit(request, 'create', document, {
+      newValues: {
+        document_name: document.document_type,
+      },
+      applicationNewValues: {
+        document_name: document.document_type,
+      },
     });
 
     return NextResponse.json({

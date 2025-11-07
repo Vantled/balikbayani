@@ -596,7 +596,8 @@ async function initializeDatabase() {
       { file: 'migrations/add_dmw_staff_to_job_fair_monitoring.sql', desc: 'Adding DMW staff assigned field to job fair monitoring' },
       { file: 'migrations/create_system_reports_certificates_table.sql', desc: 'Creating system reports certificates table' },
       { file: 'migrations/20251028_add_deleted_at_information_sheet.sql', desc: 'Adding deleted_at to information_sheet_records' },
-      { file: 'migrations/20250128_add_user_permissions.sql', desc: 'Creating user_permissions table' }
+      { file: 'migrations/20250128_add_user_permissions.sql', desc: 'Creating user_permissions table' },
+      { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' }
     ];
 
     for (const migration of migrations) {

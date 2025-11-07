@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { FileUploadService } from '@/lib/file-upload-service';
 import { ApiResponse } from '@/lib/types';
+import { recordAuditLog } from '@/lib/server/audit-logger';
+import { serializeDirectHireApplication } from '@/lib/server/serializers/direct-hire';
 import createReport from 'docx-templates';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
@@ -156,6 +158,8 @@ export async function POST(request: NextRequest) {
       const pePcgCity = formData.get('pe_pcg_city') as string | null
       const othersText = formData.get('others_text') as string | null
       const verifiedDate = formData.get('verified_date') as string | null
+      const timeReceived = formData.get('time_received') as string | null
+      const timeReleased = formData.get('time_released') as string | null
 
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
@@ -176,6 +180,8 @@ export async function POST(request: NextRequest) {
         raw_salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
         email: (formData.get('email') as string) || '',
         cellphone: (formData.get('cellphone') as string) || '',
+        time_received: timeReceived || null,
+        time_released: timeReleased || null,
         status_checklist: (() => {
           if (status === 'draft') {
             return {
@@ -223,6 +229,15 @@ export async function POST(request: NextRequest) {
       console.log('Saving application data:', applicationData);
       const application = await DatabaseService.createDirectHireApplication(applicationData);
       console.log('Saved application:', application);
+
+      await recordAuditLog(request, {
+        action: 'create',
+        tableName: 'direct_hire_applications',
+        recordId: application.id,
+        newValues: {
+          control_number: application.control_number,
+        },
+      });
 
       // Handle file uploads
       const uploadedDocuments = [];
@@ -380,6 +395,13 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await DatabaseService.createDirectHireApplication(applicationDataWithMeta as any);
+
+      await recordAuditLog(request, {
+        action: 'create',
+        tableName: 'direct_hire_applications',
+        recordId: result.id,
+        newValues: serializeDirectHireApplication(result),
+      });
 
       const response: ApiResponse = {
         success: true,

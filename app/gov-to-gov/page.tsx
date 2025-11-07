@@ -16,6 +16,7 @@ import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
 import PermissionGuard from "@/components/permission-guard"
 import { useGovToGov } from "@/hooks/use-gov-to-gov"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
+import { TransactionHistory } from "@/components/transaction-history"
 
 const initialRows = [
   { lastName: "Reyes", firstName: "Maria", middleName: "Clara", sex: "Female", taiwanExp: "Yes" },
@@ -77,6 +78,24 @@ export default function GovToGovPage() {
 
     return () => clearTimeout(timeoutId)
   }, [search])
+
+  // Prefill time_received and time_released when form opens
+  useEffect(() => {
+    if (modalOpen && !editingId) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      setFormData(prev => ({
+        ...prev,
+        time_received: prev.time_received || localDateTime,
+        time_released: prev.time_released || localDateTime
+      }));
+    }
+  }, [modalOpen, editingId])
   const [formStep, setFormStep] = useState(1)
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
   const [formData, setFormData] = useState<any>({
@@ -101,6 +120,8 @@ export default function GovToGovPage() {
     jobExpDetails: "",
     remarks: "",
     dateReceived: "",
+    time_received: "",
+    time_released: "",
   })
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
 
@@ -795,6 +816,27 @@ export default function GovToGovPage() {
                     <Label className="text-sm font-medium">Remarks:</Label>
                     <Input className="mt-1" value={formData.remarks} onChange={e => setFormData({ ...formData, remarks: (e.target.value || '').toUpperCase() })} />
                   </div>
+                  {/* Time Received and Time Released */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium">Time Received:</Label>
+                      <Input
+                        type="datetime-local"
+                        value={formData.time_received}
+                        onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Time Released:</Label>
+                      <Input
+                        type="datetime-local"
+                        value={formData.time_released}
+                        onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
                   <div className="flex justify-between pt-4">
                     <Button variant="outline" type="button" onClick={() => setFormStep(1)}>Previous</Button>
                     <Button className="bg-[#1976D2] hover:bg-[#1565C0]" type="button" onClick={async () => {
@@ -881,6 +923,8 @@ export default function GovToGovPage() {
                 other_year_started: formData.otherYearStarted || '',
                 other_year_ended: formData.otherYearEnded || '',
                 remarks: formData.remarks || '',
+                time_received: formData.time_received || null,
+                time_released: formData.time_released || null,
               } as any
               let res
               const applicantName = `${formData.firstName} ${formData.lastName}${formData.middleName ? ` ${formData.middleName}` : ''}`.trim().toUpperCase()
@@ -1114,6 +1158,15 @@ export default function GovToGovPage() {
                   }}
                   setSelectedDocument={setSelectedDocument}
                   setPdfViewerOpen={setPdfViewerOpen}
+                />
+              </div>
+              <hr className="my-4" />
+              {/* Transaction History */}
+              <div className="mb-6">
+                <TransactionHistory
+                  applicationType="gov-to-gov"
+                  recordId={selected?.id ?? null}
+                  refreshKey={documentsRefreshTrigger}
                 />
               </div>
             </div>

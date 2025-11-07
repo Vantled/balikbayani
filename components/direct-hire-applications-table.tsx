@@ -16,6 +16,7 @@ import { Document } from "@/lib/types"
 import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
+import TransactionHistory from "@/components/transaction-history"
 
 // Defer auth role check to client to avoid hydration mismatch
 
@@ -1183,6 +1184,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                   }}
                   setSelectedDocument={setSelectedDocument}
                   setPdfViewerOpen={setPdfViewerOpen}
+                />
+              <TransactionHistory
+                applicationType="direct-hire"
+                recordId={selected.id}
+                refreshKey={documentsRefreshTrigger}
                 />
               </div>
             </div>

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { ApiResponse } from '@/lib/types'
+import { recordAuditLog } from '@/lib/server/audit-logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,9 +67,21 @@ export async function POST(request: NextRequest) {
       other_year_started: body.other_year_started ? Number(body.other_year_started) : null,
       other_year_ended: body.other_year_ended ? Number(body.other_year_ended) : null,
       remarks: (body.remarks || '').toUpperCase() || null,
+      time_received: body.time_received || null,
+      time_released: body.time_released || null,
     } as any
 
     const created = await DatabaseService.createGovToGovApplication(payload)
+    
+    await recordAuditLog(request, {
+      action: 'create',
+      tableName: 'gov_to_gov_applications',
+      recordId: created.id,
+      newValues: {
+        control_number: created.control_number,
+      },
+    });
+    
     const response: ApiResponse = { success: true, data: created }
     return NextResponse.json(response, { status: 201 })
   } catch (error) {

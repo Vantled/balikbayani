@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import AuthService from '@/lib/services/auth-service';
 import { ApiResponse } from '@/lib/types';
+import { recordAuditLog } from '@/lib/server/audit-logger';
+import { serializeBalikManggagawaClearance } from '@/lib/server/serializers/balik-manggagawa';
 
 export async function GET(request: NextRequest) {
   try {
@@ -96,7 +98,9 @@ export async function POST(request: NextRequest) {
       // Watchlisted OFW contact fields
       activeEmailAddress,
       activePhMobileNumber,
-      evaluator
+      evaluator,
+      time_received,
+      time_released
     } = body;
 
     // Validate required fields (clearanceType now optional for BM app creation)
@@ -178,7 +182,18 @@ export async function POST(request: NextRequest) {
       dateOfDeparture: normalize(dateOfDeparture),
       activeEmailAddress: normalize(activeEmailAddress),
       activePhMobileNumber: normalize(activePhMobileNumber),
-      evaluator: evaluatorFromSession || normalize(evaluator)
+      evaluator: evaluatorFromSession || normalize(evaluator),
+      time_received: normalize(time_received),
+      time_released: normalize(time_released)
+    });
+
+    await recordAuditLog(request, {
+      action: 'create',
+      tableName: 'balik_manggagawa_clearance',
+      recordId: clearance.id,
+      newValues: {
+        control_number: clearance.control_number,
+      },
     });
 
     const response: ApiResponse = {

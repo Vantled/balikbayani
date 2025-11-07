@@ -16,6 +16,7 @@ import {
   JobFairMonitoring,
   Document,
   AuditLog,
+  ApplicationTransaction,
   FilterOptions,
   PaginationOptions,
   PaginatedResponse
@@ -124,12 +125,14 @@ export class DatabaseService {
     status_checklist: any;
     salary_currency?: string;
     raw_salary?: number;
+    time_received?: string | null;
+    time_released?: string | null;
   }): Promise<DirectHireApplication> {
     // debug logs removed
     const query = `
       INSERT INTO direct_hire_applications 
-      (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary, time_received, time_released)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `;
     
@@ -148,7 +151,9 @@ export class DatabaseService {
       data.employer,
       JSON.stringify(data.status_checklist),
       data.salary_currency || 'USD',
-      data.raw_salary || data.salary
+      data.raw_salary || data.salary,
+      data.time_received || null,
+      data.time_released || null
     ];
     
     // debug logs removed
@@ -538,6 +543,8 @@ export class DatabaseService {
     activeEmailAddress?: string | null;
     activePhMobileNumber?: string | null;
     evaluator?: string | null;
+    time_received?: string | null;
+    time_released?: string | null;
   }): Promise<BalikManggagawaClearance> {
     // Generate control number based on clearance type with monthly and yearly sequences
     const now = new Date();
@@ -629,14 +636,16 @@ export class DatabaseService {
         position, months_years, with_principal, new_principal_name, employment_duration,
         date_arrival, date_departure, place_date_employment, date_blacklisting,
         total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
-        no_of_months_years, date_of_departure, active_email_address, active_ph_mobile_number, evaluator
+        no_of_months_years, date_of_departure, active_email_address, active_ph_mobile_number, evaluator,
+        time_received, time_released
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,
         $8,$9,
         $10,$11,$12,$13,$14,
         $15,$16,$17,$18,
         $19,$20,$21,$22,$23,$24,
-        $25,$26,$27,$28,$29
+        $25,$26,$27,$28,$29,
+        $30,$31
       ) RETURNING *`;
     const insertParams = [
       controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, (clearanceData.clearanceType ?? null),
@@ -644,7 +653,8 @@ export class DatabaseService {
       clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
       clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
       clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
-      clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null
+      clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null,
+      clearanceData.time_received ?? null, clearanceData.time_released ?? null
     ];
 
     let rows;
@@ -1069,8 +1079,9 @@ export class DatabaseService {
         with_taiwan_work_experience, with_job_experience,
         taiwan_company, taiwan_year_started, taiwan_year_ended,
         other_company, other_year_started, other_year_ended,
-        date_received_by_region, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) RETURNING *`,
+        date_received_by_region, remarks,
+        time_received, time_released
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
       [
         appData.last_name, appData.first_name, appData.middle_name, appData.sex,
         appData.date_of_birth, appData.age, appData.height, appData.weight,
@@ -1081,7 +1092,9 @@ export class DatabaseService {
         (appData as any).taiwan_company || null, (appData as any).taiwan_year_started || null, (appData as any).taiwan_year_ended || null,
         (appData as any).other_company || null, (appData as any).other_year_started || null, (appData as any).other_year_ended || null,
         (appData as any).date_received_by_region ? new Date((appData as any).date_received_by_region) : null,
-        (appData as any).remarks || null
+        (appData as any).remarks || null,
+        (appData as any).time_received || null,
+        (appData as any).time_released || null
       ]
     );
     return rows[0];
@@ -2292,11 +2305,91 @@ export class DatabaseService {
 
   // Audit Logs
   static async createAuditLog(logData: Omit<AuditLog, 'id' | 'created_at'>): Promise<AuditLog> {
+    const payload = [
+      logData.user_id,
+      logData.action,
+      logData.table_name,
+      logData.record_id,
+      logData.old_values ?? null,
+      logData.new_values ?? null,
+      logData.ip_address ?? null,
+      logData.user_agent ?? null
+    ];
+
     const { rows } = await db.query(
       'INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [logData.user_id, logData.action, logData.table_name, logData.record_id, logData.old_values, logData.new_values, logData.ip_address, logData.user_agent]
+      payload
     );
-    return rows[0];
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      action: row.action,
+      table_name: row.table_name,
+      record_id: row.record_id,
+      old_values: row.old_values ?? null,
+      new_values: row.new_values ?? null,
+      ip_address: row.ip_address ?? null,
+      user_agent: row.user_agent ?? null,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+    };
+  }
+
+  static async getAuditLogsForRecord(
+    tableName: string,
+    recordId: string,
+    limit = 50
+  ): Promise<ApplicationTransaction[]> {
+    const { rows } = await db.query(
+      `SELECT 
+         al.id,
+         al.user_id,
+         al.action,
+         al.table_name,
+         al.record_id,
+         al.old_values,
+         al.new_values,
+         al.ip_address,
+         al.user_agent,
+         al.created_at,
+         u.full_name AS actor_full_name,
+         u.username AS actor_username
+       FROM audit_logs al
+       LEFT JOIN users u ON al.user_id = u.id
+       WHERE al.table_name = $1 AND al.record_id = $2
+       ORDER BY al.created_at DESC
+       LIMIT $3`,
+      [tableName, recordId, limit]
+    );
+
+    return rows.map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      action: row.action,
+      table_name: row.table_name,
+      record_id: row.record_id,
+      old_values: row.old_values ?? null,
+      new_values: row.new_values ?? null,
+      ip_address: row.ip_address ?? null,
+      user_agent: row.user_agent ?? null,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      actor: {
+        full_name: row.actor_full_name ?? null,
+        username: row.actor_username ?? null
+      }
+    }));
+  }
+
+  static async deleteAuditLogsForRecord(
+    tableName: string,
+    recordId: string
+  ): Promise<number> {
+    const { rowCount } = await db.query(
+      'DELETE FROM audit_logs WHERE table_name = $1 AND record_id = $2',
+      [tableName, recordId]
+    );
+    return rowCount || 0;
   }
 
   static async getAuditLogs(userId?: string, pagination: PaginationOptions = { page: 1, limit: 10 }): Promise<PaginatedResponse<AuditLog>> {

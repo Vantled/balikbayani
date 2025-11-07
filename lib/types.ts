@@ -359,15 +359,24 @@ export interface DirectHireDocument {
 
 export interface AuditLog {
   id: string;
-  user_id: string;
+  user_id: string | null;
   action: string;
   table_name: string;
   record_id: string;
   old_values?: any;
   new_values?: any;
-  ip_address: string;
-  user_agent: string;
-  created_at: Date;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AuditLogActor {
+  full_name: string | null;
+  username: string | null;
+}
+
+export interface ApplicationTransaction extends AuditLog {
+  actor: AuditLogActor;
 }
 
 // API Response types

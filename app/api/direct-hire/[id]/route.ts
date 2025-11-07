@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
 import { ApiResponse } from '@/lib/types';
+import { recordAuditLog } from '@/lib/server/audit-logger';
+import { serializeDirectHireApplication } from '@/lib/server/serializers/direct-hire';
+import { extractChangedValues } from '@/lib/utils/objectDiff';
 
 export async function GET(
   request: NextRequest,
@@ -70,6 +73,8 @@ export async function PUT(
     if (body.job_type) updateData.job_type = body.job_type as any;
     if (body.evaluator !== undefined && body.evaluator !== null && body.evaluator !== '') updateData.evaluator = String(body.evaluator).toUpperCase();
     if (body.employer !== undefined) updateData.employer = String(body.employer || '').toUpperCase();
+    if (body.time_received !== undefined) updateData.time_received = body.time_received || null;
+    if (body.time_released !== undefined) updateData.time_released = body.time_released || null;
 
     // Merge metadata into status_checklist if provided
     if (body.for_interview_meta || body.for_confirmation_meta) {
@@ -99,6 +104,33 @@ export async function PUT(
     }
 
     const result = await DatabaseService.updateDirectHireApplication(id, updateData);
+
+    if (result) {
+      const before = serializeDirectHireApplication(existingApplication);
+      const after = serializeDirectHireApplication(result);
+      const { oldValues, newValues } = extractChangedValues(before, after, { ignoreKeys: ['id'] });
+
+      if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
+        // Determine specific action based on status change
+        let auditAction = 'update';
+        const oldStatus = existingApplication.status;
+        const newStatus = result.status;
+        
+        if (newStatus === 'approved' && oldStatus !== 'approved') {
+          auditAction = 'approved';
+        } else if (newStatus === 'rejected' && oldStatus !== 'rejected') {
+          auditAction = 'rejected';
+        }
+
+        await recordAuditLog(request, {
+          action: auditAction,
+          tableName: 'direct_hire_applications',
+          recordId: id,
+          oldValues: auditAction !== 'update' ? { status: oldStatus } : oldValues,
+          newValues: auditAction !== 'update' ? { status: newStatus } : newValues,
+        });
+      }
+    }
 
     const response: ApiResponse = {
       success: true,
@@ -145,6 +177,22 @@ export async function PATCH(
 
     const result = await DatabaseService.updateDirectHireApplication(id, updateData);
 
+    if (result) {
+      const before = serializeDirectHireApplication(existingApplication);
+      const after = serializeDirectHireApplication(result);
+      const { oldValues, newValues } = extractChangedValues(before, after, { ignoreKeys: ['id'] });
+
+      if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
+        await recordAuditLog(request, {
+          action: 'update',
+          tableName: 'direct_hire_applications',
+          recordId: id,
+          oldValues,
+          newValues,
+        });
+      }
+    }
+
     const response: ApiResponse = {
       success: true,
       data: result,
@@ -189,6 +237,15 @@ export async function DELETE(
       };
       return NextResponse.json(response, { status: 500 });
     }
+
+    const before = serializeDirectHireApplication(existingApplication);
+    await recordAuditLog(request, {
+      action: 'delete',
+      tableName: 'direct_hire_applications',
+      recordId: id,
+      oldValues: before,
+      newValues: { deleted_at: new Date().toISOString() },
+    });
 
     const response: ApiResponse = {
       success: true,

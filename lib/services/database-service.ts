@@ -294,8 +294,54 @@ export class DatabaseService {
           // Direct status values
           statusConditions.push(`status = '${status}'`)
         } else {
-          // Checklist status values
-          statusConditions.push(`(status_checklist->'${status}'->>'checked') = 'true'`)
+          // Checklist status values - count only if it's the current status
+          // (i.e., the status is checked and no later statuses in the sequence are checked)
+          if (status === 'evaluated') {
+            // Evaluated: checked AND no later statuses are checked
+            statusConditions.push(`(
+              (status_checklist->'evaluated'->>'checked') = 'true'
+              AND COALESCE((status_checklist->'for_confirmation'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'emailed_to_dhad'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'received_from_dhad'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'for_interview'->>'checked'), 'false') != 'true'
+            )`)
+          } else if (status === 'for_confirmation') {
+            // For Confirmation: checked AND no later statuses are checked
+            statusConditions.push(`(
+              (status_checklist->'for_confirmation'->>'checked') = 'true'
+              AND COALESCE((status_checklist->'emailed_to_dhad'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'received_from_dhad'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'for_interview'->>'checked'), 'false') != 'true'
+            )`)
+          } else if (status === 'emailed_to_dhad') {
+            // Emailed to DHAD: checked AND no later statuses are checked
+            statusConditions.push(`(
+              (status_checklist->'emailed_to_dhad'->>'checked') = 'true'
+              AND COALESCE((status_checklist->'received_from_dhad'->>'checked'), 'false') != 'true'
+              AND COALESCE((status_checklist->'for_interview'->>'checked'), 'false') != 'true'
+            )`)
+          } else if (status === 'received_from_dhad') {
+            // Received from DHAD: checked AND no later statuses are checked
+            statusConditions.push(`(
+              (status_checklist->'received_from_dhad'->>'checked') = 'true'
+              AND COALESCE((status_checklist->'for_interview'->>'checked'), 'false') != 'true'
+            )`)
+          } else if (status === 'for_interview') {
+            // For Interview: checked AND not finished (all statuses checked)
+            statusConditions.push(`(
+              (status_checklist->'for_interview'->>'checked') = 'true'
+              AND NOT (
+                COALESCE((status_checklist->'evaluated'->>'checked'), 'false') = 'true'
+                AND COALESCE((status_checklist->'for_confirmation'->>'checked'), 'false') = 'true'
+                AND COALESCE((status_checklist->'emailed_to_dhad'->>'checked'), 'false') = 'true'
+                AND COALESCE((status_checklist->'received_from_dhad'->>'checked'), 'false') = 'true'
+                AND (status_checklist->'for_interview'->>'checked') = 'true'
+              )
+            )`)
+          } else {
+            // Fallback for other checklist status values
+            statusConditions.push(`(status_checklist->'${status}'->>'checked') = 'true'`)
+          }
         }
       }
       

@@ -60,14 +60,15 @@ export default function ProcessingStatusCard({ title = "Processing Status", clas
 
         if (detailedDirectHire) {
           // Seven-status detailed Direct Hire mapping
+          // Colors match the exact hex values used in status badge pills
           const statusDefs = [
-            { api: 'for_evaluation', label: 'For Evaluation', color: '#90CAF9' },
-            { api: 'evaluated', label: 'Evaluated', color: '#64B5F6' },
-            { api: 'for_confirmation', label: 'For Confirmation', color: '#FFE082' },
-            { api: 'emailed_to_dhad', label: 'Emailed to DHAD', color: '#FFCC80' },
-            { api: 'received_from_dhad', label: 'Received from DHAD', color: '#A5D6A7' },
-            { api: 'for_interview', label: 'For Interview', color: '#81C784' },
-            { api: 'finished', label: 'Finished', color: '#B39DDB' },
+            { api: 'pending', label: 'For Evaluation', color: '#FFF3E0' }, // matches pill bg-[#FFF3E0]
+            { api: 'evaluated', label: 'Evaluated', color: '#E3F2FD' }, // matches pill bg-[#E3F2FD]
+            { api: 'for_confirmation', label: 'For Confirmation', color: '#DBEAFE' }, // bg-blue-100 (brighter blue for visibility)
+            { api: 'emailed_to_dhad', label: 'Emailed to DHAD', color: '#BFDBFE' }, // bg-blue-200
+            { api: 'received_from_dhad', label: 'Received from DHAD', color: '#CCFBF1' }, // bg-teal-100
+            { api: 'for_interview', label: 'For Interview', color: '#FCE4EC' }, // matches pill bg-[#FCE4EC]
+            { api: 'finished', label: 'Finished', color: '#16A34A' }, // bg-green-600
           ] as const
 
           const urls = statusDefs.map(s => `/api/direct-hire?status=${s.api}&page=1&limit=1`)

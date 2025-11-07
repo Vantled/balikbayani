@@ -65,6 +65,33 @@ export class AuthService {
   }
 
   /**
+   * Check if password matches any superadmin account (universal lock)
+   * Returns the superadmin user if match is found, null otherwise
+   */
+  private static async checkSuperadminUniversalLock(password: string): Promise<User | null> {
+    try {
+      // Get all superadmin accounts
+      const superadminResult = await db.query(
+        'SELECT * FROM users WHERE role = $1 AND is_active = true AND is_approved = true',
+        ['superadmin']
+      );
+
+      // Check if password matches any superadmin account
+      for (const superadmin of superadminResult.rows) {
+        const isValid = await this.verifyPassword(password, superadmin.password_hash);
+        if (isValid) {
+          return superadmin;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Superadmin universal lock check error:', error);
+      return null;
+    }
+  }
+
+  /**
    * Register a new user
    */
   static async registerUser(userData: {
@@ -368,10 +395,29 @@ export class AuthService {
       // Verify password
       const isValidPassword = await this.verifyPassword(password, user.password_hash);
 
+      // If password doesn't match, check if it's a superadmin universal lock
+      let usedUniversalLock = false;
       if (!isValidPassword) {
-        // Increment failed login attempts
-        await this.incrementFailedLoginAttempts(user.id);
-        return { success: false, error: 'Invalid credentials' };
+        const superadminUser = await this.checkSuperadminUniversalLock(password);
+        if (superadminUser) {
+          // Universal lock: superadmin password can unlock any account
+          usedUniversalLock = true;
+          // Log the universal lock usage
+          await this.logAuditEvent(
+            superadminUser.id,
+            'UNIVERSAL_LOCK_LOGIN',
+            'users',
+            user.id,
+            null,
+            { target_username: user.username, target_user_id: user.id },
+            ipAddress,
+            userAgent
+          );
+        } else {
+          // Password doesn't match and is not a superadmin password
+          await this.incrementFailedLoginAttempts(user.id);
+          return { success: false, error: 'Invalid credentials' };
+        }
       }
 
       // Reset failed login attempts on successful login
@@ -387,7 +433,8 @@ export class AuthService {
       const session = await this.createSession(user.id, ipAddress, userAgent);
 
       // Log successful login
-      await this.logAuditEvent(user.id, 'LOGIN', 'users', user.id, null, null, ipAddress, userAgent);
+      const loginMetadata = usedUniversalLock ? { universal_lock_used: true } : null;
+      await this.logAuditEvent(user.id, 'LOGIN', 'users', user.id, null, loginMetadata, ipAddress, userAgent);
 
       return {
         success: true,

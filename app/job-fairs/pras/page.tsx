@@ -67,10 +67,12 @@ export default function PraContactsPage() {
     office_head: ""
   })
 
-  // Multiple email and contact fields
+  // Multiple email, contact, contact person, and office head fields
   const [emails, setEmails] = useState<string[]>([""])
   const [formContacts, setFormContacts] = useState<string[]>([""])
   const [customCategories, setCustomCategories] = useState<string[]>([""])
+  const [contactPersons, setContactPersons] = useState<string[]>([""])
+  const [officeHeads, setOfficeHeads] = useState<string[]>([""])
 
   // Resolve superadmin on client after mount to keep SSR markup stable
   useEffect(() => {
@@ -157,6 +159,44 @@ export default function PraContactsPage() {
     })
   }
 
+  const addContactPerson = () => {
+    setContactPersons([...contactPersons, ""])
+  }
+
+  const removeContactPerson = (index: number) => {
+    if (contactPersons.length > 1) {
+      const newContactPersons = contactPersons.filter((_, i) => i !== index)
+      setContactPersons(newContactPersons)
+    }
+  }
+
+  const updateContactPerson = (index: number, value: string) => {
+    setContactPersons(prev => {
+      const newContactPersons = [...prev]
+      newContactPersons[index] = value
+      return newContactPersons
+    })
+  }
+
+  const addOfficeHead = () => {
+    setOfficeHeads([...officeHeads, ""])
+  }
+
+  const removeOfficeHead = (index: number) => {
+    if (officeHeads.length > 1) {
+      const newOfficeHeads = officeHeads.filter((_, i) => i !== index)
+      setOfficeHeads(newOfficeHeads)
+    }
+  }
+
+  const updateOfficeHead = (index: number, value: string) => {
+    setOfficeHeads(prev => {
+      const newOfficeHeads = [...prev]
+      newOfficeHeads[index] = value
+      return newOfficeHeads
+    })
+  }
+
   const clearFieldError = (fieldName: string) => {
     setValidationErrors(prev => {
       const newErrors = { ...prev }
@@ -174,6 +214,8 @@ export default function PraContactsPage() {
     setEmails([""])
     setFormContacts([""])
     setCustomCategories([""])
+    setContactPersons([""])
+    setOfficeHeads([""])
     setValidationErrors({})
   }
 
@@ -208,6 +250,20 @@ export default function PraContactsPage() {
     } else {
       setFormContacts([`Mobile No.: ${contact.contact_number}`])
       setCustomCategories([""])
+    }
+
+    // Populate contact persons from the new structure or fallback to single contact person
+    if (contact.pra_contact_persons && contact.pra_contact_persons.length > 0) {
+      setContactPersons(contact.pra_contact_persons.map(cp => cp.name))
+    } else {
+      setContactPersons([contact.pra_contact_person])
+    }
+
+    // Populate office heads from the new structure or fallback to single office head
+    if (contact.office_heads && contact.office_heads.length > 0) {
+      setOfficeHeads(contact.office_heads.map(oh => oh.name))
+    } else {
+      setOfficeHeads([contact.office_head])
     }
     
     setValidationErrors({})
@@ -331,7 +387,7 @@ export default function PraContactsPage() {
     
     setModalLoading(true)
     try {
-      // Parse emails and contacts for the new structure
+      // Parse emails, contacts, contact persons, and office heads for the new structure
       const parsedEmails = emails.filter(email => email.trim()).map(email => ({ email_address: email.trim() }))
       const parsedContacts = formContacts.filter(contact => contact.trim()).map(contact => {
         const parts = contact.split(':')
@@ -346,18 +402,26 @@ export default function PraContactsPage() {
           contact_number: number
         }
       })
+      const parsedContactPersons = contactPersons.filter(cp => cp.trim()).map(cp => ({ name: cp.trim() }))
+      const parsedOfficeHeads = officeHeads.filter(oh => oh.trim()).map(oh => ({ name: oh.trim() }))
       
-      // Use the first email and contact for backward compatibility
+      // Use the first email, contact, contact person, and office head for backward compatibility
       const firstContact = formContacts[0]?.trim() || ""
       const contactNumber = firstContact.includes(':') ? firstContact.split(':')[1]?.trim() || "" : firstContact
       const firstEmail = emails[0]?.trim() || ""
+      const firstContactPerson = contactPersons[0]?.trim() || ""
+      const firstOfficeHead = officeHeads[0]?.trim() || ""
       
       const submitData = {
         ...formData,
         email: firstEmail,
         contact_number: contactNumber,
+        pra_contact_person: firstContactPerson,
+        office_head: firstOfficeHead,
         emails: parsedEmails,
-        contacts: parsedContacts
+        contacts: parsedContacts,
+        pra_contact_persons: parsedContactPersons,
+        office_heads: parsedOfficeHeads
       }
 
       if (editingContact) {
@@ -568,8 +632,32 @@ export default function PraContactsPage() {
                   {contacts.map((contact) => (
                     <tr key={contact.id} className={`hover:bg-gray-150 transition-colors duration-75 ${contact.deleted_at ? 'bg-red-50' : ''}`}>
                       <td className="py-3 px-4 text-center">{contact.name_of_pras}</td>
-                      <td className="py-3 px-4 text-center">{contact.pra_contact_person}</td>
-                      <td className="py-3 px-4 text-center">{contact.office_head}</td>
+                      <td className="py-3 px-4 text-center">
+                        {contact.pra_contact_persons && contact.pra_contact_persons.length > 0 ? (
+                          <div className="space-y-1">
+                            {contact.pra_contact_persons.map((cp, index) => (
+                              <div key={index} className="text-sm">
+                                {cp.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm">{contact.pra_contact_person}</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {contact.office_heads && contact.office_heads.length > 0 ? (
+                          <div className="space-y-1">
+                            {contact.office_heads.map((oh, index) => (
+                              <div key={index} className="text-sm">
+                                {oh.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm">{contact.office_head}</div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         {contact.emails && contact.emails.length > 0 ? (
                           <div className="space-y-1">
@@ -695,30 +783,86 @@ export default function PraContactsPage() {
                     />
                   </div>
 
-                  {/* PRA Contact Person */}
+                  {/* PRA Contact Persons */}
                   <div>
-                    <Label className="text-sm font-medium">PRA Contact Person:</Label>
-                    <Input 
-                      name="pra_contact_person"
-                      value={formData.pra_contact_person}
-                      onChange={handleModalChange}
-                      className="mt-1"
-                      placeholder="Enter contact person name"
-                      required
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium">PRA Contact Persons:</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addContactPerson}
+                        className="flex items-center gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Contact Person
+                      </Button>
+                    </div>
+                    
+                    {contactPersons.map((contactPerson, index) => (
+                      <div key={index} className="flex items-center gap-2 mb-2">
+                        <Input
+                          type="text"
+                          value={contactPerson}
+                          onChange={(e) => updateContactPerson(index, e.target.value)}
+                          className="flex-1"
+                          placeholder="Enter contact person name"
+                          required={index === 0}
+                        />
+                        {contactPersons.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeContactPerson(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Office Head */}
+                  {/* Office Heads */}
                   <div>
-                    <Label className="text-sm font-medium">Office Head:</Label>
-                    <Input 
-                      name="office_head"
-                      value={formData.office_head}
-                      onChange={handleModalChange}
-                      className="mt-1"
-                      placeholder="Enter office head name"
-                      required
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium">Office Heads:</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addOfficeHead}
+                        className="flex items-center gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Office Head
+                      </Button>
+                    </div>
+                    
+                    {officeHeads.map((officeHead, index) => (
+                      <div key={index} className="flex items-center gap-2 mb-2">
+                        <Input
+                          type="text"
+                          value={officeHead}
+                          onChange={(e) => updateOfficeHead(index, e.target.value)}
+                          className="flex-1"
+                          placeholder="Enter office head name"
+                          required={index === 0}
+                        />
+                        {officeHeads.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeOfficeHead(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
                   {/* Email Addresses */}

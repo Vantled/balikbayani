@@ -130,7 +130,9 @@ async function initializeDatabase() {
       { file: 'migrations/add_original_date_to_job_fairs.sql', desc: 'Adding original_date field to job fairs' },
       { file: 'migrations/update_job_fairs_contacts.sql', desc: 'Updating job fairs contacts structure' },
     { file: 'migrations/update_peso_contacts_multiple_fields.sql', desc: 'Updating PESO contacts for multiple fields' },
+    { file: 'migrations/update_peso_contacts_office_heads.sql', desc: 'Adding multiple office heads support to PESO contacts' },
     { file: 'migrations/update_pra_contacts_multiple_fields.sql', desc: 'Updating PRA contacts for multiple fields' },
+    { file: 'migrations/update_pra_contacts_contact_persons_office_heads.sql', desc: 'Adding multiple contact persons and office heads support to PRA contacts' },
     { file: 'migrations/remove_contact_number_from_job_fairs.sql', desc: 'Removing contact number from job fairs' },
     { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' }
     ];

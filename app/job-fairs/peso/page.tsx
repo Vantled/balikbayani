@@ -209,10 +209,11 @@ export default function PesoContactsPage() {
   const [panelQuery, setPanelQuery] = useState("")
   const [selectedProvince, setSelectedProvince] = useState("")
   
-  // Multiple email and contact fields
+  // Multiple email, contact, and office head fields
   const [emails, setEmails] = useState<string[]>([""])
   const [formContacts, setFormContacts] = useState<string[]>([""])
   const [customCategories, setCustomCategories] = useState<string[]>([""])
+  const [officeHeads, setOfficeHeads] = useState<string[]>([""])
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
 
   // Filter states
@@ -367,6 +368,25 @@ export default function PesoContactsPage() {
     clearFieldError(`contact_${index}`)
   }
 
+  const addOfficeHead = () => {
+    setOfficeHeads([...officeHeads, ""])
+  }
+
+  const removeOfficeHead = (index: number) => {
+    if (officeHeads.length > 1) {
+      const newOfficeHeads = officeHeads.filter((_, i) => i !== index)
+      setOfficeHeads(newOfficeHeads)
+    }
+  }
+
+  const updateOfficeHead = (index: number, value: string) => {
+    setOfficeHeads(prev => {
+      const newOfficeHeads = [...prev]
+      newOfficeHeads[index] = value
+      return newOfficeHeads
+    })
+  }
+
   const clearFieldError = (fieldName: string) => {
     setValidationErrors(prev => {
       const newErrors = { ...prev }
@@ -415,6 +435,7 @@ export default function PesoContactsPage() {
     setEmails([""])
     setFormContacts([""])
     setCustomCategories([""])
+    setOfficeHeads([""])
     setValidationErrors({})
     setModalOpen(true)
     requestAnimationFrame(() => setModalMounted(true))
@@ -446,6 +467,13 @@ export default function PesoContactsPage() {
     } else {
       setFormContacts([`Mobile No.: ${contact.contact_number}`])
       setCustomCategories([""])
+    }
+
+    // Populate office heads from the new structure or fallback to single office head
+    if (contact.office_heads && contact.office_heads.length > 0) {
+      setOfficeHeads(contact.office_heads.map(oh => oh.name))
+    } else {
+      setOfficeHeads([contact.office_head])
     }
 
     setValidationErrors({})
@@ -508,7 +536,7 @@ export default function PesoContactsPage() {
     e.preventDefault()
     
     try {
-      // Parse emails and contacts for the new structure
+      // Parse emails, contacts, and office heads for the new structure
       const parsedEmails = emails.filter(email => email.trim()).map(email => ({ email_address: email.trim() }))
       const parsedContacts = formContacts.filter(contact => contact.trim()).map(contact => {
         const parts = contact.split(':')
@@ -523,18 +551,22 @@ export default function PesoContactsPage() {
           contact_number: number
         }
       })
+      const parsedOfficeHeads = officeHeads.filter(oh => oh.trim()).map(oh => ({ name: oh.trim() }))
 
-      // Use the first email and contact for backward compatibility
+      // Use the first email, contact, and office head for backward compatibility
       const firstContact = formContacts[0]?.trim() || ""
       const contactNumber = firstContact.includes(':') ? firstContact.split(':')[1]?.trim() || "" : firstContact
       const firstEmail = emails[0]?.trim() || ""
+      const firstOfficeHead = officeHeads[0]?.trim() || ""
       
       const submitData = {
         ...formData,
         email: firstEmail,
         contact_number: contactNumber,
+        office_head: firstOfficeHead,
         emails: parsedEmails,
-        contacts: parsedContacts
+        contacts: parsedContacts,
+        office_heads: parsedOfficeHeads
       }
 
       if (editingContact) {
@@ -793,9 +825,21 @@ export default function PesoContactsPage() {
                   ) : (
                     contacts.map((contact) => (
                       <tr key={contact.id} className="hover:bg-gray-150 transition-colors duration-75 border-b border-gray-100">
-                      <td className="py-3 px-4 text-center">{contact.province}</td>
+                        <td className="py-3 px-4 text-center">{contact.province}</td>
                         <td className="py-3 px-4 text-center">{contact.peso_office}</td>
-                        <td className="py-3 px-4 text-center">{contact.office_head}</td>
+                        <td className="py-3 px-4 text-center">
+                          {contact.office_heads && contact.office_heads.length > 0 ? (
+                            <div className="space-y-1">
+                              {contact.office_heads.map((oh, index) => (
+                                <div key={index} className="text-sm">
+                                  {oh.name}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm">{contact.office_head}</div>
+                          )}
+                        </td>
                       <td className="py-3 px-4 text-center">
                         {contact.emails && contact.emails.length > 0 ? (
                           <div className="space-y-1">
@@ -931,18 +975,45 @@ export default function PesoContactsPage() {
                     </select>
                   </div>
 
-                  {/* Office Head */}
+                  {/* Office Heads */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Office Head</label>
-                    <input 
-                      name="office_head" 
-                      type="text" 
-                      required 
-                      className="w-full border rounded px-3 py-2" 
-                      placeholder="Full name of office head" 
-                      value={formData.office_head || ''}
-                      onChange={handleModalChange} 
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Office Heads</label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addOfficeHead}
+                        className="flex items-center gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Office Head
+                      </Button>
+                    </div>
+                    
+                    {officeHeads.map((officeHead, index) => (
+                      <div key={index} className="flex items-center gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={officeHead}
+                          onChange={(e) => updateOfficeHead(index, e.target.value)}
+                          className="flex-1 border rounded px-3 py-2"
+                          placeholder="Full name of office head"
+                          required={index === 0}
+                        />
+                        {officeHeads.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeOfficeHead(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
                   {/* Email Addresses */}

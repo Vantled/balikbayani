@@ -17,7 +17,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts } = body;
+    const { name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts, pra_contact_persons, office_heads } = body;
 
     if (!name_of_pras || !pra_contact_person || !office_head || !email || !contact_number) {
       return NextResponse.json(
@@ -34,7 +34,9 @@ export async function PUT(
       email,
       contact_number,
       emails: emails || [],
-      contacts: contacts || []
+      contacts: contacts || [],
+      pra_contact_persons: pra_contact_persons || [],
+      office_heads: office_heads || []
     });
 
     if (!updatedContact) {

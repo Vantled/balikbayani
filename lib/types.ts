@@ -282,6 +282,7 @@ export interface PesoContact {
   contact_number: string;
   emails?: PesoContactEmail[];
   contacts?: PesoContactContact[];
+  office_heads?: PesoContactOfficeHead[];
   created_at: Date;
   updated_at: Date;
 }
@@ -295,6 +296,10 @@ export interface PesoContactContact {
   contact_number: string;
 }
 
+export interface PesoContactOfficeHead {
+  name: string;
+}
+
 export interface PraContact {
   id: string;
   name_of_pras: string;
@@ -304,6 +309,8 @@ export interface PraContact {
   contact_number: string;
   emails?: PraContactEmail[];
   contacts?: PraContactContact[];
+  pra_contact_persons?: PraContactPerson[];
+  office_heads?: PraContactOfficeHead[];
   created_at: Date;
   updated_at: Date;
   deleted_at?: Date;
@@ -316,6 +323,14 @@ export interface PraContactEmail {
 export interface PraContactContact {
   contact_category: string;
   contact_number: string;
+}
+
+export interface PraContactPerson {
+  name: string;
+}
+
+export interface PraContactOfficeHead {
+  name: string;
 }
 
 export interface JobFairMonitoring {

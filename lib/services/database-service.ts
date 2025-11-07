@@ -1836,7 +1836,7 @@ export class DatabaseService {
   // PESO Contacts
   static async createPesoContact(contactData: Omit<PesoContact, 'id' | 'created_at' | 'updated_at'>): Promise<PesoContact> {
     const { rows } = await db.query(
-      'INSERT INTO peso_contacts (province, peso_office, office_head, email, contact_number, emails, contacts) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      'INSERT INTO peso_contacts (province, peso_office, office_head, email, contact_number, emails, contacts, office_heads) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
       [
         contactData.province, 
         contactData.peso_office, 
@@ -1844,7 +1844,8 @@ export class DatabaseService {
         contactData.email, 
         contactData.contact_number,
         JSON.stringify(contactData.emails || []),
-        JSON.stringify(contactData.contacts || [])
+        JSON.stringify(contactData.contacts || []),
+        JSON.stringify(contactData.office_heads || [])
       ]
     );
     return rows[0];
@@ -1919,11 +1920,12 @@ export class DatabaseService {
     const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
-    // Parse JSON fields for emails and contacts
+    // Parse JSON fields for emails, contacts, and office_heads
     const parsedRows = rows.map(row => ({
       ...row,
       emails: row.emails || [],
-      contacts: row.contacts || []
+      contacts: row.contacts || [],
+      office_heads: row.office_heads || []
     }));
 
     return {
@@ -1939,7 +1941,13 @@ export class DatabaseService {
 
   static async getPesoContactById(id: string): Promise<PesoContact | null> {
     const { rows } = await db.query('SELECT * FROM peso_contacts WHERE id = $1', [id]);
-    return rows[0] || null;
+    if (!rows[0]) return null;
+    return {
+      ...rows[0],
+      emails: rows[0].emails || [],
+      contacts: rows[0].contacts || [],
+      office_heads: rows[0].office_heads || []
+    };
   }
 
   static async updatePesoContact(id: string, contactData: Partial<PesoContact>): Promise<PesoContact | null> {
@@ -1955,6 +1963,7 @@ export class DatabaseService {
     if (contactData.contact_number !== undefined) { fields.push(`contact_number = $${paramCount++}`); values.push(contactData.contact_number); }
     if (contactData.emails !== undefined) { fields.push(`emails = $${paramCount++}`); values.push(JSON.stringify(contactData.emails)); }
     if (contactData.contacts !== undefined) { fields.push(`contacts = $${paramCount++}`); values.push(JSON.stringify(contactData.contacts)); }
+    if (contactData.office_heads !== undefined) { fields.push(`office_heads = $${paramCount++}`); values.push(JSON.stringify(contactData.office_heads)); }
 
     if (fields.length === 0) { return null; }
 
@@ -1980,7 +1989,7 @@ export class DatabaseService {
   // PRA Contacts
   static async createPraContact(contactData: Omit<PraContact, 'id' | 'created_at' | 'updated_at'>): Promise<PraContact> {
     const { rows } = await db.query(
-      'INSERT INTO pra_contacts (name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      'INSERT INTO pra_contacts (name_of_pras, pra_contact_person, office_head, email, contact_number, emails, contacts, pra_contact_persons, office_heads) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
       [
         contactData.name_of_pras, 
         contactData.pra_contact_person, 
@@ -1988,7 +1997,9 @@ export class DatabaseService {
         contactData.email, 
         contactData.contact_number,
         JSON.stringify(contactData.emails || []),
-        JSON.stringify(contactData.contacts || [])
+        JSON.stringify(contactData.contacts || []),
+        JSON.stringify(contactData.pra_contact_persons || []),
+        JSON.stringify(contactData.office_heads || [])
       ]
     );
     return rows[0];
@@ -2024,11 +2035,13 @@ export class DatabaseService {
     const { rows: countRows } = await db.query(countQuery, params.slice(0, paramIndex - 1));
     const total = parseInt(countRows[0].count);
 
-    // Parse JSON fields for emails and contacts
+    // Parse JSON fields for emails, contacts, contact persons, and office heads
     const parsedRows = rows.map(row => ({
       ...row,
       emails: row.emails || [],
-      contacts: row.contacts || []
+      contacts: row.contacts || [],
+      pra_contact_persons: row.pra_contact_persons || [],
+      office_heads: row.office_heads || []
     }));
 
     return {
@@ -2044,7 +2057,7 @@ export class DatabaseService {
 
   static async updatePraContact(id: string, contactData: Omit<PraContact, 'id' | 'created_at' | 'updated_at'>): Promise<PraContact | null> {
     const { rows } = await db.query(
-      'UPDATE pra_contacts SET name_of_pras = $1, pra_contact_person = $2, office_head = $3, email = $4, contact_number = $5, emails = $6, contacts = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
+      'UPDATE pra_contacts SET name_of_pras = $1, pra_contact_person = $2, office_head = $3, email = $4, contact_number = $5, emails = $6, contacts = $7, pra_contact_persons = $8, office_heads = $9, updated_at = CURRENT_TIMESTAMP WHERE id = $10 RETURNING *',
       [
         contactData.name_of_pras, 
         contactData.pra_contact_person, 
@@ -2053,10 +2066,19 @@ export class DatabaseService {
         contactData.contact_number,
         JSON.stringify(contactData.emails || []),
         JSON.stringify(contactData.contacts || []),
+        JSON.stringify(contactData.pra_contact_persons || []),
+        JSON.stringify(contactData.office_heads || []),
         id
       ]
     );
-    return rows[0] || null;
+    if (!rows[0]) return null;
+    return {
+      ...rows[0],
+      emails: rows[0].emails || [],
+      contacts: rows[0].contacts || [],
+      pra_contact_persons: rows[0].pra_contact_persons || [],
+      office_heads: rows[0].office_heads || []
+    };
   }
 
   static async deletePraContact(id: string): Promise<PraContact | null> {

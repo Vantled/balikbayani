@@ -913,12 +913,13 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                                       <Trash2 className="h-4 w-4 mr-2" />
                                       Delete
                                     </DropdownMenuItem>
-                                    {application.salary < 1000 && (
+                                    {/* Compliance Form button hidden for now when salary is below threshold */}
+                                    {/* {application.salary < 1000 && (
                                       <DropdownMenuItem onClick={() => { toast({ title: "Compliance form generated", description: "The document has been prepared and is ready for download" }) }}>
                                         <FileText className="h-4 w-4 mr-2" />
                                         Compliance Form
                                       </DropdownMenuItem>
-                                    )}
+                                    )} */}
                                   </>
                                 )}
                               </>

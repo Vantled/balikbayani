@@ -390,6 +390,13 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
               setFormData(updatedFormData)
               setOriginalFormData(updatedFormData)
               
+              // Store the original salary USD value from the database
+              // This is the USD equivalent that was calculated when the application was created/updated
+              const originalUSD = application.salary !== undefined && application.salary !== null 
+                ? Number(application.salary) 
+                : null
+              setOriginalSalaryUSD(originalUSD)
+              
               // Set evaluator for display
               setEvaluator(application.evaluator || 'Not assigned')
               
@@ -521,6 +528,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
   
   // State to track evaluator for display during edit
   const [evaluator, setEvaluator] = useState<string>('Loading...')
+  
+  // State to track original salary USD value to preserve it when salary/currency hasn't changed
+  const [originalSalaryUSD, setOriginalSalaryUSD] = useState<number | null>(null)
 
   const handleDocChange = (key: keyof DocFiles, file: File | null) => {
     setDocFiles(prev => ({ ...prev, [key]: file }))
@@ -576,18 +586,33 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       // Prepare update data with additional details
       // Note: evaluator field is intentionally excluded to preserve original value
       const salaryNumber = formData.salary !== '' ? Number(formData.salary) : 0
-      let salaryUsd = formData.salaryCurrency && salaryNumber
-        ? (formData.salaryCurrency === 'USD' ? salaryNumber : convertToUSD(salaryNumber, formData.salaryCurrency))
-        : salaryNumber
-      // Round to nearest hundredths
-      salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+      
+      // Check if salary or currency has been manually changed
+      const salaryChanged = originalFormData 
+        ? (formData.salary !== originalFormData.salary || formData.salaryCurrency !== originalFormData.salaryCurrency)
+        : true // If no original data, assume it's a new value
+      
+      // Only recalculate USD if salary or currency was changed by the user
+      // Otherwise, preserve the original USD value to avoid recalculation based on current exchange rates
+      let salaryUsd: number
+      if (salaryChanged) {
+        // User manually changed salary or currency, recalculate USD with current rates
+        salaryUsd = formData.salaryCurrency && salaryNumber
+          ? (formData.salaryCurrency === 'USD' ? salaryNumber : convertToUSD(salaryNumber, formData.salaryCurrency))
+          : salaryNumber
+        // Round to nearest hundredths
+        salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+      } else {
+        // Salary/currency unchanged, preserve original USD value
+        salaryUsd = originalSalaryUSD !== null ? originalSalaryUSD : salaryNumber
+      }
 
       const updateData = {
         ...formData,
         // Persist raw salary and currency explicitly
         raw_salary: salaryNumber,
         salary_currency: formData.salaryCurrency || '',
-        // Persist the static converted salary in USD
+        // Persist the static converted salary in USD (preserved if unchanged, recalculated if changed)
         salary: salaryUsd,
         for_interview_meta: {
           processed_workers_principal: formData.processed_workers_principal ? Number(formData.processed_workers_principal) : 0,

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Header from "@/components/shared/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import {
   DropdownMenu,
@@ -1050,9 +1051,8 @@ export default function PraContactsPage() {
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-gray-600">Enter your password to view deleted PRA contacts.</p>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
+            <PasswordInput
+              className="w-full"
               placeholder="Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -1143,9 +1143,8 @@ export default function PraContactsPage() {
             <p className="text-sm text-gray-600">
               Enter your password to restore {contactToRestore?.name_of_pras}.
             </p>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
+            <PasswordInput
+              className="w-full"
               placeholder="Password"
               value={restorePassword}
               onChange={(e) => setRestorePassword(e.target.value)}

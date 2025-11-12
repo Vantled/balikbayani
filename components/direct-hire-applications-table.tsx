@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { PasswordInput } from "@/components/ui/password-input"
 import { MoreHorizontal, Eye, Edit, Trash2, FileText, File, Image as ImageIcon, FileArchive, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
@@ -1208,9 +1209,8 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-gray-600">Enter your password to view {confirmPurpose === 'deleted' ? 'deleted' : 'finished'} applications.</p>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
+            <PasswordInput
+              className="w-full"
               placeholder="Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

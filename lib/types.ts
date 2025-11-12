@@ -45,6 +45,7 @@ export interface PermissionUpdateRequest {
     permission_key: string;
     granted: boolean;
   }[];
+  current_password?: string;
 }
 
 export interface LoginResponse {

@@ -106,7 +106,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 400 });
     }
 
-    if (!['admin', 'staff'].includes(role)) {
+    if (!['admin', 'staff', 'superadmin'].includes(role)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid role'

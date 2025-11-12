@@ -2680,9 +2680,16 @@ export class DatabaseService {
 
   /**
    * Get users with their permissions
+   * @param requestingUserRole - Role of the user making the request. If 'superadmin', includes superadmin accounts.
    */
-  static async getUsersWithPermissions(): Promise<User[]> {
+  static async getUsersWithPermissions(requestingUserRole?: string): Promise<User[]> {
     try {
+      // If requesting user is superadmin, include all users including superadmins
+      // Otherwise, exclude superadmin accounts
+      const roleFilter = requestingUserRole === 'superadmin' 
+        ? '' 
+        : "WHERE u.role <> 'superadmin'";
+      
       const result = await db.query(`
         SELECT 
           u.*,
@@ -2702,7 +2709,7 @@ export class DatabaseService {
           ) as permissions
         FROM users u
         LEFT JOIN user_permissions up ON u.id = up.user_id
-        WHERE u.role <> 'superadmin'
+        ${roleFilter}
         GROUP BY u.id
         ORDER BY u.full_name
       `);

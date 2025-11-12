@@ -1,6 +1,7 @@
 // app/api/users/permissions/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/services/database-service';
+import { AuthService } from '@/lib/services/auth-service';
 import { ApiResponse, PermissionUpdateRequest } from '@/lib/types';
 
 function getUserFromRequest(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
     }
 
-    const users = await DatabaseService.getUsersWithPermissions();
+    const users = await DatabaseService.getUsersWithPermissions(user.role);
     const availablePermissions = DatabaseService.getAvailablePermissions();
 
     return NextResponse.json({
@@ -44,10 +45,27 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     const body: PermissionUpdateRequest = await request.json();
-    const { user_id, permissions } = body;
+    const { user_id, permissions, current_password } = body;
 
     if (!user_id || !permissions || !Array.isArray(permissions)) {
       return NextResponse.json({ success: false, error: 'Invalid request data' }, { status: 400 });
+    }
+
+    // Validate current password is provided
+    if (!current_password) {
+      return NextResponse.json({
+        success: false,
+        error: 'Current password is required'
+      }, { status: 400 });
+    }
+
+    // Verify current password
+    const passwordValid = await AuthService.verifyUserPassword(user.id, current_password);
+    if (!passwordValid) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid current password'
+      }, { status: 400 });
     }
 
     // Validate permission keys

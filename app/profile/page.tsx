@@ -8,6 +8,7 @@ import Cookies from 'js-cookie';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { User, Lock, Mail } from 'lucide-react';
@@ -340,9 +341,8 @@ export default function ProfilePage() {
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div>
                              <Label htmlFor="current_password_change">Current Password</Label>
-                             <Input
+                             <PasswordInput
                                id="current_password_change"
-                               type="password"
                                value={formData.current_password}
                                onChange={(e) => handleInputChange('current_password', e.target.value)}
                                placeholder="Enter your current password"
@@ -350,9 +350,8 @@ export default function ProfilePage() {
                            </div>
                            <div>
                              <Label htmlFor="new_password">New Password</Label>
-                             <Input
+                             <PasswordInput
                                id="new_password"
-                               type="password"
                                value={formData.new_password}
                                onChange={(e) => handleInputChange('new_password', e.target.value)}
                                placeholder="Enter new password (min 6 characters)"
@@ -407,9 +406,8 @@ export default function ProfilePage() {
            <div className="space-y-4">
              <div>
                <Label htmlFor="modal_current_password">Current Password</Label>
-               <Input
+               <PasswordInput
                  id="modal_current_password"
-                 type="password"
                  value={formData.current_password}
                  onChange={(e) => handleInputChange('current_password', e.target.value)}
                  placeholder="Enter your current password"
@@ -461,9 +459,8 @@ export default function ProfilePage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="modal_confirm_password">Confirm New Password</Label>
-              <Input
+              <PasswordInput
                 id="modal_confirm_password"
-                type="password"
                 value={formData.confirm_password}
                 onChange={(e) => handleInputChange('confirm_password', e.target.value)}
                 placeholder="Confirm your new password"

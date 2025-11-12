@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import Image from "next/image"
 
@@ -23,7 +24,7 @@ export default function LoginForm() {
 
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" placeholder="Enter your password" />
+          <PasswordInput id="password" placeholder="Enter your password" />
         </div>
 
         <Button className="w-full bg-[#1976D2] hover:bg-[#1565C0]">Sign In</Button>

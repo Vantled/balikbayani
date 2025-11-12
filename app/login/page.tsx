@@ -4,6 +4,7 @@ import * as React from "react"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { login } from "@/lib/auth"
@@ -120,8 +121,7 @@ export default function LoginPage() {
               tabIndex={0}
               className="rounded-xl"
             />
-            <Input
-              type="password"
+            <PasswordInput
               placeholder="Password"
               value={password}
               onChange={e => setPassword(e.target.value)}

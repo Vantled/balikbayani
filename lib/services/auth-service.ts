@@ -139,7 +139,7 @@ export class AuthService {
     email: string;
     password: string;
     full_name: string;
-    role: 'admin' | 'staff';
+    role: 'superadmin' | 'admin' | 'staff';
     createdBy: string;
     is_first_login?: boolean;
   }): Promise<{ success: boolean; user?: User; error?: string }> {
@@ -179,23 +179,25 @@ export class AuthService {
 
       const user = result.rows[0];
       
-      // Grant default permissions to new users
-      try {
-        const defaultPermissions = [
-          'dashboard',
-          'direct_hire',
-          'balik_manggagawa',
-          'gov_to_gov',
-          'information_sheet',
-          'monitoring',
-          'job_fairs',
-          'data_backups'
-        ].map(key => ({ permission_key: key, granted: true }));
+      // Grant default permissions to new users (skip for superadmin as they have full access)
+      if (userData.role !== 'superadmin') {
+        try {
+          const defaultPermissions = [
+            'dashboard',
+            'direct_hire',
+            'balik_manggagawa',
+            'gov_to_gov',
+            'information_sheet',
+            'monitoring',
+            'job_fairs',
+            'data_backups'
+          ].map(key => ({ permission_key: key, granted: true }));
 
-        await DatabaseService.updateUserPermissions(user.id, defaultPermissions, userData.createdBy);
-      } catch (permErr) {
-        // Do not fail user creation if permissions seeding fails; log for follow-up
-        console.error('Failed to seed default permissions for new user:', permErr);
+          await DatabaseService.updateUserPermissions(user.id, defaultPermissions, userData.createdBy);
+        } catch (permErr) {
+          // Do not fail user creation if permissions seeding fails; log for follow-up
+          console.error('Failed to seed default permissions for new user:', permErr);
+        }
       }
       
       // Log user creation

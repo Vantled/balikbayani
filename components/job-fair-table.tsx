@@ -1,6 +1,7 @@
 // components/job-fair-table.tsx
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { PasswordInput } from '@/components/ui/password-input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -440,9 +441,8 @@ export default function JobFairTable({
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-gray-600">Enter your password to view deleted job fairs.</p>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
+            <PasswordInput
+              className="w-full"
               placeholder="Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -529,9 +529,8 @@ export default function JobFairTable({
             <p className="text-sm text-gray-600">
               Enter your password to restore {jobFairToRestore?.venue}.
             </p>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
+            <PasswordInput
+              className="w-full"
               placeholder="Password"
               value={restorePassword}
               onChange={(e) => setRestorePassword(e.target.value)}

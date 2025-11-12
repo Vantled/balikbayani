@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { getUser, logout } from '@/lib/auth'
@@ -214,9 +215,8 @@ export default function FirstTimeLoginModal({ isOpen, onClose, onSuccess }: Firs
 
           <div>
             <Label htmlFor="new_password">New Password</Label>
-            <Input
+            <PasswordInput
               id="new_password"
-              type="password"
               value={formData.new_password}
               onChange={(e) => setFormData({ ...formData, new_password: e.target.value })}
               placeholder="Choose a new password"
@@ -229,9 +229,8 @@ export default function FirstTimeLoginModal({ isOpen, onClose, onSuccess }: Firs
 
           <div>
             <Label htmlFor="confirm_password">Confirm Password</Label>
-            <Input
+            <PasswordInput
               id="confirm_password"
-              type="password"
               value={formData.confirm_password}
               onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
               placeholder="Confirm your new password"

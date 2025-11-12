@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -79,6 +80,9 @@ export default function UserManagementPage() {
   const [roleDraft, setRoleDraft] = useState<string[]>([]);
   const [statusDraft, setStatusDraft] = useState<string[]>([]);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [showSuperadminOption, setShowSuperadminOption] = useState(false);
+  const [typedText, setTypedText] = useState('');
+  const [isRoleSelectFocused, setIsRoleSelectFocused] = useState(false);
   const router = useRouter();
 
   // Copy to clipboard functionality
@@ -121,6 +125,44 @@ export default function UserManagementPage() {
     }
   };
 
+  // Generate memorable temporary credentials connected to the provided full name.
+  const generateTempCredentials = (fullName: string) => {
+    const cleanedName = fullName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z\s'-]/g, '')
+      .replace(/\s+/g, ' ');
+
+    const parts = cleanedName.length ? cleanedName.split(' ').filter(Boolean) : [];
+    const fallback = 'user';
+    const first = parts[0] || fallback;
+    const last = parts.length > 1 ? parts[parts.length - 1] : '';
+
+    const slugify = (value: string) =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 12);
+
+    const baseUsername = [slugify(first), slugify(last).slice(0, 1)]
+      .filter(Boolean)
+      .join('.');
+    const usernameSuffix = Math.floor(10 + Math.random() * 90); // two-digit suffix
+    const username = `${baseUsername || fallback}.${usernameSuffix}`.replace(/\.+$/, '');
+
+    const capitalize = (value: string) =>
+      value.length ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : '';
+    const readableFirst = capitalize(parts[0] || 'Temp');
+    const readableLastInitial = capitalize(last).charAt(0);
+    const passwordDigits = Math.floor(1000 + Math.random() * 9000);
+    const password = `${readableFirst}${readableLastInitial}${passwordDigits}!`;
+
+    return {
+      username: username.toLowerCase(),
+      password,
+    };
+  };
+
   useEffect(() => {
     setMounted(true);
     const user = getUser();
@@ -135,6 +177,38 @@ export default function UserManagementPage() {
     }
     fetchUsers();
   }, [router]);
+
+  // Track typing "superadmin" when create dialog is open and role select is focused
+  useEffect(() => {
+    if (!createDialogOpen || !mounted || !currentUser || !isSuperadmin(currentUser) || !isRoleSelectFocused) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Track typed characters (only letters)
+      if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+        const newTypedText = (typedText + e.key).toLowerCase();
+        setTypedText(newTypedText);
+        
+        // Check if "superadmin" has been typed
+        if (newTypedText.includes('superadmin')) {
+          setShowSuperadminOption(true);
+          setTypedText('');
+        }
+      } else if (e.key === 'Backspace') {
+        setTypedText(prev => prev.slice(0, -1));
+        setShowSuperadminOption(false);
+      } else if (e.key === 'Escape') {
+        setTypedText('');
+        setShowSuperadminOption(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [createDialogOpen, typedText, isRoleSelectFocused, mounted, currentUser]);
 
   const fetchUsers = async () => {
     try {
@@ -175,18 +249,17 @@ export default function UserManagementPage() {
     }
 
     try {
-      // Generate shorter temporary username and password
-      const tempUsername = `temp${Math.random().toString(36).substring(2, 8)}`;
-      const tempPassword = Math.random().toString(36).substring(2, 10);
-      
-             const userData = {
-         full_name: formData.full_name,
-         role: formData.role,
-         username: tempUsername,
-         password: tempPassword,
-         email: null, // NULL email for temporary user
-         is_first_login: true // Flag to indicate this is a temporary user
-       };
+      // Generate memorable temporary credentials derived from the user's name
+      const { username: tempUsername, password: tempPassword } = generateTempCredentials(formData.full_name);
+
+      const userData = {
+        full_name: formData.full_name,
+        role: formData.role,
+        username: tempUsername,
+        password: tempPassword,
+        email: null, // NULL email for temporary user
+        is_first_login: true // Flag to indicate this is a temporary user
+      };
 
       const response = await fetch('/api/users', {
         method: 'POST',
@@ -209,6 +282,9 @@ export default function UserManagementPage() {
           confirm_full_name: '',
           role: 'staff'
         });
+        setTypedText('');
+        setShowSuperadminOption(false);
+        setIsRoleSelectFocused(false);
         fetchUsers();
       } else {
         toast({
@@ -456,7 +532,7 @@ export default function UserManagementPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ user_id: user.id, permissions })
+          body: JSON.stringify({ user_id: user.id, permissions, current_password: confirmPassword })
         });
         const data2 = await resp2.json();
         if (!data2.success) {
@@ -815,7 +891,22 @@ export default function UserManagementPage() {
               </div>
 
               {mounted && currentUser && isSuperadmin(currentUser) && (
-                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <Dialog 
+                  open={createDialogOpen} 
+                  onOpenChange={(open) => {
+                    setCreateDialogOpen(open);
+                    if (!open) {
+                      setTypedText('');
+                      setShowSuperadminOption(false);
+                      setIsRoleSelectFocused(false);
+                      setFormData({
+                        full_name: '',
+                        confirm_full_name: '',
+                        role: 'staff'
+                      });
+                    }
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button className="h-9 px-3">
                       <Plus className="w-4 h-4 mr-1" />
@@ -850,13 +941,43 @@ export default function UserManagementPage() {
                       </div>
                       <div>
                         <Label htmlFor="role">Role</Label>
-                        <Select value={formData.role} onValueChange={(value: 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
-                          <SelectTrigger>
+                        <Select 
+                          value={formData.role} 
+                          onValueChange={(value: 'superadmin' | 'admin' | 'staff') => {
+                            setFormData({ ...formData, role: value });
+                            setTypedText('');
+                            // Keep superadmin option visible if superadmin is selected
+                            if (value !== 'superadmin') {
+                              setShowSuperadminOption(false);
+                            }
+                            setIsRoleSelectFocused(false);
+                          }}
+                          onOpenChange={(open) => {
+                            setIsRoleSelectFocused(open);
+                            if (!open) {
+                              // Don't hide superadmin option if it's already selected
+                              if (formData.role !== 'superadmin') {
+                                setTypedText('');
+                                setShowSuperadminOption(false);
+                              }
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            onFocus={() => setIsRoleSelectFocused(true)}
+                            onBlur={() => {
+                              // Delay to allow select menu to open
+                              setTimeout(() => setIsRoleSelectFocused(false), 100);
+                            }}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
+                            {(showSuperadminOption || formData.role === 'superadmin') && (
+                              <SelectItem value="superadmin">Superadmin</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -897,6 +1018,13 @@ export default function UserManagementPage() {
                 </TableHeader>
                 <TableBody>
                   {users
+                    .filter((u) => {
+                      // Filter superadmin accounts if current user is not superadmin
+                      if (mounted && currentUser && !isSuperadmin(currentUser) && u.role === 'superadmin') {
+                        return false;
+                      }
+                      return true;
+                    })
                     .filter((u) => {
                       const q = search.trim().toLowerCase();
                       if (!q) return true;
@@ -986,7 +1114,8 @@ export default function UserManagementPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
-                          {mounted && currentUser && (isAdmin(currentUser) || isSuperadmin(currentUser)) && (
+                          {/* Only show Edit button for active users */}
+                          {mounted && currentUser && (isAdmin(currentUser) || isSuperadmin(currentUser)) && user.is_active && (
                                 <Dialog open={editDialogOpen && selectedUser?.id === user.id} onOpenChange={setEditDialogOpen}>
                                   <DialogTrigger asChild>
                                     <Button
@@ -1149,9 +1278,8 @@ export default function UserManagementPage() {
            <div className="space-y-4">
              <div>
                <Label htmlFor="activate-password">Your Password</Label>
-               <Input
+               <PasswordInput
                  id="activate-password"
-                 type="password"
                  value={activatePassword}
                  onChange={(e) => setActivatePassword(e.target.value)}
                  placeholder="Enter your password"
@@ -1294,9 +1422,8 @@ export default function UserManagementPage() {
            <div className="space-y-4">
              <div>
                <Label htmlFor="confirm-password">Current Password</Label>
-               <Input
+               <PasswordInput
                  id="confirm-password"
-                 type="password"
                  value={confirmPassword}
                  onChange={(e) => setConfirmPassword(e.target.value)}
                  placeholder="Enter your current password"
@@ -1336,9 +1463,8 @@ export default function UserManagementPage() {
            <div className="space-y-4">
              <div>
                <Label htmlFor="deactivate-password">Current Password</Label>
-               <Input
+               <PasswordInput
                  id="deactivate-password"
-                 type="password"
                  value={deactivatePassword}
                  onChange={(e) => setDeactivatePassword(e.target.value)}
                  placeholder="Enter your current password"

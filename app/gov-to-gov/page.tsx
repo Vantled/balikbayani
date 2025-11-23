@@ -60,7 +60,25 @@ export default function GovToGovPage() {
   const [appliedFilters, setAppliedFilters] = useState<any>({})
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   
-  const { items, refresh, create, update, remove } = useGovToGov(appliedFilters)
+  const { items, loading, pagination, refresh, create, update, remove } = useGovToGov(appliedFilters)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageLimit] = useState(10)
+  
+  // Update applied filters with pagination
+  useEffect(() => {
+    setAppliedFilters(prev => ({
+      ...prev,
+      page: currentPage,
+      limit: pageLimit
+    }))
+  }, [currentPage, pageLimit])
+  
+  // Reset to page 1 when filters change (except page itself)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [appliedFilters.search, appliedFilters.sex, appliedFilters.educational_attainment, appliedFilters.with_taiwan_work_experience, appliedFilters.date_from, appliedFilters.date_to, appliedFilters.include_deleted, appliedFilters.include_active])
   
   // Refresh data when filters change
   useEffect(() => {
@@ -331,6 +349,83 @@ export default function GovToGovPage() {
             </Button>
           </div>
         </div>
+        
+        {/* Pagination Controls - Outside table container */}
+        <div className="mb-2 flex items-center justify-between text-sm text-gray-600">
+          <div>
+            {loading ? (
+              <span>Loading...</span>
+            ) : (
+              <span>Page {pagination.page} of {pagination.totalPages || 1} ({pagination.total || 0} total records)</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {(() => {
+              const pages: any[] = []
+              const totalPages = pagination.totalPages || 1
+              const currentPageNum = pagination.page || 1
+              const go = (p: number) => {
+                setCurrentPage(p)
+              }
+
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) {
+                  pages.push(
+                    <Button 
+                      key={i} 
+                      variant={i === currentPageNum ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => go(i)} 
+                      className="min-w-[40px] h-8"
+                      disabled={loading}
+                    >
+                      {i}
+                    </Button>
+                  )
+                }
+              } else {
+                let startPage = Math.max(1, currentPageNum - 2)
+                let endPage = Math.min(totalPages, currentPageNum + 2)
+
+                if (startPage > 1) {
+                  pages.push(
+                    <Button key={1} variant="outline" size="sm" onClick={() => go(1)} className="min-w-[40px] h-8" disabled={loading}>1</Button>
+                  )
+                  if (startPage > 2) {
+                    pages.push(<span key="ellipsis1" className="px-2">...</span>)
+                  }
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                  pages.push(
+                    <Button 
+                      key={i} 
+                      variant={i === currentPageNum ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => go(i)} 
+                      className="min-w-[40px] h-8"
+                      disabled={loading}
+                    >
+                      {i}
+                    </Button>
+                  )
+                }
+
+                if (endPage < totalPages) {
+                  if (endPage < totalPages - 1) {
+                    pages.push(<span key="ellipsis2" className="px-2">...</span>)
+                  }
+                  pages.push(
+                    <Button key={totalPages} variant="outline" size="sm" onClick={() => go(totalPages)} className="min-w-[40px] h-8" disabled={loading}>{totalPages}</Button>
+                  )
+                }
+              }
+
+              return pages
+            })()}
+          </div>
+        </div>
+        
         <div className="bg-white rounded-md border overflow-hidden flex-1 flex flex-col">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
             <table className="w-full">
@@ -345,7 +440,20 @@ export default function GovToGovPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {items.map((row: any) => (
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                      No records found
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((row: any) => (
                   <tr 
                     key={row.id} 
                     className={`hover:bg-gray-150 transition-colors duration-75 select-none ${row.deleted_at ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
@@ -434,7 +542,8 @@ export default function GovToGovPage() {
                       </DropdownMenu>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

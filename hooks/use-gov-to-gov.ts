@@ -14,11 +14,23 @@ export interface GovToGovListItem {
 export function useGovToGov(filters: any = {}) {
   const [items, setItems] = useState<GovToGovListItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  })
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
+      
+      // Add pagination parameters
+      const page = filters.page || 1
+      const limit = filters.limit || 10
+      params.append('page', String(page))
+      params.append('limit', String(limit))
       
       // Add filter parameters
       if (filters.search) params.append('search', filters.search)
@@ -36,6 +48,12 @@ export function useGovToGov(filters: any = {}) {
       const data = await res.json()
       if (data?.success) {
         setItems(data.data.data || [])
+        setPagination(data.data.pagination || {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0
+        })
       }
     } finally {
       setLoading(false)
@@ -75,7 +93,7 @@ export function useGovToGov(filters: any = {}) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  return { items, loading, refresh, create, update, remove }
+  return { items, loading, pagination, refresh, create, update, remove }
 }
 
 

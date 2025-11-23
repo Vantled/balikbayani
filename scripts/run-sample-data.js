@@ -31,15 +31,36 @@ async function runSampleDataScript() {
     console.log(`   Database: ${dbConfig.database}`);
     console.log(`   User: ${dbConfig.user}`);
     
+    // Set up notice handler to show progress in real-time
+    let noticeHandler = (msg) => {
+      if (msg.message) {
+        // Remove trailing newline and display
+        const message = msg.message.trim();
+        if (message && !message.includes('already exists, skipping')) {
+          // Skip the "already exists" message to reduce noise
+          console.log(`   ${message}`);
+        }
+      }
+    };
+    
+    client.on('notice', noticeHandler);
+    
     // Read the SQL file
     const sqlFilePath = path.join(__dirname, 'generate-sample-data.sql');
     const sql = fs.readFileSync(sqlFilePath, 'utf8');
     
     console.log('\n🚀 Executing sample data generation script...');
-    console.log('   This may take a few minutes...\n');
+    console.log('   This may take a few minutes...');
+    console.log('   Progress updates will be shown every 100 records.\n');
     
-    // Execute the SQL script
+    // Execute the SQL script with progress tracking
+    // Split into smaller chunks if needed, but for now execute all at once
+    const startTime = Date.now();
     await client.query(sql);
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
+    
+    console.log(`\n⏱️  Script execution completed in ${duration} seconds.`);
     
     console.log('\n✅ Sample data generation completed successfully!');
     console.log('   Generated 1000 records for each table:');

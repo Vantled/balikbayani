@@ -116,6 +116,14 @@ export async function PUT(
         const oldStatus = existingApplication.status;
         const newStatus = result.status;
         
+        // Record all status changes, not just approved/rejected
+        if (oldStatus !== newStatus) {
+          auditAction = 'update';
+          // Include status change in audit log
+          oldValues.status = oldStatus;
+          newValues.status = newStatus;
+        }
+        
         if (newStatus === 'approved' && oldStatus !== 'approved') {
           auditAction = 'approved';
         } else if (newStatus === 'rejected' && oldStatus !== 'rejected') {

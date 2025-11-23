@@ -5,59 +5,202 @@
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Update status constraint to include new statuses if needed
+DO $$
+BEGIN
+    -- Check if constraint exists and update it to include new statuses
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'direct_hire_applications_status_check'
+    ) THEN
+        -- Drop the old constraint
+        ALTER TABLE direct_hire_applications 
+        DROP CONSTRAINT IF EXISTS direct_hire_applications_status_check;
+        
+        -- Add the updated constraint with all required statuses
+        ALTER TABLE direct_hire_applications 
+        ADD CONSTRAINT direct_hire_applications_status_check 
+        CHECK (status IN ('pending', 'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview', 'approved', 'rejected'));
+        
+        RAISE NOTICE 'Updated direct_hire_applications status constraint to include new statuses.';
+    END IF;
+END $$;
+
+-- Confirm script is starting
+DO $$
+BEGIN
+    RAISE NOTICE '========================================';
+    RAISE NOTICE 'Starting sample data generation...';
+    RAISE NOTICE 'This will generate 1000 records for each table.';
+    RAISE NOTICE 'Progress updates will appear every 100 records.';
+    RAISE NOTICE '========================================';
+END $$;
+
 -- ============================================================================
 -- 1. DIRECT HIRE APPLICATIONS (1000 records)
 -- ============================================================================
 DO $$
 DECLARE
     i INTEGER;
-    current_year INTEGER := EXTRACT(YEAR FROM CURRENT_DATE);
-    current_month INTEGER := EXTRACT(MONTH FROM CURRENT_DATE);
-    current_day INTEGER := EXTRACT(DAY FROM CURRENT_DATE);
-    month_day VARCHAR(4) := LPAD(current_month::TEXT, 2, '0') || LPAD(current_day::TEXT, 2, '0');
+    record_date DATE;
+    record_year INTEGER;
+    record_month INTEGER;
+    record_day INTEGER;
+    month_day VARCHAR(4);
     monthly_count INTEGER;
     yearly_count INTEGER;
     control_num VARCHAR(50);
+    selected_status TEXT;
+    status_checklist_json JSONB;
+    timestamp1 TIMESTAMP;
+    timestamp2 TIMESTAMP;
+    timestamp3 TIMESTAMP;
+    timestamp4 TIMESTAMP;
+    timestamp5 TIMESTAMP;
     first_names TEXT[] := ARRAY['MARIA', 'JOSE', 'JOHN', 'MARY', 'JUAN', 'ANA', 'CARLOS', 'ROSA', 'PEDRO', 'ELENA', 'ANTONIO', 'CARMEN', 'MANUEL', 'DOLORES', 'FRANCISCO', 'ISABEL', 'JOSE', 'MARIA', 'LUIS', 'PATRICIA', 'MIGUEL', 'GLORIA', 'RAFAEL', 'MARTHA', 'ROBERTO', 'SUSANA', 'FERNANDO', 'TERESA', 'RICARDO', 'MONICA'];
     last_names TEXT[] := ARRAY['SANTOS', 'REYES', 'CRUZ', 'BAUTISTA', 'VILLANUEVA', 'FERNANDEZ', 'RAMOS', 'GARCIA', 'TORRES', 'DELA CRUZ', 'MENDOZA', 'CASTRO', 'OROZCO', 'MORALES', 'AQUINO', 'SALAZAR', 'ROMERO', 'JIMENEZ', 'HERRERA', 'VARGAS', 'GUERRERO', 'RODRIGUEZ', 'MARTINEZ', 'LOPEZ', 'GONZALEZ', 'PEREZ', 'SANCHEZ', 'RIVERA', 'GOMEZ', 'DIAZ'];
     jobsites TEXT[] := ARRAY['HONG KONG', 'SINGAPORE', 'QATAR', 'UAE', 'SAUDI ARABIA', 'KUWAIT', 'TAIWAN', 'JAPAN', 'SOUTH KOREA', 'CANADA', 'USA', 'AUSTRALIA', 'NEW ZEALAND', 'ITALY', 'SPAIN', 'UK', 'GERMANY', 'FRANCE', 'SWITZERLAND', 'NETHERLANDS'];
     positions_professional TEXT[] := ARRAY['NURSE', 'ENGINEER', 'TEACHER', 'ACCOUNTANT', 'ARCHITECT', 'CHEF', 'PHYSICAL THERAPIST', 'OCCUPATIONAL THERAPIST', 'DENTAL HYGIENIST', 'VETERINARY TECHNICIAN', 'IT SPECIALIST', 'PROJECT MANAGER', 'SALES MANAGER', 'MARKETING MANAGER', 'HR MANAGER', 'FINANCIAL ANALYST', 'AUDITOR', 'CONSULTANT', 'SUPERVISOR', 'COORDINATOR'];
     positions_household TEXT[] := ARRAY['DOMESTIC HELPER', 'HOUSEKEEPER', 'CAREGIVER', 'NANNY', 'COOK', 'DRIVER', 'GARDENER', 'MAID', 'BABYSITTER', 'ELDERLY CAREGIVER'];
     employers TEXT[] := ARRAY['ABC EMPLOYMENT AGENCY', 'XYZ RECRUITMENT SERVICES', 'GLOBAL MANPOWER SOLUTIONS', 'WORLDWIDE STAFFING INC', 'INTERNATIONAL HIRING CORP', 'PREMIER RECRUITMENT AGENCY', 'ELITE EMPLOYMENT SERVICES', 'SUPREME MANPOWER AGENCY', 'EXCELLENCE STAFFING SOLUTIONS', 'PROFESSIONAL RECRUITMENT CORP'];
-    statuses TEXT[] := ARRAY['pending', 'evaluated', 'for_confirmation', 'for_interview', 'approved'];
+    statuses TEXT[] := ARRAY['pending', 'evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview', 'approved'];
     currencies TEXT[] := ARRAY['USD', 'PHP', 'SAR', 'AED', 'HKD', 'SGD', 'CAD', 'AUD', 'EUR', 'GBP'];
     sex_values TEXT[] := ARRAY['male', 'female'];
     job_types TEXT[] := ARRAY['household', 'professional'];
     evaluators TEXT[] := ARRAY['JUAN DELA CRUZ', 'MARIA SANTOS', 'JOSE REYES', 'ANA GARCIA', 'CARLOS RAMOS', 'ROSA TORRES', 'PEDRO MENDOZA', 'ELENA CASTRO'];
 BEGIN
-    -- Get current counts - use COUNT as base, uniqueness check will handle conflicts
-    SELECT COALESCE(COUNT(*), 0) INTO yearly_count 
-    FROM direct_hire_applications 
-    WHERE EXTRACT(YEAR FROM created_at) = current_year;
-    
-    SELECT COALESCE(COUNT(*), 0) INTO monthly_count 
-    FROM direct_hire_applications 
-    WHERE EXTRACT(YEAR FROM created_at) = current_year 
-    AND EXTRACT(MONTH FROM created_at) = current_month;
+    RAISE NOTICE 'Starting Direct Hire Applications generation...';
+    RAISE NOTICE 'Generating records with random dates to ensure unique control numbers...';
+    RAISE NOTICE 'This should take approximately 10-30 seconds...';
     
     FOR i IN 1..1000 LOOP
+        -- Show progress every 200 records for faster feedback
+        IF i % 200 = 0 THEN
+            RAISE NOTICE 'Generating Direct Hire record % of 1000...', i;
+        END IF;
+        
+        -- Generate a random date within the past year to current date
+        record_date := CURRENT_DATE - INTERVAL '1 day' * floor(random() * 365);
+        record_year := EXTRACT(YEAR FROM record_date);
+        record_month := EXTRACT(MONTH FROM record_date);
+        record_day := EXTRACT(DAY FROM record_date);
+        month_day := LPAD(record_month::TEXT, 2, '0') || LPAD(record_day::TEXT, 2, '0');
+        
+        -- Get the maximum control numbers for this specific date to avoid duplicates
+        SELECT COALESCE(MAX(
+            CASE 
+                WHEN control_number ~ ('^DHPSW-ROIVA-' || record_year || '-' || month_day || '-\d{3}-\d{3}$')
+                THEN (regexp_replace(control_number, '^DHPSW-ROIVA-' || record_year || '-' || month_day || '-(\d{3})-(\d{3})$', '\1'))::INTEGER
+                ELSE NULL
+            END
+        ), 0) INTO monthly_count
+        FROM direct_hire_applications;
+        
+        SELECT COALESCE(MAX(
+            CASE 
+                WHEN control_number ~ ('^DHPSW-ROIVA-' || record_year || '-\d{4}-\d{3}-(\d{3})$')
+                THEN (regexp_replace(control_number, '^DHPSW-ROIVA-' || record_year || '-\d{4}-\d{3}-(\d{3})$', '\1'))::INTEGER
+                ELSE NULL
+            END
+        ), 0) INTO yearly_count
+        FROM direct_hire_applications;
+        
         -- Increment counters
         monthly_count := monthly_count + 1;
         yearly_count := yearly_count + 1;
         
-        -- Generate control number
-        control_num := 'DHPSW-ROIVA-' || current_year || '-' || month_day || '-' || 
+        -- Generate control number for this specific date
+        control_num := 'DHPSW-ROIVA-' || record_year || '-' || month_day || '-' || 
                       LPAD(monthly_count::TEXT, 3, '0') || '-' || 
                       LPAD(yearly_count::TEXT, 3, '0');
         
-        -- Check if control number already exists, if so find next available
-        WHILE EXISTS (SELECT 1 FROM direct_hire_applications WHERE control_number = control_num) LOOP
+        -- Simple duplicate check - if exists, increment once more
+        IF EXISTS (SELECT 1 FROM direct_hire_applications WHERE control_number = control_num) THEN
             monthly_count := monthly_count + 1;
             yearly_count := yearly_count + 1;
-            control_num := 'DHPSW-ROIVA-' || current_year || '-' || month_day || '-' || 
+            control_num := 'DHPSW-ROIVA-' || record_year || '-' || month_day || '-' || 
                           LPAD(monthly_count::TEXT, 3, '0') || '-' || 
                           LPAD(yearly_count::TEXT, 3, '0');
-        END LOOP;
+        END IF;
+        
+        -- Select a random status
+        selected_status := statuses[(1 + floor(random() * array_length(statuses, 1)))::INTEGER];
+        
+        -- Generate timestamps for status checklist
+        timestamp1 := record_date::TIMESTAMP + INTERVAL '1 hour' * floor(random() * 24);
+        timestamp2 := record_date::TIMESTAMP + INTERVAL '1 hour' * (floor(random() * 24) + 1);
+        timestamp3 := record_date::TIMESTAMP + INTERVAL '1 hour' * (floor(random() * 24) + 2);
+        timestamp4 := record_date::TIMESTAMP + INTERVAL '1 hour' * (floor(random() * 24) + 3);
+        timestamp5 := record_date::TIMESTAMP + INTERVAL '1 hour' * (floor(random() * 24) + 4);
+        
+        -- Build status_checklist based on the selected status
+        -- The status_checklist must match the status for proper counting
+        -- The query logic checks status_checklist, not just the status field
+        CASE selected_status
+            WHEN 'pending' THEN
+                -- For Evaluation: no statuses checked
+                status_checklist_json := '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}'::jsonb;
+            WHEN 'evaluated' THEN
+                -- Evaluated: only evaluated checked, no later statuses checked
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', false, 'timestamp', null),
+                    'emailed_to_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'received_from_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'for_interview', jsonb_build_object('checked', false, 'timestamp', null)
+                );
+            WHEN 'for_confirmation' THEN
+                -- For Confirmation: evaluated and for_confirmation checked, no later statuses checked
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', true, 'timestamp', timestamp2::TEXT),
+                    'emailed_to_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'received_from_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'for_interview', jsonb_build_object('checked', false, 'timestamp', null)
+                );
+            WHEN 'emailed_to_dhad' THEN
+                -- Emailed to DHAD: evaluated, for_confirmation, and emailed_to_dhad checked, no later statuses checked
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', true, 'timestamp', timestamp2::TEXT),
+                    'emailed_to_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp3::TEXT),
+                    'received_from_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'for_interview', jsonb_build_object('checked', false, 'timestamp', null)
+                );
+            WHEN 'received_from_dhad' THEN
+                -- Received from DHAD: evaluated, for_confirmation, emailed_to_dhad, and received_from_dhad checked, for_interview not checked
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', true, 'timestamp', timestamp2::TEXT),
+                    'emailed_to_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp3::TEXT),
+                    'received_from_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp4::TEXT),
+                    'for_interview', jsonb_build_object('checked', false, 'timestamp', null)
+                );
+            WHEN 'for_interview' THEN
+                -- For Interview: The query requires for_interview checked AND NOT all statuses checked
+                -- To make it count as "for_interview" (not "finished"), we need for_interview checked but NOT all checked
+                -- We'll set all previous statuses checked, and for_interview checked, but leave received_from_dhad unchecked
+                -- This way: for_interview = true, but NOT all are checked (received_from_dhad is false)
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', true, 'timestamp', timestamp2::TEXT),
+                    'emailed_to_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp3::TEXT),
+                    'received_from_dhad', jsonb_build_object('checked', false, 'timestamp', null),
+                    'for_interview', jsonb_build_object('checked', true, 'timestamp', timestamp5::TEXT)
+                );
+            WHEN 'approved' THEN
+                -- Finished: all statuses checked
+                status_checklist_json := jsonb_build_object(
+                    'evaluated', jsonb_build_object('checked', true, 'timestamp', timestamp1::TEXT),
+                    'for_confirmation', jsonb_build_object('checked', true, 'timestamp', timestamp2::TEXT),
+                    'emailed_to_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp3::TEXT),
+                    'received_from_dhad', jsonb_build_object('checked', true, 'timestamp', timestamp4::TEXT),
+                    'for_interview', jsonb_build_object('checked', true, 'timestamp', timestamp5::TEXT)
+                );
+            ELSE
+                -- Default: no statuses checked
+                status_checklist_json := '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}'::jsonb;
+        END CASE;
         
         INSERT INTO direct_hire_applications (
             control_number, name, email, cellphone, sex, salary, salary_currency, raw_salary,
@@ -81,7 +224,7 @@ BEGIN
                 WHEN random() > 0.5 THEN 500 + floor(random() * 4500)::DECIMAL
                 ELSE 300 + floor(random() * 200)::DECIMAL
             END,
-            statuses[(1 + floor(random() * array_length(statuses, 1)))::INTEGER],
+            selected_status,
             jobsites[(1 + floor(random() * array_length(jobsites, 1)))::INTEGER],
             CASE 
                 WHEN (SELECT job_type FROM (SELECT unnest(job_types) AS job_type ORDER BY random() LIMIT 1) AS jt) = 'professional'
@@ -91,12 +234,12 @@ BEGIN
             job_types[(1 + floor(random() * array_length(job_types, 1)))::INTEGER],
             evaluators[(1 + floor(random() * array_length(evaluators, 1)))::INTEGER],
             employers[(1 + floor(random() * array_length(employers, 1)))::INTEGER],
-            '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}'::jsonb,
+            status_checklist_json,
             CASE WHEN random() > 0.7 THEN TRUE ELSE FALSE END,
-            CASE WHEN random() > 0.5 THEN CURRENT_TIMESTAMP - INTERVAL '1 day' * floor(random() * 30) ELSE NULL END,
-            CASE WHEN random() > 0.5 THEN CURRENT_TIMESTAMP - INTERVAL '1 hour' * floor(random() * 24) ELSE NULL END,
-            CURRENT_TIMESTAMP - INTERVAL '1 day' * floor(random() * 365),
-            CURRENT_TIMESTAMP - INTERVAL '1 day' * floor(random() * 365)
+            CASE WHEN random() > 0.5 THEN record_date::TIMESTAMP + INTERVAL '1 hour' * floor(random() * 24) ELSE NULL END,
+            CASE WHEN random() > 0.5 THEN record_date::TIMESTAMP + INTERVAL '1 hour' * (floor(random() * 24) + 1) ELSE NULL END,
+            record_date::TIMESTAMP + INTERVAL '1 hour' * floor(random() * 24),
+            record_date::TIMESTAMP + INTERVAL '1 hour' * floor(random() * 24)
         );
     END LOOP;
     
@@ -165,7 +308,15 @@ BEGIN
     SELECT COALESCE(COUNT(*), 0) INTO wsn_yearly FROM balik_manggagawa_clearance WHERE clearance_type = 'watchlisted_similar_name' AND EXTRACT(YEAR FROM created_at) = current_year;
     SELECT COALESCE(COUNT(*), 0) INTO wsn_count FROM balik_manggagawa_clearance WHERE clearance_type = 'watchlisted_similar_name' AND EXTRACT(YEAR FROM created_at) = current_year AND EXTRACT(MONTH FROM created_at) = current_month;
     
+    RAISE NOTICE 'Starting Balik Manggagawa Clearance generation...';
+    RAISE NOTICE 'This should take approximately 10-30 seconds...';
+    
     FOR i IN 1..1000 LOOP
+        -- Show progress every 200 records for faster feedback
+        IF i % 200 = 0 THEN
+            RAISE NOTICE 'Generating Balik Manggagawa record % of 1000...', i;
+        END IF;
+        
         selected_clearance_type := clearance_types[(1 + floor(random() * array_length(clearance_types, 1)))::INTEGER];
         
         -- Determine prefix, delimiter, and get counts based on clearance type
@@ -227,18 +378,10 @@ BEGIN
             yearly_count := wsn_yearly;
         END IF;
         
+        -- Generate control number (no duplicate check needed since we start from clean database)
         control_num := prefix || delimiter || current_year || '-' || month_day || '-' || 
                       LPAD(monthly_count::TEXT, 3, '0') || '-' || 
                       LPAD(yearly_count::TEXT, 3, '0');
-        
-        -- Check if control number already exists, if so find next available
-        WHILE EXISTS (SELECT 1 FROM balik_manggagawa_clearance WHERE control_number = control_num) LOOP
-            monthly_count := monthly_count + 1;
-            yearly_count := yearly_count + 1;
-            control_num := prefix || delimiter || current_year || '-' || month_day || '-' || 
-                          LPAD(monthly_count::TEXT, 3, '0') || '-' || 
-                          LPAD(yearly_count::TEXT, 3, '0');
-        END LOOP;
         
         INSERT INTO balik_manggagawa_clearance (
             control_number, name_of_worker, sex, employer, destination, salary, raw_salary, salary_currency,
@@ -296,7 +439,15 @@ DECLARE
     taiwan_companies TEXT[] := ARRAY['TAIWAN TECH CORP', 'ASIA MANUFACTURING LTD', 'TAIPEI SERVICES INC', 'FORMOSA INDUSTRIES', 'TAIWAN LOGISTICS CO'];
     other_companies TEXT[] := ARRAY['GLOBAL SERVICES INC', 'INTERNATIONAL CORP', 'WORLDWIDE ENTERPRISES', 'PREMIER COMPANY LTD', 'ELITE BUSINESS CORP'];
 BEGIN
+    RAISE NOTICE 'Starting Gov to Gov Applications generation...';
+    RAISE NOTICE 'This should take approximately 10-30 seconds...';
+    
     FOR i IN 1..1000 LOOP
+        -- Show progress every 200 records for faster feedback
+        IF i % 200 = 0 THEN
+            RAISE NOTICE 'Generating Gov to Gov record % of 1000...', i;
+        END IF;
+        
         -- Generate realistic birth date (age between 20-60)
         age_val := 20 + floor(random() * 41)::INTEGER;
         birth_date := CURRENT_DATE - (age_val || ' years')::INTERVAL - (floor(random() * 365) || ' days')::INTERVAL;
@@ -382,7 +533,15 @@ DECLARE
     num_docs INTEGER;
     j INTEGER;
 BEGIN
+    RAISE NOTICE 'Starting Information Sheet Records generation...';
+    RAISE NOTICE 'This should take approximately 10-30 seconds...';
+    
     FOR i IN 1..1000 LOOP
+        -- Show progress every 200 records for faster feedback
+        IF i % 200 = 0 THEN
+            RAISE NOTICE 'Generating Information Sheet record % of 1000...', i;
+        END IF;
+        
         time_received := CURRENT_TIMESTAMP - INTERVAL '1 day' * floor(random() * 30) - INTERVAL '1 hour' * floor(random() * 8);
         time_released := time_received + INTERVAL '1 hour' * (1 + floor(random() * 4));
         
@@ -442,7 +601,15 @@ DECLARE
     j INTEGER;
     job_fair_id UUID;
 BEGIN
+    RAISE NOTICE 'Starting Job Fairs generation...';
+    RAISE NOTICE 'This should take approximately 10-30 seconds...';
+    
     FOR i IN 1..1000 LOOP
+        -- Show progress every 200 records for faster feedback
+        IF i % 200 = 0 THEN
+            RAISE NOTICE 'Generating Job Fair record % of 1000...', i;
+        END IF;
+        
         -- Generate date (past 2 years to future 1 year)
         fair_date := CURRENT_DATE - INTERVAL '1 day' * floor(random() * 730) + INTERVAL '1 day' * floor(random() * 365);
         

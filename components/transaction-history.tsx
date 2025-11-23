@@ -62,6 +62,66 @@ const buildFieldSummary = (transaction: ApplicationTransaction) => {
   return Array.from(changedKeys);
 };
 
+// Map status checklist keys to readable status names
+const getStatusName = (statusKey: string): string => {
+  const statusMap: Record<string, string> = {
+    'evaluated': 'Evaluated',
+    'for_confirmation': 'For Confirmation',
+    'emailed_to_dhad': 'Emailed to DHAD',
+    'received_from_dhad': 'Received from DHAD',
+    'for_interview': 'For Interview',
+    'pending': 'For Evaluation',
+    'approved': 'Finished',
+    'rejected': 'Rejected'
+  };
+  return statusMap[statusKey] || statusKey;
+};
+
+// Check if status changed in status_checklist
+const getStatusChecklistChange = (transaction: ApplicationTransaction): { oldStatus: string | null; newStatus: string | null } | null => {
+  const oldChecklist = transaction.old_values?.status_checklist;
+  const newChecklist = transaction.new_values?.status_checklist;
+  
+  if (!oldChecklist && !newChecklist) return null;
+  
+  // Find which status was changed (checked from false to true)
+  const statusKeys = ['evaluated', 'for_confirmation', 'emailed_to_dhad', 'received_from_dhad', 'for_interview'];
+  
+  for (const key of statusKeys) {
+    const oldChecked = (oldChecklist as any)?.[key]?.checked || false;
+    const newChecked = (newChecklist as any)?.[key]?.checked || false;
+    
+    if (!oldChecked && newChecked) {
+      // Status was checked - find the previous status that was checked
+      let previousStatus: string | null = null;
+      
+      // Check status field for old status
+      const oldStatusField = transaction.old_values?.status;
+      if (oldStatusField && oldStatusField !== 'pending') {
+        previousStatus = getStatusName(oldStatusField);
+      } else {
+        // Find the last checked status in old checklist
+        for (let i = statusKeys.indexOf(key) - 1; i >= 0; i--) {
+          if ((oldChecklist as any)?.[statusKeys[i]]?.checked) {
+            previousStatus = getStatusName(statusKeys[i]);
+            break;
+          }
+        }
+        if (!previousStatus) {
+          previousStatus = 'For Evaluation';
+        }
+      }
+      
+      return {
+        oldStatus: previousStatus,
+        newStatus: getStatusName(key)
+      };
+    }
+  }
+  
+  return null;
+};
+
 const buildChangeSummary = (transaction: ApplicationTransaction): string => {
   // For create actions, show control_number or document information
   if (transaction.action === 'create') {
@@ -113,6 +173,20 @@ const buildChangeSummary = (transaction: ApplicationTransaction): string => {
     return "";
   }
 
+  // Check for status checklist changes (status changes)
+  const statusChange = getStatusChecklistChange(transaction);
+  if (statusChange && transaction.action === 'update') {
+    return `Application Status: ${statusChange.oldStatus} → ${statusChange.newStatus}`;
+  }
+
+  // Check for direct status field changes
+  if (transaction.old_values?.status && transaction.new_values?.status && 
+      transaction.old_values.status !== transaction.new_values.status) {
+    const oldStatus = getStatusName(transaction.old_values.status);
+    const newStatus = getStatusName(transaction.new_values.status);
+    return `Application Status: ${oldStatus} → ${newStatus}`;
+  }
+
   // For approved, rejected, release_card, and received_by_region actions, only show action (no detailed change summary)
   if (transaction.action === 'approved' || transaction.action === 'rejected' || transaction.action === 'release_card' || transaction.action === 'received_by_region') {
     return "";
@@ -121,8 +195,8 @@ const buildChangeSummary = (transaction: ApplicationTransaction): string => {
   const keys = buildFieldSummary(transaction);
   if (!keys.length) return "";
 
-  // Filter out 'deleted' key from display
-  const filteredKeys = keys.filter(key => key !== 'deleted');
+  // Filter out 'deleted' and 'status_checklist' keys from display (we handle status_checklist separately above)
+  const filteredKeys = keys.filter(key => key !== 'deleted' && key !== 'status_checklist');
 
   const parts = filteredKeys.map((key) => {
     const prev = formatValue(transaction.old_values?.[key]);
@@ -247,6 +321,20 @@ export function TransactionHistory(props: TransactionHistoryProps) {
       });
       const timestamp = `[${datePart} at ${timePart}]`;
       const changeSummary = buildChangeSummary(transaction);
+      
+      // Check if this is a status change to use special format
+      const statusChange = getStatusChecklistChange(transaction);
+      const directStatusChange = transaction.old_values?.status && transaction.new_values?.status && 
+                                 transaction.old_values.status !== transaction.new_values.status;
+      
+      if ((statusChange || directStatusChange) && transaction.action === 'update') {
+        const oldStatus = statusChange?.oldStatus || (directStatusChange ? getStatusName(transaction.old_values!.status) : null);
+        const newStatus = statusChange?.newStatus || (directStatusChange ? getStatusName(transaction.new_values!.status) : null);
+        if (oldStatus && newStatus) {
+          return `${timestamp} Updated by ${actor} - Application Status: ${oldStatus} → ${newStatus}`;
+        }
+      }
+      
       return `${timestamp} ${actionLabel} by ${actor}${changeSummary ? ` — ${changeSummary}` : ""}`;
     });
   }, [transactions]);
@@ -329,11 +417,46 @@ export function TransactionHistory(props: TransactionHistoryProps) {
       )}
 
       {!loading && hasData && (
-        <textarea
-          readOnly
-          value={logText}
-          className="mt-4 h-56 w-full resize-y rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-700"
-        />
+        <div className="mt-4 h-56 w-full resize-y overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-700">
+          {transactions.map((transaction, index) => {
+            const actor = transaction.actor?.full_name || transaction.actor?.username || "Unknown user";
+            const actionLabel = formatActionLabel(transaction.action);
+            const eventDate = new Date(transaction.created_at);
+            const datePart = `${eventDate.getFullYear()}-${eventDate.toLocaleString('en-US', {
+              month: 'short'
+            }).toUpperCase()}-${String(eventDate.getDate()).padStart(2, '0')}`;
+            const timePart = eventDate.toLocaleString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            });
+            const timestamp = `[${datePart} at ${timePart}]`;
+            const changeSummary = buildChangeSummary(transaction);
+            
+            // Check if this is a status change to use special format
+            const statusChange = getStatusChecklistChange(transaction);
+            const directStatusChange = transaction.old_values?.status && transaction.new_values?.status && 
+                                       transaction.old_values.status !== transaction.new_values.status;
+            
+            if ((statusChange || directStatusChange) && transaction.action === 'update') {
+              const oldStatus = statusChange?.oldStatus || (directStatusChange ? getStatusName(transaction.old_values!.status) : null);
+              const newStatus = statusChange?.newStatus || (directStatusChange ? getStatusName(transaction.new_values!.status) : null);
+              if (oldStatus && newStatus) {
+                return (
+                  <div key={index} className="mb-1">
+                    <span className="font-bold">{timestamp}</span> Updated by <span className="underline">{actor}</span> - Application Status: {oldStatus} → {newStatus}
+                  </div>
+                );
+              }
+            }
+            
+            return (
+              <div key={index} className="mb-1">
+                <span className="font-bold">{timestamp}</span> {actionLabel} by <span className="underline">{actor}</span>{changeSummary ? ` — ${changeSummary}` : ""}
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );

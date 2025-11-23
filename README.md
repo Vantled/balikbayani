@@ -231,6 +231,58 @@ npm run db:seed-bm       # Seed Balik Manggagawa data
 npm run db:cleanup-users # Clean up users (with --confirm flag)
 ```
 
+### Sample Data Management
+
+#### Generate Sample Data
+```bash
+npm run db:generate-sample-data
+```
+
+**Description:** Generates 1000 realistic sample records for each of the following tables:
+- **Direct Hire Applications** - With proper control numbers (DHPSW-ROIVA-YYYY-MMDD-MMM-YYY format)
+- **Balik Manggagawa Clearance** - With various clearance types (BM, WE, SP, NCC, NVEC, FAC, CS, WSN)
+- **Gov to Gov Applications** - With personal information and work experience data
+- **Information Sheet Records** - With documents and actions taken
+- **Job Fairs** - With multiple email addresses and contact numbers
+
+**Features:**
+- ✅ Follows all validation rules and constraints
+- ✅ Proper capitalization (all uppercase where required)
+- ✅ Realistic Filipino names, destinations, and positions
+- ✅ Unique control numbers generated correctly
+- ✅ Related data included (emails, contacts, documents)
+- ✅ Timestamps spread over the past year
+
+**Note:** This script uses your database credentials from `.env.local` and will automatically handle existing records to avoid duplicate control numbers.
+
+#### Cleanup Sample Data
+```bash
+npm run db:cleanup-sample-data
+```
+
+**Description:** Removes all records from the sample data tables and resets control numbers. This script will:
+- Delete all records from Direct Hire Applications, Balik Manggagawa Clearance, Gov to Gov Applications, Information Sheet Records, and Job Fairs
+- Delete all related records (documents, actions taken, emails, contacts, etc.)
+- Reset sequences for SERIAL columns
+- Verify that all tables are empty after cleanup
+
+**Features:**
+- ✅ Safe deletion order (respects foreign key constraints)
+- ✅ Includes confirmation prompt (requires typing "YES")
+- ✅ Verification report showing record counts after cleanup
+- ✅ Control numbers automatically reset to 001-001 on next record creation
+
+**Warning:** This operation is **irreversible**. All data in the specified tables will be permanently deleted. The script will prompt for confirmation before proceeding.
+
+**Usage Example:**
+```bash
+# Clean up all sample data
+npm run db:cleanup-sample-data
+
+# Then regenerate fresh sample data
+npm run db:generate-sample-data
+```
+
 📖 **For detailed database script documentation, see [DATABASE_SCRIPTS.md](DATABASE_SCRIPTS.md)**
 
 ## Project Structure

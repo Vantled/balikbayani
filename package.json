@@ -25,6 +25,7 @@
     "db:seed-peso": "tsx scripts/seed-peso-contacts.ts",
     "db:seed-pra": "tsx scripts/seed-pra-contacts.ts",
     "db:seed-bm": "tsx scripts/seed-balik-manggagawa.ts",
+    "db:generate-sample-data": "node scripts/run-sample-data.js",
     "db:cleanup-users": "tsx scripts/cleanup-users.ts",
     "debug:session": "tsx lib/debug-session.ts",
     "test:complete-auth": "tsx lib/test-complete-auth.ts",

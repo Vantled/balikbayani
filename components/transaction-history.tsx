@@ -93,8 +93,28 @@ const buildChangeSummary = (transaction: ApplicationTransaction): string => {
     }
   }
 
-  // For for_compliance, approved, rejected, release_card, and received_by_region actions, only show action (no detailed change summary)
-  if (transaction.action === 'for_compliance' || transaction.action === 'approved' || transaction.action === 'rejected' || transaction.action === 'release_card' || transaction.action === 'received_by_region') {
+  // For for_compliance action, show clearance type if available
+  if (transaction.action === 'for_compliance') {
+    const clearanceType = transaction.new_values?.clearance_type;
+    if (clearanceType) {
+      // Map clearance type codes to readable names (matching getComplianceTitle from balik-manggagawa page)
+      const clearanceTypeMap: Record<string, string> = {
+        'critical_skill': 'Critical Skills',
+        'for_assessment_country': 'For Assessment Country',
+        'non_compliant_country': 'Non Compliant Country',
+        'no_verified_contract': 'No Verified Contract',
+        'seafarer_position': 'Seaferer\'s Position',
+        'watchlisted_employer': 'Watchlisted Employer',
+        'watchlisted_similar_name': 'Watchlisted OFW'
+      };
+      const typeName = clearanceTypeMap[String(clearanceType)] || String(clearanceType);
+      return `Type: ${typeName}`;
+    }
+    return "";
+  }
+
+  // For approved, rejected, release_card, and received_by_region actions, only show action (no detailed change summary)
+  if (transaction.action === 'approved' || transaction.action === 'rejected' || transaction.action === 'release_card' || transaction.action === 'received_by_region') {
     return "";
   }
 

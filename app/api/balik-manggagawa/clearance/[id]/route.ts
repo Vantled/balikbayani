@@ -326,12 +326,24 @@ export async function PATCH(
           auditAction = 'rejected';
         }
 
+        // Build newValues for audit log
+        let auditNewValues: Record<string, unknown> = {};
+        if (auditAction !== 'update') {
+          auditNewValues = { status: status };
+          // Include clearance_type for for_compliance action
+          if (auditAction === 'for_compliance' && clearanceType) {
+            auditNewValues.clearance_type = clearanceType;
+          }
+        } else {
+          auditNewValues = newValues;
+        }
+
         await recordAuditLog(request, {
           action: auditAction,
           tableName: 'balik_manggagawa_clearance',
           recordId: id,
           oldValues: auditAction !== 'update' ? { status: existing.status } : oldValues,
-          newValues: auditAction !== 'update' ? { status: status } : newValues,
+          newValues: auditNewValues,
         });
       }
       const response: ApiResponse = { success: true, data: updated, message: 'Status updated successfully' };

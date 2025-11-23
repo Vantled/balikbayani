@@ -142,6 +142,8 @@ export interface BalikManggagawaClearance {
   salary: number;
   raw_salary?: number;
   salary_currency?: string;
+  job_type?: 'household' | 'professional';
+  position?: string;
   clearance_type: 'watchlisted_employer' | 'seafarer_position' | 'non_compliant_country' | 'no_verified_contract' | 'for_assessment_country' | 'critical_skill' | 'watchlisted_similar_name';
   status?: string;
   // New fields for template

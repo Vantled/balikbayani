@@ -55,15 +55,19 @@ export async function PUT(
     await recordDocumentAudit(request, 'update', updatedDocument, {
       oldValues: {
         document_name: document.document_type,
+        file_name: document.file_name,
       },
       newValues: {
         document_name: updatedDocument.document_type,
+        file_name: updatedDocument.file_name,
       },
       applicationOldValues: {
         document_name: document.document_type,
+        file_name: document.file_name,
       },
       applicationNewValues: {
         document_name: updatedDocument.document_type,
+        file_name: updatedDocument.file_name,
       },
     });
 
@@ -213,14 +217,14 @@ export async function DELETE(
       oldValues: serializeDocument(document),
       newValues: {
         document_name: document.document_type,
-        deleted: true,
+        file_name: document.file_name,
       },
       applicationOldValues: {
         document_name: document.document_type,
       },
       applicationNewValues: {
         document_name: document.document_type,
-        deleted: true,
+        file_name: document.file_name,
       },
     });
 

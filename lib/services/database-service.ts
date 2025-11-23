@@ -523,6 +523,7 @@ export class DatabaseService {
     clearanceType?: string | null;
     rawSalary?: number | null;
     salaryCurrency?: string | null;
+    jobType?: string | null;
     position?: string | null;
     monthsYears?: string | null;
     withPrincipal?: string | null;
@@ -632,7 +633,7 @@ export class DatabaseService {
     const insertSql = `
       INSERT INTO balik_manggagawa_clearance (
         control_number, name_of_worker, sex, employer, destination, salary, clearance_type,
-        raw_salary, salary_currency,
+        raw_salary, salary_currency, job_type,
         position, months_years, with_principal, new_principal_name, employment_duration,
         date_arrival, date_departure, place_date_employment, date_blacklisting,
         total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
@@ -640,16 +641,16 @@ export class DatabaseService {
         time_received, time_released
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,
-        $8,$9,
-        $10,$11,$12,$13,$14,
-        $15,$16,$17,$18,
-        $19,$20,$21,$22,$23,$24,
-        $25,$26,$27,$28,$29,
-        $30,$31
+        $8,$9,$10,
+        $11,$12,$13,$14,$15,
+        $16,$17,$18,$19,
+        $20,$21,$22,$23,$24,$25,
+        $26,$27,$28,$29,$30,
+        $31,$32
       ) RETURNING *`;
     const insertParams = [
       controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, (clearanceData.clearanceType ?? null),
-      (clearanceData.rawSalary ?? clearanceData.salary ?? null), (clearanceData.salaryCurrency ?? null),
+      (clearanceData.rawSalary ?? clearanceData.salary ?? null), (clearanceData.salaryCurrency ?? null), (clearanceData.jobType ?? null),
       clearanceData.position ?? null, clearanceData.monthsYears ?? null, clearanceData.withPrincipal ?? null, clearanceData.newPrincipalName ?? null, clearanceData.employmentDuration ?? null,
       clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
       clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,

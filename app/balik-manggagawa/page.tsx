@@ -654,6 +654,23 @@ export default function BalikManggagawaPage() {
     time_received: "",
     time_released: "",
   })
+
+  // Helper function to reset the create form
+  const resetCreateForm = () => {
+    setFormData({ 
+      nameOfWorker: "", 
+      sex: "", 
+      employer: "", 
+      destination: "", 
+      salary: "", 
+      position: "", 
+      job_type: "", 
+      salaryCurrency: "", 
+      time_received: "", 
+      time_released: "" 
+    });
+    setControlPreview("");
+  }
   const [controlPreview, setControlPreview] = useState("")
   const [creating, setCreating] = useState(false)
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
@@ -672,6 +689,8 @@ export default function BalikManggagawaPage() {
     job_type: "" as 'household' | 'professional' | '',
     salaryCurrency: "" as Currency | '',
   })
+  const [originalEditData, setOriginalEditData] = useState<typeof editData | null>(null)
+  const [originalSalaryUSD, setOriginalSalaryUSD] = useState<number | null>(null)
   const [editUsdDisplay, setEditUsdDisplay] = useState<string>("")
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [permanentDeleteConfirmOpen, setPermanentDeleteConfirmOpen] = useState(false)
@@ -1131,7 +1150,7 @@ export default function BalikManggagawaPage() {
                                       if (json.success) {
                                         const d = json.data
                                         setSelected(d)
-                                        setEditData({
+                                        const initialEditData = {
                                           nameOfWorker: d.name_of_worker || '',
                                           sex: d.sex || '',
                                           employer: d.employer || '',
@@ -1140,7 +1159,14 @@ export default function BalikManggagawaPage() {
                                           salary: d.raw_salary != null ? String(d.raw_salary) : (d.salary != null ? String(d.salary) : ''),
                                           job_type: d.job_type || '',
                                           salaryCurrency: d.salary_currency || '',
-                                        })
+                                        }
+                                        setEditData(initialEditData)
+                                        setOriginalEditData(initialEditData)
+                                        // Store the original salary USD value from the database
+                                        const originalUSD = d.salary !== undefined && d.salary !== null 
+                                          ? Number(d.salary) 
+                                          : null
+                                        setOriginalSalaryUSD(originalUSD)
                                         setEditOpen(true)
                                       } else {
                                         toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
@@ -1206,11 +1232,25 @@ export default function BalikManggagawaPage() {
       </main>
 
       {/* Create BM Clearance Modal */}
-      <Dialog open={isCreateOpen} onOpenChange={(o)=> { setIsCreateOpen(o); if (!o) { setFormData({ nameOfWorker: "", sex: "", employer: "", destination: "", salary: "", position: "", job_type: "", salaryCurrency: "", time_received: "", time_released: "" }); setControlPreview("") } }}>
+      <Dialog open={isCreateOpen} onOpenChange={(o)=> { 
+        setIsCreateOpen(o); 
+        if (!o) { 
+          resetCreateForm();
+        } 
+      }}>
         <DialogContent onInteractOutside={(e)=> e.preventDefault()} className="p-0 overflow-hidden max-w-2xl w-[95vw]">
           <DialogTitle className="sr-only">Create BM Application</DialogTitle>
-          <div className="bg-[#1976D2] text-white px-6 py-4">
+          <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Create BM Application</h2>
+            <DialogClose asChild>
+              <button 
+                aria-label="Close" 
+                className="text-white text-2xl font-bold hover:opacity-80 transition-opacity"
+                onClick={resetCreateForm}
+              >
+                ×
+              </button>
+            </DialogClose>
           </div>
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 gap-4">
@@ -1348,7 +1388,15 @@ export default function BalikManggagawaPage() {
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={()=> setIsCreateOpen(false)}>Cancel</Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  resetCreateForm();
+                  setIsCreateOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
               <Button className="bg-[#1976D2] text-white" disabled={creating} onClick={()=> setCreateConfirmOpen(true)}>Create</Button>
             </div>
           </div>
@@ -1395,7 +1443,9 @@ export default function BalikManggagawaPage() {
               setCreating(false)
               if ((res as any)?.success) {
                 toast({ title: 'Created', description: 'BM clearance created successfully.' })
+                resetCreateForm()
                 setIsCreateOpen(false)
+                fetchClearances(getCurrentFilters())
               } else {
                 toast({ title: 'Error', description: (res as any)?.error || 'Failed to create', variant: 'destructive' })
               }
@@ -1558,7 +1608,7 @@ export default function BalikManggagawaPage() {
       </Dialog>
 
       {/* Edit Modal */}
-      <Dialog open={editOpen} onOpenChange={(o)=> { setEditOpen(o); if (!o) { setSelected(null); setEditSaving(false) } }}>
+      <Dialog open={editOpen} onOpenChange={(o)=> { setEditOpen(o); if (!o) { setSelected(null); setEditSaving(false); setOriginalEditData(null); setOriginalSalaryUSD(null) } }}>
         <DialogContent className="p-0 overflow-hidden max-w-2xl w-[95vw]">
           <DialogTitle className="sr-only">Edit BM Application</DialogTitle>
           <div className="bg-[#1976D2] text-white px-6 py-4">
@@ -1661,11 +1711,27 @@ export default function BalikManggagawaPage() {
                 }
                 setEditSaving(true)
                 try {
-                  // Calculate USD equivalent for salary
+                  // Check if salary or currency has been manually changed
+                  const salaryChanged = originalEditData 
+                    ? (editData.salary !== originalEditData.salary || editData.salaryCurrency !== originalEditData.salaryCurrency)
+                    : true // If no original data, assume it's a new value
+                  
                   const numericSalary = editData.salary !== '' ? Number(editData.salary) : 0
-                  const salaryUsd = editData.salaryCurrency && numericSalary
-                    ? (editData.salaryCurrency === 'USD' ? numericSalary : Number((await getUSDEquivalentAsync(numericSalary, editData.salaryCurrency)).replace(/[^0-9.]/g, '')))
-                    : numericSalary
+                  
+                  // Only recalculate USD if salary or currency was changed by the user
+                  // Otherwise, preserve the original USD value to avoid recalculation based on current exchange rates
+                  let salaryUsd: number
+                  if (salaryChanged) {
+                    // User manually changed salary or currency, recalculate USD with current rates
+                    salaryUsd = editData.salaryCurrency && numericSalary
+                      ? (editData.salaryCurrency === 'USD' ? numericSalary : Number((await getUSDEquivalentAsync(numericSalary, editData.salaryCurrency)).replace(/[^0-9.]/g, '')))
+                      : numericSalary
+                    // Round to nearest hundredths
+                    salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+                  } else {
+                    // Salary/currency unchanged, preserve original USD value
+                    salaryUsd = originalSalaryUSD !== null ? originalSalaryUSD : numericSalary
+                  }
 
                   const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, {
                     method: 'PUT',

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { FileUploadService } from '@/lib/file-upload-service'
+import { recordDocumentAudit } from '@/lib/server/document-audit'
 import createReport from 'docx-templates'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
@@ -189,6 +190,17 @@ export async function POST(
       file_path: upload.filePath,
       file_size: upload.fileSize,
       mime_type: upload.mimeType
+    })
+
+    await recordDocumentAudit(request, 'create', document, {
+      newValues: {
+        document_name: document.document_type,
+        file_name: document.file_name,
+      },
+      applicationNewValues: {
+        document_name: document.document_type,
+        file_name: document.file_name,
+      },
     })
 
     return NextResponse.json<ApiResponse>({ success: true, data: document, message: 'Document generated and attached' })

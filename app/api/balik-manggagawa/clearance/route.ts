@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       salary,
       rawSalary,
       salaryCurrency,
+      jobType,
       clearanceType,
       // Extended fields
       position,
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
       clearanceType: clearanceType || null,
       rawSalary: rawSalary ? parseFloat(rawSalary) : parseFloat(salary),
       salaryCurrency: salaryCurrency || null,
+      jobType: normalize(jobType),
       position: normalize(position),
       monthsYears: normalize(monthsYears),
       withPrincipal: normalize(withPrincipal),

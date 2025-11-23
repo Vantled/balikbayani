@@ -66,9 +66,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     await recordDocumentAudit(request, 'create', document, {
       newValues: {
         document_name: document.document_type,
+        file_name: document.file_name,
       },
       applicationNewValues: {
         document_name: document.document_type,
+        file_name: document.file_name,
       },
     });
 

@@ -63,13 +63,34 @@ const buildFieldSummary = (transaction: ApplicationTransaction) => {
 };
 
 const buildChangeSummary = (transaction: ApplicationTransaction): string => {
-  // For create actions, only show control_number
+  // For create actions, show control_number or document information
   if (transaction.action === 'create') {
     const controlNumber = transaction.new_values?.control_number;
     if (controlNumber) {
       return `Control No: ${formatValue(controlNumber)}`;
     }
+    // For document creation, show document name and file name
+    const documentName = transaction.new_values?.document_name;
+    const fileName = transaction.new_values?.file_name;
+    if (documentName || fileName) {
+      const parts: string[] = [];
+      if (documentName) parts.push(`Document: ${formatValue(documentName)}`);
+      if (fileName) parts.push(`File: ${formatValue(fileName)}`);
+      return parts.join(" | ");
+    }
     return "";
+  }
+
+  // For delete actions on documents, show document name and file name, but exclude deleted flag
+  if (transaction.action === 'delete') {
+    const documentName = transaction.new_values?.document_name || transaction.old_values?.document_name;
+    const fileName = transaction.new_values?.file_name || transaction.old_values?.file_name;
+    if (documentName || fileName) {
+      const parts: string[] = [];
+      if (documentName) parts.push(`Document: ${formatValue(documentName)}`);
+      if (fileName) parts.push(`File: ${formatValue(fileName)}`);
+      return parts.join(" | ");
+    }
   }
 
   // For for_compliance, approved, rejected, release_card, and received_by_region actions, only show action (no detailed change summary)
@@ -80,7 +101,10 @@ const buildChangeSummary = (transaction: ApplicationTransaction): string => {
   const keys = buildFieldSummary(transaction);
   if (!keys.length) return "";
 
-  const parts = keys.map((key) => {
+  // Filter out 'deleted' key from display
+  const filteredKeys = keys.filter(key => key !== 'deleted');
+
+  const parts = filteredKeys.map((key) => {
     const prev = formatValue(transaction.old_values?.[key]);
     const next = formatValue(transaction.new_values?.[key]);
 
@@ -193,15 +217,13 @@ export function TransactionHistory(props: TransactionHistoryProps) {
       const actor = transaction.actor?.full_name || transaction.actor?.username || "Unknown user";
       const actionLabel = formatActionLabel(transaction.action);
       const eventDate = new Date(transaction.created_at);
-      const datePart = `${eventDate.getUTCFullYear()}-${eventDate.toLocaleString('en-US', {
-        month: 'short',
-        timeZone: 'UTC'
-      }).toUpperCase()}-${String(eventDate.getUTCDate()).padStart(2, '0')}`;
+      const datePart = `${eventDate.getFullYear()}-${eventDate.toLocaleString('en-US', {
+        month: 'short'
+      }).toUpperCase()}-${String(eventDate.getDate()).padStart(2, '0')}`;
       const timePart = eventDate.toLocaleString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        hour12: true,
-        timeZone: 'UTC'
+        hour12: true
       });
       const timestamp = `[${datePart} at ${timePart}]`;
       const changeSummary = buildChangeSummary(transaction);

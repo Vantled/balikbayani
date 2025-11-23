@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseService } from '@/lib/services/database-service'
 import { FileUploadService } from '@/lib/file-upload-service'
+import { recordDocumentAudit } from '@/lib/server/document-audit'
 import createReport from 'docx-templates'
 import { buildDirectHireDocxData } from '@/lib/docx-common'
 import { readFile } from 'fs/promises'
@@ -151,6 +152,17 @@ export async function POST(
       mime_type: upload.mimeType
     })
 
+    await recordDocumentAudit(request, 'create', document, {
+      newValues: {
+        document_name: document.document_type,
+        file_name: document.file_name,
+      },
+      applicationNewValues: {
+        document_name: document.document_type,
+        file_name: document.file_name,
+      },
+    })
+
     // Additionally generate DMW Clearance Request (non-blocking)
     try {
       if (existingDmw && override) {
@@ -193,7 +205,7 @@ export async function POST(
         'dmw_clearance_request'
       )
 
-      await DatabaseService.createDocument({
+      const dmwDocument = await DatabaseService.createDocument({
         application_id: application.id,
         application_type: 'direct_hire',
         document_type: 'dmw_clearance_request',
@@ -201,6 +213,17 @@ export async function POST(
         file_path: dmwUpload.filePath,
         file_size: dmwUpload.fileSize,
         mime_type: dmwUpload.mimeType
+      })
+
+      await recordDocumentAudit(request, 'create', dmwDocument, {
+        newValues: {
+          document_name: dmwDocument.document_type,
+          file_name: dmwDocument.file_name,
+        },
+        applicationNewValues: {
+          document_name: dmwDocument.document_type,
+          file_name: dmwDocument.file_name,
+        },
       })
     } catch (err) {
       console.error('Error generating DMW clearance request:', err)

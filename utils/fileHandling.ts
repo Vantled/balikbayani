@@ -102,7 +102,25 @@ export const handlePasteFromClipboard = async (
 
 // Check clipboard support
 export const checkClipboardSupport = (): boolean => {
-  return !!(navigator.clipboard && typeof navigator.clipboard.read === 'function')
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return false
+  }
+  
+  // On macOS, always show the paste button as the Clipboard API may be available
+  // but require user interaction or HTTPS. The error handling will catch permission issues.
+  const isMacOS = /Mac|iPhone|iPad|iPod/.test(navigator.platform) || 
+                  /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+  
+  // Check for Clipboard API support
+  const hasClipboardAPI = !!(navigator.clipboard && typeof navigator.clipboard.read === 'function')
+  
+  // Also check for legacy clipboard API as fallback
+  const hasLegacyClipboard = !!(document.execCommand && typeof document.execCommand === 'function')
+  
+  // Return true if either API is available, or if we're on macOS (show button anyway)
+  // The button will be shown, and we'll handle errors gracefully in the paste handler
+  return hasClipboardAPI || hasLegacyClipboard || isMacOS
 }
 
 // File type validation

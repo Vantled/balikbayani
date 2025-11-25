@@ -73,8 +73,8 @@ export async function PUT(
     if (body.job_type) updateData.job_type = body.job_type as any;
     if (body.evaluator !== undefined && body.evaluator !== null && body.evaluator !== '') updateData.evaluator = String(body.evaluator).toUpperCase();
     if (body.employer !== undefined) updateData.employer = String(body.employer || '').toUpperCase();
-    if (body.time_received !== undefined) updateData.time_received = body.time_received || null;
-    if (body.time_released !== undefined) updateData.time_released = body.time_released || null;
+    // Note: time_received and time_released are intentionally excluded from updates
+    // They should only be set during creation and cannot be modified afterward
 
     // Merge metadata into status_checklist if provided
     if (body.for_interview_meta || body.for_confirmation_meta) {

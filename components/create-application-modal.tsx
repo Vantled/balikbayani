@@ -607,8 +607,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         salaryUsd = originalSalaryUSD !== null ? originalSalaryUSD : salaryNumber
       }
 
+      // Exclude time_received and time_released from update (they should not be editable)
+      const { time_received, time_released, ...formDataWithoutTimeFields } = formData
+      
       const updateData = {
-        ...formData,
+        ...formDataWithoutTimeFields,
         // Persist raw salary and currency explicitly
         raw_salary: salaryNumber,
         salary_currency: formData.salaryCurrency || '',
@@ -846,6 +849,15 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       // Round to nearest hundredths
       salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
 
+      // Convert time_received and time_released from datetime-local format to ISO timestamp
+      const convertToISOTimestamp = (datetimeLocal: string): string | null => {
+        if (!datetimeLocal) return null
+        // datetime-local format: "YYYY-MM-DDTHH:mm"
+        // Convert to ISO timestamp: "YYYY-MM-DDTHH:mm:ss.sssZ"
+        const date = new Date(datetimeLocal)
+        return isNaN(date.getTime()) ? null : date.toISOString()
+      }
+
       const createData = {
         ...formData,
         // Persist both raw and converted amounts on create
@@ -853,6 +865,9 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         salary_currency: formData.salaryCurrency || '',
         salary: salaryUsd,
         evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
+        // Convert time_received and time_released to ISO timestamps
+        time_received: convertToISOTimestamp(formData.time_received),
+        time_released: convertToISOTimestamp(formData.time_released),
         for_interview_meta: {
           processed_workers_principal: formData.processed_workers_principal ? Number(formData.processed_workers_principal) : 0,
           processed_workers_las: formData.processed_workers_las ? Number(formData.processed_workers_las) : 0,
@@ -1884,27 +1899,29 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                  </div>
                </div>
 
-              {/* Time Received and Time Released */}
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div>
-                  <Label className="text-sm font-medium text-gray-700">Time Received:</Label>
-                  <Input
-                    type="datetime-local"
-                    value={formData.time_received}
-                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
-                    className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
+              {/* Time Received and Time Released - Only show for new applications */}
+              {!applicationId && (
+                <div className="grid grid-cols-2 gap-4 mt-6">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Time Received:</Label>
+                    <Input
+                      type="datetime-local"
+                      value={formData.time_received}
+                      onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
+                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Time Released:</Label>
+                    <Input
+                      type="datetime-local"
+                      value={formData.time_released}
+                      onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
+                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-700">Time Released:</Label>
-                  <Input
-                    type="datetime-local"
-                    value={formData.time_released}
-                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
-                    className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+              )}
 
                {/* Navigation buttons for Form 3 */}
                <div className="flex justify-between pt-6">

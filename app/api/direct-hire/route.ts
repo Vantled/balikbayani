@@ -162,6 +162,13 @@ export async function POST(request: NextRequest) {
       const timeReceived = formData.get('time_received') as string | null
       const timeReleased = formData.get('time_released') as string | null
 
+      // Convert datetime-local format to ISO timestamp
+      const convertToISOTimestamp = (datetimeLocal: string | null): string | null => {
+        if (!datetimeLocal) return null
+        const date = new Date(datetimeLocal)
+        return isNaN(date.getTime()) ? null : date.toISOString()
+      }
+
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
 
@@ -181,8 +188,8 @@ export async function POST(request: NextRequest) {
         raw_salary: status === 'draft' ? (salary ? parseFloat(salary) : 0) : parseFloat(salary),
         email: (formData.get('email') as string) || '',
         cellphone: (formData.get('cellphone') as string) || '',
-        time_received: timeReceived || null,
-        time_released: timeReleased || null,
+        time_received: convertToISOTimestamp(timeReceived),
+        time_released: convertToISOTimestamp(timeReleased),
         status_checklist: (() => {
           if (status === 'draft') {
             return {
@@ -384,6 +391,14 @@ export async function POST(request: NextRequest) {
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
 
+      // Convert datetime-local format to ISO timestamp
+      const convertToISOTimestamp = (datetimeLocal: string | null | undefined): string | null => {
+        if (!datetimeLocal) return null
+        // Handle both datetime-local format and ISO format
+        const date = new Date(datetimeLocal)
+        return isNaN(date.getTime()) ? null : date.toISOString()
+      }
+
       // Create the application
       const applicationData = {
         control_number: controlNumber,
@@ -403,6 +418,9 @@ export async function POST(request: NextRequest) {
         job_type: body.job_type as 'household' | 'professional' || 'professional',
         evaluator: body.evaluator || '',
         employer: body.employer || '',
+        // Convert time_received and time_released to ISO timestamps
+        time_received: convertToISOTimestamp(body.time_received),
+        time_released: convertToISOTimestamp(body.time_released),
         status_checklist: (() => {
           const evaluatedChecked = body.status === 'evaluated'
           return {

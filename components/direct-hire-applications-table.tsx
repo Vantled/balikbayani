@@ -1033,6 +1033,49 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 </div>
               </div>
               <hr className="my-4" />
+              {/* Processing Times */}
+              {((selected as any).time_received || (selected as any).time_released) && (
+                <>
+                  <div className="mb-6">
+                    <div className="font-semibold text-gray-700 mb-2">Processing Times</div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                      {(selected as any).time_received && (
+                        <div>
+                          <div className="text-gray-500">Time Received:</div>
+                          <div className="font-medium">
+                            {new Date((selected as any).time_received).toLocaleString(undefined, { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: '2-digit', 
+                              hour: '2-digit', 
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {(selected as any).time_released && (
+                        <div>
+                          <div className="text-gray-500">Time Released:</div>
+                          <div className="font-medium">
+                            {new Date((selected as any).time_released).toLocaleString(undefined, { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: '2-digit', 
+                              hour: '2-digit', 
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <hr className="my-4" />
+                </>
+              )}
               {/* Application Status */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">

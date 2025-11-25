@@ -162,12 +162,17 @@ export async function POST(request: NextRequest) {
       const timeReceived = formData.get('time_received') as string | null
       const timeReleased = formData.get('time_released') as string | null
 
-      // Convert datetime-local format to ISO timestamp
-      const convertToISOTimestamp = (datetimeLocal: string | null): string | null => {
-        if (!datetimeLocal) return null
-        const date = new Date(datetimeLocal)
+      // Convert to ISO timestamp if needed (handles both ISO and datetime-local formats)
+      const convertToISOTimestamp = (timestamp: string | null): string | null => {
+        if (!timestamp) return null
+        // If already in ISO format, return as-is; otherwise convert
+        const date = new Date(timestamp)
         return isNaN(date.getTime()) ? null : date.toISOString()
       }
+      
+      // For drafts, only set time_received (not time_released)
+      // For final submissions, set both
+      const isDraft = status === 'draft'
 
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
@@ -189,7 +194,8 @@ export async function POST(request: NextRequest) {
         email: (formData.get('email') as string) || '',
         cellphone: (formData.get('cellphone') as string) || '',
         time_received: convertToISOTimestamp(timeReceived),
-        time_released: convertToISOTimestamp(timeReleased),
+        // Only set time_released for final submissions, not drafts
+        time_released: isDraft ? null : (convertToISOTimestamp(timeReleased) || new Date().toISOString()),
         status_checklist: (() => {
           if (status === 'draft') {
             return {
@@ -391,13 +397,16 @@ export async function POST(request: NextRequest) {
       // Generate control number automatically
       const controlNumber = await DatabaseService.generateDirectHireControlNumber();
 
-      // Convert datetime-local format to ISO timestamp
-      const convertToISOTimestamp = (datetimeLocal: string | null | undefined): string | null => {
-        if (!datetimeLocal) return null
-        // Handle both datetime-local format and ISO format
-        const date = new Date(datetimeLocal)
+      // Convert to ISO timestamp if needed (handles both ISO and datetime-local formats)
+      const convertToISOTimestamp = (timestamp: string | null | undefined): string | null => {
+        if (!timestamp) return null
+        // If already in ISO format, return as-is; otherwise convert
+        const date = new Date(timestamp)
         return isNaN(date.getTime()) ? null : date.toISOString()
       }
+      
+      // Determine if this is a draft
+      const isDraft = body.status === 'draft'
 
       // Create the application
       const applicationData = {
@@ -418,9 +427,10 @@ export async function POST(request: NextRequest) {
         job_type: body.job_type as 'household' | 'professional' || 'professional',
         evaluator: body.evaluator || '',
         employer: body.employer || '',
-        // Convert time_received and time_released to ISO timestamps
+        // time_received is set when modal opens (already in ISO format)
         time_received: convertToISOTimestamp(body.time_received),
-        time_released: convertToISOTimestamp(body.time_released),
+        // time_released is set automatically on final submission (not for drafts)
+        time_released: isDraft ? null : (convertToISOTimestamp(body.time_released) || new Date().toISOString()),
         status_checklist: (() => {
           const evaluatedChecked = body.status === 'evaluated'
           return {

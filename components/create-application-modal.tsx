@@ -217,6 +217,11 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       formDataToSend.append('evaluator', (currentUser?.full_name || 'Unknown').toUpperCase());
       formDataToSend.append('status', 'draft');
       formDataToSend.append('employer', (formData.employer || '').toUpperCase());
+      // Include time_received for drafts (set when modal opens)
+      // Don't set time_released for drafts - only on final submission
+      if (formData.time_received) {
+        formDataToSend.append('time_received', formData.time_received);
+      }
 
 
 
@@ -280,20 +285,16 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
     return () => cancelAnimationFrame(t)
   }, []);
 
-  // Prefill time_received and time_released when form opens (for new applications only)
+  // Set time_received automatically when modal opens (for new applications only)
   useEffect(() => {
     if (mounted && !applicationId && !initialData) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      // Set time_received to current timestamp when modal opens
+      const timeReceived = new Date().toISOString();
       setFormData(prev => ({
         ...prev,
-        time_received: prev.time_received || localDateTime,
-        time_released: prev.time_released || localDateTime
+        time_received: prev.time_received || timeReceived,
+        // Don't set time_released here - it will be set when application is submitted
+        time_released: ''
       }));
     }
   }, [mounted, applicationId, initialData]);
@@ -849,15 +850,6 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
       // Round to nearest hundredths
       salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
 
-      // Convert time_received and time_released from datetime-local format to ISO timestamp
-      const convertToISOTimestamp = (datetimeLocal: string): string | null => {
-        if (!datetimeLocal) return null
-        // datetime-local format: "YYYY-MM-DDTHH:mm"
-        // Convert to ISO timestamp: "YYYY-MM-DDTHH:mm:ss.sssZ"
-        const date = new Date(datetimeLocal)
-        return isNaN(date.getTime()) ? null : date.toISOString()
-      }
-
       const createData = {
         ...formData,
         // Persist both raw and converted amounts on create
@@ -865,9 +857,10 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
         salary_currency: formData.salaryCurrency || '',
         salary: salaryUsd,
         evaluator: (currentUser?.full_name || 'Unknown').toUpperCase(),
-        // Convert time_received and time_released to ISO timestamps
-        time_received: convertToISOTimestamp(formData.time_received),
-        time_released: convertToISOTimestamp(formData.time_released),
+        // time_received is already set when modal opens (ISO timestamp)
+        // time_released is set automatically when application is submitted
+        time_received: formData.time_received || new Date().toISOString(),
+        time_released: new Date().toISOString(), // Set automatically on submission
         for_interview_meta: {
           processed_workers_principal: formData.processed_workers_principal ? Number(formData.processed_workers_principal) : 0,
           processed_workers_las: formData.processed_workers_las ? Number(formData.processed_workers_las) : 0,
@@ -1899,26 +1892,28 @@ export default function CreateApplicationModal({ onClose, initialData = null, ap
                  </div>
                </div>
 
-              {/* Time Received and Time Released - Only show for new applications */}
-              {!applicationId && (
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">Time Received:</Label>
-                    <Input
-                      type="datetime-local"
-                      value={formData.time_received}
-                      onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
-                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">Time Released:</Label>
-                    <Input
-                      type="datetime-local"
-                      value={formData.time_released}
-                      onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
-                      className="mt-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
+              {/* Processing Times Info - Automatically generated */}
+              {!applicationId && formData.time_received && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-sm text-gray-700">
+                    <div className="font-medium text-blue-800 mb-2">Processing Times (Automatically Generated)</div>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <div>
+                        <span className="font-medium">Time Received:</span>{' '}
+                        {new Date(formData.time_received).toLocaleString(undefined, { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: true
+                        })}
+                      </div>
+                      <div className="text-gray-500 italic">
+                        Time Released will be set automatically when the application is submitted.
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

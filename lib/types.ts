@@ -146,6 +146,8 @@ export interface BalikManggagawaClearance {
   position?: string;
   clearance_type: 'watchlisted_employer' | 'seafarer_position' | 'non_compliant_country' | 'no_verified_contract' | 'for_assessment_country' | 'critical_skill' | 'watchlisted_similar_name';
   status?: string;
+  time_received?: string | null;
+  time_released?: string | null;
   // New fields for template
   no_of_months_years?: string;
   date_of_departure?: Date;

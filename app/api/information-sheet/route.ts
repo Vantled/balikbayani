@@ -109,10 +109,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    // Convert to ISO timestamp if needed (handles both ISO and datetime-local formats)
+    const convertToISOTimestamp = (timestamp: string | null | undefined): string | null => {
+      if (!timestamp) return null;
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
     const payload = {
       ...body,
-      time_received: body.time_received || null,
-      time_released: body.time_released || null,
+      // time_received is set when modal opens (already in ISO format)
+      time_received: convertToISOTimestamp(body.time_received) || new Date().toISOString(),
+      // time_released is set automatically on submission
+      time_released: convertToISOTimestamp(body.time_released) || new Date().toISOString(),
       total_pct: body.total_pct ?? 100,
       remarks: body.remarks ?? null,
       remarks_others: body.remarks_others ?? null,

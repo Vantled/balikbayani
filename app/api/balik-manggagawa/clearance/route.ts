@@ -185,8 +185,16 @@ export async function POST(request: NextRequest) {
       activeEmailAddress: normalize(activeEmailAddress),
       activePhMobileNumber: normalize(activePhMobileNumber),
       evaluator: evaluatorFromSession || normalize(evaluator),
-      time_received: normalize(time_received),
-      time_released: normalize(time_released)
+      // Convert to ISO timestamp if needed (handles both ISO and datetime-local formats)
+      time_received: time_received ? (() => {
+        const date = new Date(time_received);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+      })() : null,
+      // time_released is set automatically on submission
+      time_released: time_released ? (() => {
+        const date = new Date(time_released);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+      })() : new Date().toISOString()
     });
 
     await recordAuditLog(request, {

@@ -221,23 +221,19 @@ export default function InformationSheetPage() {
     load()
   }, [viewOpen, selected])
 
-  // Prefill time_received and time_released when form opens
+  // Set time_received automatically when modal opens (for new records only)
   useEffect(() => {
-    if (modalOpen) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+    if (modalOpen && !editOpen) {
+      // Set time_received to current timestamp when modal opens
+      const timeReceived = new Date().toISOString();
       setFormData(prev => ({
         ...prev,
-        time_received: prev.time_received || localDateTime,
-        time_released: prev.time_released || localDateTime
+        time_received: prev.time_received || timeReceived,
+        // Don't set time_released here - it will be set when record is submitted
+        time_released: ""
       }));
     }
-  }, [modalOpen])
+  }, [modalOpen, editOpen])
 
   return (
     <PermissionGuard permission="information_sheet" fallback={<div className="min-h-screen bg-[#eaf3fc]"><Header /></div>}>
@@ -836,27 +832,31 @@ export default function InformationSheetPage() {
                   />
                 )}
               </div>
-              {/* Time Received and Time Released */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Time Received:</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full border rounded px-3 py-2 mt-1"
-                    value={formData.time_received}
-                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
-                  />
+              {/* Processing Times Info - Automatically generated */}
+              {formData.time_received && !editOpen && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-sm text-gray-700">
+                    <div className="font-medium text-blue-800 mb-2">Processing Times (Automatically Generated)</div>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <div>
+                        <span className="font-medium">Time Received:</span>{' '}
+                        {new Date(formData.time_received).toLocaleString(undefined, { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: true
+                        })}
+                      </div>
+                      <div className="text-gray-500 italic">
+                        Time Released will be set automatically when the record is submitted.
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Time Released:</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full border rounded px-3 py-2 mt-1"
-                    value={formData.time_released}
-                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
-                  />
-                </div>
-              </div>
+              )}
               
               <div className="flex justify-end gap-2 mt-6">
                 <Button variant="outline" className="px-6" type="button" onClick={() => setModalOpen(false)}>
@@ -876,8 +876,10 @@ export default function InformationSheetPage() {
                     requested_record: formData.requestedRecord?.toLowerCase().replaceAll(' ', '_'),
                     documents_presented: formData.documents ? [formData.documents] : [],
                     documents_others: formData.documents === 'Others' ? formData.documentsOther : undefined,
-                    time_received: formData.time_received || null,
-                    time_released: formData.time_released || null,
+                    // time_received is already set when modal opens (ISO timestamp)
+                    time_received: formData.time_received || new Date().toISOString(),
+                    // time_released is set automatically on submission
+                    time_released: new Date().toISOString(),
                     // removed fields are omitted by backend defaults
                   } as any
                   // open confirm dialog before posting

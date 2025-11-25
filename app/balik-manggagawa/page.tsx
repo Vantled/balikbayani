@@ -567,6 +567,7 @@ export default function BalikManggagawaPage() {
   const [search, setSearch] = useState("")
   const [showFilter, setShowFilter] = useState(false)
   const [panelQuery, setPanelQuery] = useState("")
+  const [exporting, setExporting] = useState(false)
   
   const [filters, setFilters] = useState({
     clearanceType: "",
@@ -654,6 +655,20 @@ export default function BalikManggagawaPage() {
     time_received: "",
     time_released: "",
   })
+
+  // Set time_received automatically when modal opens
+  useEffect(() => {
+    if (isCreateOpen) {
+      // Set time_received to current timestamp when modal opens
+      const timeReceived = new Date().toISOString();
+      setFormData(prev => ({
+        ...prev,
+        time_received: prev.time_received || timeReceived,
+        // Don't set time_released here - it will be set when application is submitted
+        time_released: ""
+      }));
+    }
+  }, [isCreateOpen]);
 
   // Helper function to reset the create form
   const resetCreateForm = () => {
@@ -914,6 +929,72 @@ export default function BalikManggagawaPage() {
                 <Filter className="h-4 w-4" />
               </Button>
             </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="bg-white border-gray-300 h-9 flex items-center gap-2"
+                  disabled={exporting}
+                >
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {exporting ? 'Exporting...' : 'Export Sheet'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={exporting}
+                  onClick={async () => {
+                    try {
+                      setExporting(true)
+                      const params = new URLSearchParams()
+                      if (search.trim()) params.append('search', search.trim())
+                      if (panelQuery.trim()) params.append('panelQuery', panelQuery.trim())
+                      Object.entries(filters).forEach(([key, value]) => {
+                        if (typeof value === 'boolean') {
+                          if (value) params.append(key, 'true')
+                        } else if (value) {
+                          params.append(key, value)
+                        }
+                      })
+                      const queryString = params.toString()
+                      const response = await fetch(`/api/balik-manggagawa/export${queryString ? `?${queryString}` : ''}`)
+                      if (!response.ok) throw new Error('Export failed')
+
+                      const blob = await response.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = 'balik-manggagawa.xlsx'
+                      document.body.appendChild(link)
+                      link.click()
+                      document.body.removeChild(link)
+                      window.URL.revokeObjectURL(url)
+
+                      toast({
+                        title: 'Export successful',
+                        description: 'Balik Manggagawa data exported to Excel.',
+                      })
+                    } catch (error) {
+                      console.error('Export failed:', error)
+                      toast({
+                        title: 'Export failed',
+                        description: 'Failed to export Balik Manggagawa data.',
+                        variant: 'destructive'
+                      })
+                    } finally {
+                      setExporting(false)
+                    }
+                  }}
+                >
+                  Export as Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button className="bg-[#1976D2] text-white h-9 flex items-center gap-2" onClick={() => {
               setIsCreateOpen(true)
@@ -1364,27 +1445,31 @@ export default function BalikManggagawaPage() {
                   </div>
                 )}
               </div>
-              {/* Time Received and Time Released */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Time Received:</Label>
-                  <Input
-                    type="datetime-local"
-                    value={formData.time_received}
-                    onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
-                    className="mt-1"
-                  />
+              {/* Processing Times Info - Automatically generated */}
+              {formData.time_received && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-sm text-gray-700">
+                    <div className="font-medium text-blue-800 mb-2">Processing Times (Automatically Generated)</div>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <div>
+                        <span className="font-medium">Time Received:</span>{' '}
+                        {new Date(formData.time_received).toLocaleString(undefined, { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: true
+                        })}
+                      </div>
+                      <div className="text-gray-500 italic">
+                        Time Released will be set automatically when the application is submitted.
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label>Time Released:</Label>
-                  <Input
-                    type="datetime-local"
-                    value={formData.time_released}
-                    onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -1436,8 +1521,10 @@ export default function BalikManggagawaPage() {
                 position: formData.position || undefined,
                 jobType: formData.job_type || undefined,
                 salaryCurrency: formData.salaryCurrency || undefined,
-                time_received: formData.time_received || undefined,
-                time_released: formData.time_released || undefined,
+                // time_received is already set when modal opens (ISO timestamp)
+                time_received: formData.time_received || new Date().toISOString(),
+                // time_released is set automatically on submission
+                time_released: new Date().toISOString(),
               }
               const res = await createClearance(payload)
               setCreating(false)

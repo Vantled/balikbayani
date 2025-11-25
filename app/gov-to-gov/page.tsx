@@ -97,20 +97,16 @@ export default function GovToGovPage() {
     return () => clearTimeout(timeoutId)
   }, [search])
 
-  // Prefill time_received and time_released when form opens
+  // Set time_received automatically when modal opens (for new applications only)
   useEffect(() => {
     if (modalOpen && !editingId) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      // Set time_received to current timestamp when modal opens
+      const timeReceived = new Date().toISOString();
       setFormData(prev => ({
         ...prev,
-        time_received: prev.time_received || localDateTime,
-        time_released: prev.time_released || localDateTime
+        time_received: prev.time_received || timeReceived,
+        // Don't set time_released here - it will be set when application is submitted
+        time_released: ""
       }));
     }
   }, [modalOpen, editingId])
@@ -925,27 +921,31 @@ export default function GovToGovPage() {
                     <Label className="text-sm font-medium">Remarks:</Label>
                     <Input className="mt-1" value={formData.remarks} onChange={e => setFormData({ ...formData, remarks: (e.target.value || '').toUpperCase() })} />
                   </div>
-                  {/* Time Received and Time Released */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium">Time Received:</Label>
-                      <Input
-                        type="datetime-local"
-                        value={formData.time_received}
-                        onChange={(e) => setFormData({ ...formData, time_received: e.target.value })}
-                        className="mt-1"
-                      />
+                  {/* Processing Times Info - Automatically generated */}
+                  {formData.time_received && !editingId && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="text-sm text-gray-700">
+                        <div className="font-medium text-blue-800 mb-2">Processing Times (Automatically Generated)</div>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          <div>
+                            <span className="font-medium">Time Received:</span>{' '}
+                            {new Date(formData.time_received).toLocaleString(undefined, { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: '2-digit', 
+                              hour: '2-digit', 
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })}
+                          </div>
+                          <div className="text-gray-500 italic">
+                            Time Released will be set automatically when the application is submitted.
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-sm font-medium">Time Released:</Label>
-                      <Input
-                        type="datetime-local"
-                        value={formData.time_released}
-                        onChange={(e) => setFormData({ ...formData, time_released: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
+                  )}
                   <div className="flex justify-between pt-4">
                     <Button variant="outline" type="button" onClick={() => setFormStep(1)}>Previous</Button>
                     <Button className="bg-[#1976D2] hover:bg-[#1565C0]" type="button" onClick={async () => {
@@ -1032,8 +1032,10 @@ export default function GovToGovPage() {
                 other_year_started: formData.otherYearStarted || '',
                 other_year_ended: formData.otherYearEnded || '',
                 remarks: formData.remarks || '',
-                time_received: formData.time_received || null,
-                time_released: formData.time_released || null,
+                // time_received is already set when modal opens (ISO timestamp)
+                time_received: formData.time_received || new Date().toISOString(),
+                // time_released is set automatically on submission (not for edits)
+                time_released: editingId ? formData.time_released : new Date().toISOString(),
               } as any
               let res
               const applicantName = `${formData.firstName} ${formData.lastName}${formData.middleName ? ` ${formData.middleName}` : ''}`.trim().toUpperCase()

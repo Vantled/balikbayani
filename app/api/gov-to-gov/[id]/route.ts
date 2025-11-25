@@ -62,8 +62,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.date_received_by_region !== undefined) updatePayload.date_received_by_region = body.date_received_by_region ? new Date(body.date_received_by_region) : null
     if (body.date_card_released !== undefined) updatePayload.date_card_released = body.date_card_released ? new Date(body.date_card_released) : null
     if (body.remarks !== undefined) updatePayload.remarks = (body.remarks || '').toUpperCase() || null
-    if (body.time_received !== undefined) updatePayload.time_received = body.time_received || null
-    if (body.time_released !== undefined) updatePayload.time_released = body.time_released || null
+    // Note: time_received and time_released are intentionally excluded from updates
+    // They should only be set during creation and cannot be modified afterward
 
     const updated = await DatabaseService.updateGovToGovApplication(id, updatePayload)
     if (!updated) {

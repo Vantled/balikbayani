@@ -67,8 +67,16 @@ export async function POST(request: NextRequest) {
       other_year_started: body.other_year_started ? Number(body.other_year_started) : null,
       other_year_ended: body.other_year_ended ? Number(body.other_year_ended) : null,
       remarks: (body.remarks || '').toUpperCase() || null,
-      time_received: body.time_received || null,
-      time_released: body.time_released || null,
+      // Convert to ISO timestamp if needed (handles both ISO and datetime-local formats)
+      time_received: body.time_received ? (() => {
+        const date = new Date(body.time_received);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+      })() : null,
+      // time_released is set automatically on submission
+      time_released: body.time_released ? (() => {
+        const date = new Date(body.time_released);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+      })() : new Date().toISOString(),
     } as any
 
     const created = await DatabaseService.createGovToGovApplication(payload)

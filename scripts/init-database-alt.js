@@ -599,7 +599,9 @@ async function initializeDatabase() {
       { file: 'migrations/create_system_reports_certificates_table.sql', desc: 'Creating system reports certificates table' },
       { file: 'migrations/20251028_add_deleted_at_information_sheet.sql', desc: 'Adding deleted_at to information_sheet_records' },
       { file: 'migrations/20250128_add_user_permissions.sql', desc: 'Creating user_permissions table' },
-      { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' }
+      { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' },
+      { file: 'migrations/20251126_create_applicant_otp_table.sql', desc: 'Creating applicant OTP table and adding applicant role' },
+      { file: 'migrations/20251126_add_applicant_user_to_direct_hire.sql', desc: 'Adding applicant_user_id to direct_hire_applications' }
     ];
 
     for (const migration of migrations) {

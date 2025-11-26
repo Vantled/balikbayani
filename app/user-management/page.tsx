@@ -17,13 +17,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Edit, Eye, UserX, Copy, Check, Filter } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 import Header from '@/components/shared/header';
+import type { UserRole } from '@/lib/types';
 
 interface User {
   id: string;
   username: string;
   email: string;
   full_name: string;
-  role: 'superadmin' | 'admin' | 'staff';
+  role: UserRole;
   is_approved: boolean;
   is_active: boolean;
   last_login?: string;
@@ -39,6 +40,8 @@ interface UserPermission {
   granted_at: string;
 }
 
+type StaffRole = Extract<UserRole, 'superadmin' | 'admin' | 'staff'>;
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +52,7 @@ export default function UserManagementPage() {
   const [formData, setFormData] = useState({
     full_name: '',
     confirm_full_name: '',
-    role: 'staff' as 'superadmin' | 'admin' | 'staff'
+    role: 'staff' as StaffRole
   });
   const [activatePassword, setActivatePassword] = useState('');
   const [activatePasswordDialogOpen, setActivatePasswordDialogOpen] = useState(false);
@@ -64,7 +67,7 @@ export default function UserManagementPage() {
   const [userPermissions, setUserPermissions] = useState<{[key: string]: boolean}>({});
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [originalPermissions, setOriginalPermissions] = useState<{[key: string]: boolean}>({});
-  const [originalRole, setOriginalRole] = useState<'superadmin' | 'admin' | 'staff' | null>(null);
+  const [originalRole, setOriginalRole] = useState<UserRole | null>(null);
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -943,7 +946,7 @@ export default function UserManagementPage() {
                         <Label htmlFor="role">Role</Label>
                         <Select 
                           value={formData.role} 
-                          onValueChange={(value: 'superadmin' | 'admin' | 'staff') => {
+                          onValueChange={(value: StaffRole) => {
                             setFormData({ ...formData, role: value });
                             setTypedText('');
                             // Keep superadmin option visible if superadmin is selected
@@ -1144,7 +1147,7 @@ export default function UserManagementPage() {
                                           return (
                                             <div>
                                               <Label htmlFor="edit-role">Role</Label>
-                                              <Select value={formData.role} onValueChange={(value: 'superadmin' | 'admin' | 'staff') => setFormData({ ...formData, role: value })}>
+                                              <Select value={formData.role} onValueChange={(value: StaffRole) => setFormData({ ...formData, role: value })}>
                                                 <SelectTrigger>
                                                   <SelectValue />
                                                 </SelectTrigger>

@@ -238,6 +238,8 @@ export async function POST(request: NextRequest) {
             }
           }
         })()
+        ,
+        applicant_user_id: null
       };
 
       console.log('Saving application data:', applicationData);
@@ -440,7 +442,8 @@ export async function POST(request: NextRequest) {
             received_from_dhad: { checked: false, timestamp: undefined },
             for_interview: { checked: false, timestamp: undefined }
           }
-        })()
+        })(),
+        applicant_user_id: null
       };
 
       // Attach optional metadata into status_checklist if provided

@@ -7,13 +7,15 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
+export type UserRole = 'superadmin' | 'admin' | 'staff' | 'applicant';
+
 export interface User {
   id: string;
   username: string;
   email: string;
   password_hash?: string;
   full_name: string;
-  role: 'superadmin' | 'admin' | 'staff';
+  role: UserRole;
   is_approved: boolean;
   is_active: boolean;
   is_first_login?: boolean;
@@ -58,6 +60,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   full_name: string;
+  verification_token: string;
 }
 
 export interface LoginRequest {
@@ -99,6 +102,7 @@ export interface DirectHireApplication {
   documents?: Document[];
   documents_completed?: boolean;
   completed_at?: string;
+  applicant_user_id?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;

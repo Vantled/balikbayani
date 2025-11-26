@@ -103,7 +103,7 @@ export class AuthService {
     try {
       // Check if user already exists
       const existingUser = await db.query(
-        'SELECT id FROM users WHERE username = $1 OR email = $2',
+        'SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)',
         [userData.username, userData.email]
       );
 
@@ -114,12 +114,12 @@ export class AuthService {
       // Hash password
       const passwordHash = await this.hashPassword(userData.password);
 
-      // Create user with default role as 'staff'
+      // Create applicant account
       const result = await db.query(
-        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, is_first_login)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [userData.username, userData.email, passwordHash, userData.full_name, 'staff', false]
+        [userData.username, userData.email, passwordHash, userData.full_name, 'applicant', true, true]
       );
 
       const user = result.rows[0];
@@ -507,11 +507,25 @@ export class AuthService {
 
       const session = sessionResult.rows[0];
 
-      // Check if user is still active and approved
-      if (!session.is_active || !session.is_approved) {
+      // Check if user is still active
+      if (!session.is_active) {
         await this.invalidateSession(token);
         return null;
       }
+
+      // For non-applicant roles, check if account is approved
+      // Applicants are auto-approved during registration, so they bypass this check
+      if (session.role !== 'applicant' && !session.is_approved) {
+        await this.invalidateSession(token);
+        return null;
+      }
+
+      // Enforce single session per user: if another session exists for this user, invalidate it
+      // This ensures only one active session per user at a time
+      await db.query(
+        'DELETE FROM user_sessions WHERE user_id = $1 AND session_token != $2 AND expires_at > CURRENT_TIMESTAMP',
+        [session.user_id, token]
+      );
 
       // Enforce single session per user: if another session exists for this user, invalidate it
       // This ensures only one active session per user at a time
@@ -696,7 +710,7 @@ export class AuthService {
   static async getUserByEmail(email: string): Promise<User | null> {
     try {
       const result = await db.query(
-        'SELECT * FROM users WHERE email = $1',
+        'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
         [email]
       );
 
@@ -713,7 +727,7 @@ export class AuthService {
   static async getUserByUsername(username: string): Promise<User | null> {
     try {
       const result = await db.query(
-        'SELECT * FROM users WHERE username = $1',
+        'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
         [username]
       );
 

@@ -127,12 +127,13 @@ export class DatabaseService {
     raw_salary?: number;
     time_received?: string | null;
     time_released?: string | null;
+    applicant_user_id?: string | null;
   }): Promise<DirectHireApplication> {
     // debug logs removed
     const query = `
       INSERT INTO direct_hire_applications 
-      (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary, time_received, time_released)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      (control_number, name, email, cellphone, sex, salary, status, jobsite, position, job_type, evaluator, employer, status_checklist, salary_currency, raw_salary, time_received, time_released, applicant_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
     
@@ -153,7 +154,8 @@ export class DatabaseService {
       data.salary_currency || 'USD',
       data.raw_salary || data.salary,
       data.time_received || null,
-      data.time_released || null
+      data.time_released || null,
+      data.applicant_user_id || null
     ];
     
     // debug logs removed
@@ -2687,9 +2689,12 @@ export class DatabaseService {
     try {
       // If requesting user is superadmin, include all users including superadmins
       // Otherwise, exclude superadmin accounts
-      const roleFilter = requestingUserRole === 'superadmin' 
-        ? '' 
-        : "WHERE u.role <> 'superadmin'";
+      const roleConditions = ["u.role <> 'applicant'"];
+      if (requestingUserRole !== 'superadmin') {
+        roleConditions.push("u.role <> 'superadmin'");
+      }
+
+      const roleFilter = roleConditions.length ? `WHERE ${roleConditions.join(' AND ')}` : '';
       
       const result = await db.query(`
         SELECT 

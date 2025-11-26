@@ -11,7 +11,7 @@ CREATE TABLE users (
     email VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('superadmin', 'admin', 'staff')),
+    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('superadmin', 'admin', 'staff', 'applicant')),
     is_approved BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     last_login TIMESTAMP WITH TIME ZONE,
@@ -23,6 +23,25 @@ CREATE TABLE users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Applicant OTP tracking table
+CREATE TABLE IF NOT EXISTS applicant_otps (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    otp_hash VARCHAR(255) NOT NULL,
+    verification_token UUID,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_sent_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_applicant_otps_verification_token
+    ON applicant_otps (verification_token)
+    WHERE verification_token IS NOT NULL;
 
 -- Direct Hire Applications
 CREATE TABLE direct_hire_applications (
@@ -44,6 +63,7 @@ CREATE TABLE direct_hire_applications (
     status_checklist JSONB DEFAULT '{"evaluated": {"checked": false, "timestamp": null}, "for_confirmation": {"checked": false, "timestamp": null}, "emailed_to_dhad": {"checked": false, "timestamp": null}, "received_from_dhad": {"checked": false, "timestamp": null}, "for_interview": {"checked": false, "timestamp": null}}',
     documents_completed BOOLEAN DEFAULT FALSE,
     completed_at TIMESTAMP WITH TIME ZONE,
+    applicant_user_id UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -306,6 +326,7 @@ CREATE INDEX idx_direct_hire_status ON direct_hire_applications(status);
 CREATE INDEX idx_direct_hire_created_at ON direct_hire_applications(created_at);
 CREATE INDEX idx_direct_hire_sex ON direct_hire_applications(sex);
 CREATE INDEX idx_direct_hire_documents_completed ON direct_hire_applications(documents_completed);
+CREATE INDEX IF NOT EXISTS idx_direct_hire_applicant_user ON direct_hire_applications(applicant_user_id);
 
 CREATE INDEX idx_direct_hire_documents_application_id ON direct_hire_documents(application_id);
 CREATE INDEX idx_direct_hire_documents_type ON direct_hire_documents(document_type);

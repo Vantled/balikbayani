@@ -19,6 +19,11 @@ export default function FirstTimeLoginHandler() {
         console.log('FirstTimeLoginHandler: User from cookies:', user)
         
         if (user) {
+          if (user.role === 'applicant') {
+            console.log('FirstTimeLoginHandler: Applicant users skip first-time modal')
+            setIsChecking(false)
+            return
+          }
           // Fetch complete user data from server to get is_first_login flag
           const response = await fetch('/api/profile', {
             credentials: 'include'

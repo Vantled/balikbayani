@@ -1,11 +1,12 @@
 import Cookies from 'js-cookie'
+import type { UserRole } from '@/lib/types'
 
 export type User = {
   id: string
   username: string
   email: string
   full_name: string
-  role: 'superadmin' | 'admin' | 'staff'
+  role: UserRole
   is_approved: boolean
   is_active: boolean
   last_login?: string
@@ -17,7 +18,7 @@ export type User = {
 const AUTH_COOKIE = 'bb_auth_token'
 const USER_COOKIE = 'bb_user'
 
-export const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+export const login = async (username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> => {
   try {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
@@ -33,7 +34,7 @@ export const login = async (username: string, password: string): Promise<{ succe
     if (data.success) {
       // Server sets HttpOnly token cookie; store user for UI only
       Cookies.set(USER_COOKIE, JSON.stringify(data.data.user), { expires: 1 });
-      return { success: true };
+      return { success: true, user: data.data.user as User };
     } else {
       return { success: false, error: data.error };
     }
@@ -71,10 +72,11 @@ export const isAuthenticated = (): boolean => {
 }
 
 export const register = async (userData: {
-  username: string;
-  email: string;
-  password: string;
-  full_name: string;
+  username: string
+  email: string
+  password: string
+  full_name: string
+  verification_token: string
 }): Promise<{ success: boolean; error?: string }> => {
   try {
     const response = await fetch('/api/auth/register', {
@@ -83,20 +85,78 @@ export const register = async (userData: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(userData),
-    });
+    })
 
-    const data = await response.json();
+    const data = await response.json()
 
     if (data.success) {
-      return { success: true };
+      return { success: true }
     } else {
-      return { success: false, error: data.error };
+      return { success: false, error: data.error }
     }
   } catch (error) {
-    console.error('Registration error:', error);
-    return { success: false, error: 'Network error' };
+    console.error('Registration error:', error)
+    return { success: false, error: 'Network error' }
   }
-};
+}
+
+export const requestRegistrationOtp = async (
+  email: string
+): Promise<{ success: boolean; error?: string; retryAfterSeconds?: number }> => {
+  try {
+    const response = await fetch('/api/auth/send-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
+
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      return { success: true }
+    }
+
+    return {
+      success: false,
+      error: data.error || 'Unable to send verification code.',
+      retryAfterSeconds: data.data?.retryAfterSeconds,
+    }
+  } catch (error) {
+    console.error('Send OTP error:', error)
+    return { success: false, error: 'Network error' }
+  }
+}
+
+export const verifyRegistrationOtp = async (
+  email: string,
+  code: string
+): Promise<{ success: boolean; verificationToken?: string; error?: string }> => {
+  try {
+    const response = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, code }),
+    })
+
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      return {
+        success: true,
+        verificationToken: data.data?.verificationToken,
+      }
+    }
+
+    return { success: false, error: data.error || 'Unable to verify the code.' }
+  } catch (error) {
+    console.error('Verify OTP error:', error)
+    return { success: false, error: 'Network error' }
+  }
+}
 
 export const getUser = (): User | null => {
   const user = Cookies.get(USER_COOKIE);
@@ -109,17 +169,20 @@ export const getUser = (): User | null => {
 };
 
 // Role-based authorization functions
-export const hasRole = (user: User | null, requiredRole: 'superadmin' | 'admin' | 'staff'): boolean => {
-  if (!user) return false;
+type StaffRole = 'superadmin' | 'admin' | 'staff'
+
+export const hasRole = (user: User | null, requiredRole: StaffRole): boolean => {
+  if (!user) return false
   
-  const roleHierarchy = {
-    'superadmin': 3,
-    'admin': 2,
-    'staff': 1
-  };
+  const roleHierarchy: Record<UserRole, number> = {
+    applicant: 0,
+    staff: 1,
+    admin: 2,
+    superadmin: 3,
+  }
   
-  return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
-};
+  return roleHierarchy[user.role] >= roleHierarchy[requiredRole]
+}
 
 export const isSuperadmin = (user: User | null): boolean => hasRole(user, 'superadmin');
 export const isAdmin = (user: User | null): boolean => hasRole(user, 'admin');

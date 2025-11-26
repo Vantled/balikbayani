@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Button } from "@/components/ui/button"
@@ -47,6 +48,14 @@ export default function LoginPage() {
       // Clean up URL parameter
       router.replace('/login')
     }
+
+    if (searchParams?.get("registered") === "true") {
+      toast({
+        title: "Registration successful",
+        description: "Please sign in with the credentials you just created.",
+      })
+      router.replace('/login')
+    }
   }, [searchParams, toast, router])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -57,7 +66,8 @@ export default function LoginPage() {
     try {
       const result = await login(username, password)
       if (result.success) {
-        const redirect = searchParams?.get("from") || "/dashboard"
+        const roleBasedDefault = result.user?.role === 'applicant' ? '/applicant' : '/dashboard'
+        const redirect = searchParams?.get("from") || roleBasedDefault
         // Wait a bit for cookies to be set before navigating
         // Use window.location instead of router.push to ensure cookies are available
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -140,6 +150,12 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
+          <p className="text-sm text-gray-600 text-center mt-4">
+            Need an applicant account?{" "}
+            <Link href="/register" className="text-[#1976D2] font-semibold hover:underline">
+              Register here
+            </Link>
+          </p>
         </div>
       </main>
     </div>

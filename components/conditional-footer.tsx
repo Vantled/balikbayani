@@ -7,6 +7,8 @@ export function ConditionalFooter() {
   const pathname = usePathname()
   const isDashboard = pathname === "/dashboard"
   const isInfoSheet = pathname.startsWith("/information-sheet")
+  const isAuthPage = pathname === "/login" || pathname === "/register"
+  const isApplicant = pathname.startsWith("/applicant")
 
   if (isDashboard || isInfoSheet) {
     return (
@@ -17,10 +19,19 @@ export function ConditionalFooter() {
     )
   }
 
-  return (
-    <footer className="fixed bottom-0 left-0 w-full p-4 text-center text-xs text-gray-500 z-40">
+  const baseFooter =
+    <footer className="w-full p-4 text-center text-xs text-gray-500 bg-white/90 border-t border-gray-200">
       <p>© 2025 BalikBayani Portal. All rights reserved.</p>
       <p>This is a secure government system. Unauthorized access is prohibited and subject to legal action.</p>
     </footer>
+
+  if (isAuthPage || isApplicant) {
+    return baseFooter
+  }
+
+  return (
+    <div className="fixed bottom-0 left-0 w-full z-40">
+      {baseFooter}
+    </div>
   )
 }

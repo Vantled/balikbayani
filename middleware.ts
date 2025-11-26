@@ -11,7 +11,8 @@ const protectedPaths = [
   '/information-sheet',
   '/user-management',
   '/profile',
-  '/data-backups'
+  '/data-backups',
+  '/applicant'
 ] as const
 
 // Define public paths that don't require authentication
@@ -51,6 +52,23 @@ export async function middleware(request: NextRequest) {
   if (isProtectedPath && isAuthenticated && userCookie?.value) {
     try {
       const user = JSON.parse(userCookie.value)
+
+      // Applicants should not access staff/admin dashboard and modules
+      if (user.role === 'applicant') {
+        const staffOnlyPaths = [
+          '/dashboard',
+          '/direct-hire',
+          '/job-fairs',
+          '/gov-to-gov',
+          '/balik-manggagawa',
+          '/information-sheet',
+          '/user-management',
+          '/data-backups',
+        ]
+        if (staffOnlyPaths.some(path => pathname.startsWith(path))) {
+          return NextResponse.redirect(new URL('/applicant', request.url))
+        }
+      }
       
       // Special handling for user management - only admin and superadmin can access
       if (pathname.startsWith('/user-management')) {

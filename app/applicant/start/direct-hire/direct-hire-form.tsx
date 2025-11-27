@@ -222,6 +222,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     setDocErrors({})
     if (validateInfo()) {
       setStep('documents')
+      toast({
+        title: 'Step 2: Documents',
+        description: 'Please upload all required documents and fill in their details.',
+      })
     }
   }
 
@@ -390,6 +394,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     }
 
     setLoading(true)
+    toast({
+      title: 'Submitting application...',
+      description: 'Please wait while we process your submission.',
+    })
+    
     try {
       const response = await fetch('/api/applicant/direct-hire', {
         method: 'POST',
@@ -428,13 +437,25 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
           return
         }
         
-        const errorMessage = data.error || data.message || `Submission failed (${response.status})`
+        let errorMessage = data.error || data.message || `Submission failed (${response.status})`
+        
+        // Provide more specific error messages
+        if (response.status === 409) {
+          errorMessage = 'You already have a Direct Hire application. Please track its status instead.'
+        } else if (response.status === 400) {
+          errorMessage = data.error || 'Please check all required fields and try again.'
+        } else if (response.status === 413) {
+          errorMessage = 'File size too large. Please reduce the size of your documents and try again.'
+        } else if (response.status >= 500) {
+          errorMessage = 'Server error. Please try again later or contact support if the problem persists.'
+        }
+        
         throw new Error(errorMessage)
       }
 
       toast({
-        title: 'Application submitted',
-        description: `Your control number is ${data.data.controlNumber}.`,
+        title: 'Application submitted successfully!',
+        description: `Your Direct Hire application has been submitted. Control number: ${data.data.controlNumber}. You will be redirected shortly.`,
       })
 
       // Clear saved draft on successful submission
@@ -446,12 +467,26 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         // ignore
       }
 
-      router.push(`/applicant?submitted=direct-hire&control=${encodeURIComponent(data.data.controlNumber)}`)
+      // Delay redirect to allow user to see the success message
+      setTimeout(() => {
+        router.push(`/applicant?submitted=direct-hire&control=${encodeURIComponent(data.data.controlNumber)}`)
+      }, 2000)
     } catch (error: any) {
       console.error('Applicant direct hire submission error:', error)
-      const errorMessage = error?.message || error?.toString() || 'Please try again later.'
+      let errorMessage = 'Unable to submit your application. Please try again later.'
+      
+      if (error?.message) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.'
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
       toast({
-        title: 'Unable to submit',
+        title: 'Submission failed',
         description: errorMessage,
         variant: 'destructive',
       })

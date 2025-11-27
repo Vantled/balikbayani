@@ -3,11 +3,15 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DirectHireApplicantForm from './direct-hire-form'
 import ApplicantHeader from '@/components/applicant-header'
+import { AuthService } from '@/lib/services/auth-service'
+import { db } from '@/lib/database'
 
 export default async function ApplicantStartDirectHirePage() {
   const cookieStore = await cookies()
   const userCookie = cookieStore.get('bb_user')
-  if (!userCookie) {
+  const token = cookieStore.get('bb_auth_token')?.value
+  
+  if (!userCookie || !token) {
     redirect('/login?from=/applicant/start/direct-hire')
   }
 
@@ -20,6 +24,22 @@ export default async function ApplicantStartDirectHirePage() {
 
   if (!user || user.role !== 'applicant') {
     redirect('/dashboard')
+  }
+
+  // Validate session and get user ID from database
+  const validatedUser = await AuthService.validateSession(token)
+  if (!validatedUser || validatedUser.role !== 'applicant') {
+    redirect('/login?from=/applicant/start/direct-hire')
+  }
+
+  // Check if applicant already has a Direct Hire application
+  const existingApp = await db.query(
+    'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 LIMIT 1',
+    [validatedUser.id]
+  )
+
+  if (existingApp.rows.length > 0) {
+    redirect('/applicant/status')
   }
 
   const fullName = (user?.full_name || '').trim()

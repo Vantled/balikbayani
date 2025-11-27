@@ -12,7 +12,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     if (!username || !password) {
       return NextResponse.json({
         success: false,
-        error: 'Username and password are required'
+        error: 'Username/email and password are required'
       }, { status: 400 });
     }
 

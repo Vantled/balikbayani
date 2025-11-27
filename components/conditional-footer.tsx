@@ -26,7 +26,16 @@ export function ConditionalFooter() {
     </footer>
 
   if (isAuthPage || isApplicant) {
-    return baseFooter
+    const authFooter =
+      <footer className="w-full p-2 text-center text-xs text-gray-500">
+        <p>© 2025 BalikBayani Portal. All rights reserved.</p>
+        <p>This is a secure government system. Unauthorized access is prohibited and subject to legal action.</p>
+      </footer>
+    return (
+      <div className="sm:fixed sm:bottom-0 sm:left-0 w-full z-40">
+        {authFooter}
+      </div>
+    )
   }
 
   return (

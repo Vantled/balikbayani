@@ -367,9 +367,9 @@ export class AuthService {
     userAgent?: string
   ): Promise<LoginResult> {
     try {
-      // Get user by username
+      // Get user by username or email
       const userResult = await db.query(
-        'SELECT * FROM users WHERE username = $1',
+        'SELECT * FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)',
         [username]
       );
 

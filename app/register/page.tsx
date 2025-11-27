@@ -363,7 +363,7 @@ export default function RegisterPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-800">What you can do</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Applicants can submit one request per module. Each application stays in sync with staff workflows.
+                Applicants can submit one request per application type.
               </p>
               <ul className="mt-4 space-y-3 text-sm text-gray-600">
                 <li className="flex gap-2">
@@ -376,7 +376,7 @@ export default function RegisterPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="mt-1 h-2 w-2 rounded-full bg-[#0f62fe]" />
-                  Update personal information securely during first login.
+                  Present your control number to the Department of Migrant Workers Region IV-A.
                 </li>
               </ul>
             </div>

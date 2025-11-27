@@ -11,6 +11,7 @@ import Image from "next/image"
 import { login } from "@/lib/auth"
 import { useToast } from "@/hooks/use-toast"
 import { BadgeCheck, X, AlertTriangle } from "lucide-react"
+import ForgotPasswordModal from "@/components/forgot-password-modal"
 
 const quickLinks = [
   { label: "Forms & Applications", href: "#" },
@@ -25,8 +26,33 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Prevent body scrolling on login page (desktop only, allow scrolling on mobile for footer)
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 640) {
+        // Desktop: prevent scrolling
+        document.body.style.overflow = 'hidden'
+        document.documentElement.style.overflow = 'hidden'
+      } else {
+        // Mobile: allow scrolling to see footer
+        document.body.style.overflow = ''
+        document.documentElement.style.overflow = ''
+      }
+    }
+    
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [])
 
   // Handle logout success and session expired toasts
   React.useEffect(() => {
@@ -61,6 +87,26 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
+    
+    // Validate fields
+    if (!username.trim()) {
+      toast({
+        title: "Username/Email required",
+        description: "Please enter your username or email address.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    if (!password) {
+      toast({
+        title: "Password required",
+        description: "Please enter your password.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     setLoading(true)
     
     try {
@@ -69,23 +115,47 @@ export default function LoginPage() {
         const roleBasedDefault = result.user?.role === 'applicant' ? '/applicant' : '/dashboard'
         const redirect = searchParams?.get("from") || roleBasedDefault
         // Wait a bit for cookies to be set before navigating
-        // Use window.location instead of router.push to ensure cookies are available
         await new Promise(resolve => setTimeout(resolve, 100))
         // Use window.location.href to force a full page reload, ensuring cookies are available
         window.location.href = `${redirect}?loginSuccess=true`
       } else {
-        setError(result.error || "Invalid username or password.")
+        setError(result.error || "Invalid username/email or password.")
+        
+        // Provide more specific error messages
+        let errorTitle = "Login failed"
+        let errorDescription = result.error || "Please check your username/email and password and try again."
+        
+        if (result.error?.toLowerCase().includes('locked') || result.error?.toLowerCase().includes('suspended')) {
+          errorTitle = "Account locked"
+          errorDescription = "Your account has been temporarily locked. Please contact support or try again later."
+        } else if (result.error?.toLowerCase().includes('inactive') || result.error?.toLowerCase().includes('not approved')) {
+          errorTitle = "Account not active"
+          errorDescription = "Your account is not yet approved or has been deactivated. Please contact your administrator."
+        }
+        
         toast({
-          title: "Login failed",
-          description: result.error || "Please check your username and password and try again.",
+          title: errorTitle,
+          description: errorDescription,
           variant: "destructive",
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       setError("An error occurred. Please try again.")
+      
+      let errorMessage = "Unable to connect to the server. Please check your internet connection."
+      if (err?.message) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = "Network error. Please check your internet connection and try again."
+        } else if (err.message.includes('timeout')) {
+          errorMessage = "Request timed out. Please try again."
+        } else {
+          errorMessage = err.message
+        }
+      }
+      
       toast({
         title: "Connection error",
-        description: "Unable to connect to the server. Please check your internet connection.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -94,7 +164,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#eaf3fc]">
+    <div className="flex flex-col bg-[#eaf3fc] min-h-screen sm:h-screen">
       {/* Header */}
       <header className="w-full fixed top-0 left-0 z-30 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col">
@@ -104,7 +174,7 @@ export default function LoginPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center pt-24">
+      <main className="flex-1 flex flex-col items-center justify-center pb-20 sm:pb-0">
         <div className="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 flex flex-col items-center">
           <Image
             src="/dmw-logo.png"
@@ -123,11 +193,11 @@ export default function LoginPage() {
           <form className="w-full space-y-4" onSubmit={handleSubmit}>
             <Input
               type="text"
-              placeholder="Username"
+              placeholder="Username/Email"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
-              aria-label="Username"
+              aria-label="Username or Email"
               tabIndex={0}
               className="rounded-xl"
             />
@@ -150,14 +220,31 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-          <p className="text-sm text-gray-600 text-center mt-4">
-            Need an applicant account?{" "}
-            <Link href="/register" className="text-[#1976D2] font-semibold hover:underline">
-              Register here
-            </Link>
-          </p>
+          <div className="text-sm text-gray-600 text-center mt-4 space-y-2">
+            <p>
+              Need an applicant account?{" "}
+              <Link href="/register" className="text-[#1976D2] font-semibold hover:underline">
+                Register here
+              </Link>
+            </p>
+            <p>
+              Forgot your password?{' '}
+              <button
+                type="button"
+                onClick={() => setForgotPasswordOpen(true)}
+                className="text-[#1976D2] font-semibold hover:underline"
+              >
+                Reset here
+              </button>
+            </p>
+          </div>
         </div>
       </main>
+
+      <ForgotPasswordModal
+        isOpen={forgotPasswordOpen}
+        onClose={() => setForgotPasswordOpen(false)}
+      />
     </div>
   )
 }

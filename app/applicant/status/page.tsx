@@ -79,6 +79,13 @@ export default function ApplicantStatusPage() {
       
       if (!appsData.success) {
         setApplications({ directHire: null })
+        if (appsData.error) {
+          toast({
+            title: 'Unable to load applications',
+            description: appsData.error || 'Please refresh the page to try again.',
+            variant: 'destructive',
+          })
+        }
         return
       }
 
@@ -111,10 +118,15 @@ export default function ApplicantStatusPage() {
       // TODO: Fetch other application types when they support applicant_user_id
 
       setApplications(newApplications)
+      
+      // Only show success toast if applications were found
+      if (newApplications.directHire?.application) {
+        // Silent success - status is already displayed on the page
+      }
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to load application status',
+        title: 'Failed to load applications',
+        description: 'Unable to fetch your application status. Please refresh the page or try again later.',
         variant: 'destructive',
       })
     } finally {
@@ -165,6 +177,10 @@ export default function ApplicantStatusPage() {
       name: doc.file_name,
     })
     setPdfViewerOpen(true)
+    toast({
+      title: 'Opening document',
+      description: `Loading ${doc.file_name}...`,
+    })
   }
 
   const renderDirectHireApplication = (appData: ApplicationData) => {
@@ -178,7 +194,7 @@ export default function ApplicantStatusPage() {
         <AccordionTrigger className="px-6 py-4 hover:no-underline">
           <div className="flex items-center justify-between w-full pr-4">
             <div className="flex items-center gap-4">
-              <div>
+              <div className="text-left">
                 <h3 className="text-lg font-semibold text-gray-900">Direct Hire</h3>
                 <p className="text-sm text-gray-500">Control Number: {application.control_number}</p>
               </div>

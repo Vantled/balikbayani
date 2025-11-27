@@ -5,9 +5,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ApplicantHeader from '@/components/applicant-header'
+import { useToast } from '@/hooks/use-toast'
 
 export default function ApplicantStartPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [hasDirectHire, setHasDirectHire] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -21,16 +23,26 @@ export default function ApplicantStartPage() {
         
         if (data.success) {
           setHasDirectHire(data.data.hasDirectHire)
+        } else {
+          toast({
+            title: 'Unable to load applications',
+            description: data.error || 'Please refresh the page to try again.',
+            variant: 'destructive',
+          })
         }
       } catch (error) {
-        // Silently fail - allow user to see the page
+        toast({
+          title: 'Connection error',
+          description: 'Failed to load your applications. Please check your internet connection and try again.',
+          variant: 'destructive',
+        })
       } finally {
         setLoading(false)
       }
     }
 
     checkApplications()
-  }, [])
+  }, [toast])
 
   return (
     <>
@@ -63,6 +75,10 @@ export default function ApplicantStartPage() {
               {hasDirectHire ? (
                 <div className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-gray-300 text-gray-600 font-semibold cursor-not-allowed">
                   Application Already Submitted
+                </div>
+              ) : loading ? (
+                <div className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-gray-200 text-gray-500 font-semibold">
+                  Loading...
                 </div>
               ) : (
                 <Link

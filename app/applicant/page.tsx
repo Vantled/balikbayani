@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ApplicantHeader from '@/components/applicant-header'
+import ApplicantLoginSuccessHandler from '@/components/applicant-login-success-handler'
 
 type SearchParams = { [key: string]: string | string[] | undefined }
 
@@ -31,6 +32,7 @@ export default async function ApplicantHomePage({ searchParams }: { searchParams
 
   return (
     <>
+      <ApplicantLoginSuccessHandler />
       <ApplicantHeader />
       <section className="min-h-[calc(100vh-4rem)] bg-[#eaf3fc] flex items-center justify-center px-4 py-16 pt-20">
       <div className="w-full max-w-3xl bg-white rounded-3xl shadow-xl p-8 md:p-12 text-center space-y-6">

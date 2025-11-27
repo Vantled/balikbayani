@@ -31,7 +31,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
   const STORAGE_KEY = 'bb_applicant_direct_hire_form_v1'
 
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState<'info' | 'documents'>('info')
+  const [step, setStep] = useState<'info' | 'documents' | 'review'>('info')
   const [documents, setDocuments] = useState<{
     passport: File | null
     workVisa: File | null
@@ -100,6 +100,13 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
   const employmentContractComplete =
     !!documents.employmentContract && !!docMeta.ecIssuedDate && !!docMeta.ecVerification
 
+  const documentChecklist = [
+    { label: 'Passport', complete: passportComplete },
+    { label: 'Work Visa / Permit', complete: workVisaComplete },
+    { label: 'Employment Contract', complete: employmentContractComplete },
+    { label: 'TESDA / PRC License', complete: !!documents.tesdaLicense },
+  ]
+
   // Load saved draft from localStorage on mount (client-side only)
   useEffect(() => {
     try {
@@ -123,7 +130,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
           ...parsed.docMeta,
         }))
       }
-      if (parsed.step === 'documents' || parsed.step === 'info') {
+      if (parsed.step === 'documents' || parsed.step === 'info' || parsed.step === 'review') {
         setStep(parsed.step)
       }
     } catch (err) {
@@ -227,6 +234,18 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         description: 'Please upload all required documents and fill in their details.',
       })
     }
+  }
+
+  const goToReviewStep = () => {
+    if (!validateInfo()) {
+      setStep('info')
+      return
+    }
+    if (!validateDocuments()) {
+      setStep('documents')
+      return
+    }
+    setStep('review')
   }
 
   // Compute USD equivalent display similar to staff create modal
@@ -348,10 +367,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
   }
 
   const handleSubmit = async () => {
-    if (step !== 'documents') {
-      if (validateInfo()) {
-        setStep('documents')
-      }
+    if (step !== 'review') {
       return
     }
 
@@ -495,6 +511,13 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     }
   }
 
+  const SummaryItem = ({ label, value }: { label: string; value: string }) => (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-sm font-semibold text-gray-900">{value || 'N/A'}</div>
+    </div>
+  )
+
   return (
     <form className="bg-white rounded-3xl shadow-xl p-6 md:p-10 space-y-8">
       <div className="flex flex-col sm:flex-row text-sm font-semibold text-gray-600 border-b pb-2">
@@ -515,6 +538,16 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
           className={`flex-1 text-left sm:text-center py-2 ${step === 'documents' ? 'text-[#0f62fe] border-b-2 border-[#0f62fe]' : ''}`}
         >
           2. Documents
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (step === 'review') return
+            goToReviewStep()
+          }}
+          className={`flex-1 text-left sm:text-center py-2 ${step === 'review' ? 'text-[#0f62fe] border-b-2 border-[#0f62fe]' : ''}`}
+        >
+          3. Review &amp; Submit
         </button>
       </div>
 
@@ -1113,24 +1146,65 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
           </section>
         </>
       )}
+      {step === 'review' && (
+        <>
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-gray-200 p-6 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Review your application</h2>
+                <p className="text-sm text-red-600 mt-1">
+                  Your application will no longer be editable once submitted. To request any changes after submission,
+                  please visit the Department of Migrant Workers Region IV-A Office.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <SummaryItem
+                  label="Full Name"
+                  value={[formState.firstName, formState.middleName, formState.lastName].filter(Boolean).join(' ') || 'N/A'}
+                />
+                <SummaryItem label="Sex" value={formState.sex.toUpperCase()} />
+                <SummaryItem label="Email" value={formState.contactEmail || 'N/A'} />
+                <SummaryItem label="Phone Number" value={formState.contactNumber || 'N/A'} />
+                <SummaryItem label="Job Site" value={formState.jobsite} />
+                <SummaryItem label="Position" value={formState.position} />
+                <SummaryItem label="Job Type" value={formState.jobType.toUpperCase()} />
+                <SummaryItem label="Employer" value={formState.employer || 'N/A'} />
+                <SummaryItem
+                  label="Monthly Salary"
+                  value={`${formState.salaryCurrency || 'USD'} ${formState.salaryAmount || '0'}`}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 p-6 space-y-3">
+              <h3 className="text-base font-semibold text-gray-900">Document checklist</h3>
+              <p className="text-sm text-gray-600">
+                Ensure all required documents are uploaded and their details are complete.
+              </p>
+              <ul className="space-y-2 text-sm">
+                {documentChecklist.map(item => (
+                  <li key={item.label} className="flex items-center gap-3">
+                    <span
+                      className={`h-5 w-5 rounded-full flex items-center justify-center text-xs ${
+                        item.complete ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {item.complete ? '✓' : '!'}
+                    </span>
+                    <span className={item.complete ? 'text-gray-900' : 'text-gray-600'}>
+                      {item.label} {item.complete ? 'complete' : 'needs attention'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        </>
+      )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 sm:justify-end">
-        {step === 'documents' && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={loading}
-            onClick={() => {
-              // Back from documents to info: clear document errors
-              setDocErrors({})
-              setStep('info')
-            }}
-          >
-            Back
-          </Button>
-        )}
-        {step === 'info' ? (
+        {step === 'info' && (
           <Button
             type="button"
             className="bg-[#0f62fe] hover:bg-[#0c4dcc]"
@@ -1138,15 +1212,49 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
           >
             Next
           </Button>
-        ) : (
-          <Button
-            type="button"
-            className="bg-[#0f62fe] hover:bg-[#0c4dcc]"
-            disabled={loading}
-            onClick={handleSubmit}
-          >
-            {loading ? 'Submitting...' : 'Submit Application'}
-          </Button>
+        )}
+        {step === 'documents' && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => {
+                setDocErrors({})
+                setStep('info')
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#0f62fe] hover:bg-[#0c4dcc]"
+              disabled={loading}
+              onClick={goToReviewStep}
+            >
+              Review Application
+            </Button>
+          </>
+        )}
+        {step === 'review' && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setStep('documents')}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#0f62fe] hover:bg-[#0c4dcc]"
+              disabled={loading}
+              onClick={handleSubmit}
+            >
+              {loading ? 'Submitting...' : 'Submit Application'}
+            </Button>
+          </>
         )}
       </div>
     </form>

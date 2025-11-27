@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { UserCircle, LogOut, User, Menu, Home, PlayCircle, ListChecks } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { logout, getUser } from "@/lib/auth"
+import { logout, getUser, validateSession } from "@/lib/auth"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 
@@ -40,6 +40,40 @@ export default function ApplicantHeader() {
       })
     }
   }
+
+  // Session heartbeat to enforce inactivity + single-session rules
+  useEffect(() => {
+    let cancelled = false
+    let interval: any
+
+    const beat = async () => {
+      const ok = await validateSession()
+      if (!ok && !cancelled) {
+        toast({
+          title: "Session Expired",
+          description: "You have been logged out because your session ended or another device signed in.",
+          variant: "destructive",
+        })
+        await logout()
+        router.push('/login?sessionExpired=true')
+      }
+    }
+
+    interval = setInterval(beat, 15 * 1000)
+    beat()
+
+    const onFocus = () => beat()
+    const onVisibility = () => { if (document.visibilityState === 'visible') beat() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [router, toast])
 
   if (!mounted) return null
 

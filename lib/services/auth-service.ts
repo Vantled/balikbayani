@@ -361,7 +361,7 @@ export class AuthService {
    * Authenticate user login
    */
   static async loginUser(
-    username: string,
+    identifier: string,
     password: string,
     ipAddress?: string,
     userAgent?: string
@@ -369,8 +369,8 @@ export class AuthService {
     try {
       // Get user by username or email
       const userResult = await db.query(
-        'SELECT * FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)',
-        [username]
+        'SELECT * FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)',
+        [identifier]
       );
 
       if (userResult.rows.length === 0) {
@@ -521,14 +521,6 @@ export class AuthService {
       }
 
       // Enforce single session per user: if another session exists for this user, invalidate it
-      // This ensures only one active session per user at a time
-      await db.query(
-        'DELETE FROM user_sessions WHERE user_id = $1 AND session_token != $2 AND expires_at > CURRENT_TIMESTAMP',
-        [session.user_id, token]
-      );
-
-      // Enforce single session per user: if another session exists for this user, invalidate it
-      // This ensures only one active session per user at a time
       await db.query(
         'DELETE FROM user_sessions WHERE user_id = $1 AND session_token != $2 AND expires_at > CURRENT_TIMESTAMP',
         [session.user_id, token]

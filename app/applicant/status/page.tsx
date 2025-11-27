@@ -7,8 +7,9 @@ import ApplicantHeader from '@/components/applicant-header'
 import DocumentViewerModal from '@/components/pdf-viewer-modal'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Loader2, Eye, FileText, CheckCircle2, Clock, ChevronDown } from 'lucide-react'
+import { Loader2, Eye, FileText, CheckCircle2, Clock } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import type { BalikManggagawaClearance } from '@/lib/types'
 
 interface DirectHireApplication {
   id: string
@@ -45,8 +46,8 @@ interface Document {
   meta?: any
 }
 
-interface ApplicationData {
-  application: DirectHireApplication | null
+interface ApplicationData<TApplication> {
+  application: TApplication | null
   documents: Document[]
 }
 
@@ -54,10 +55,12 @@ export default function ApplicantStatusPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [applications, setApplications] = useState<{
-    directHire: ApplicationData | null
-    // Future: balikManggagawa, govToGov, informationSheet
+    directHire: ApplicationData<DirectHireApplication> | null
+    balikManggagawa: ApplicationData<BalikManggagawaClearance> | null
+    // Future: govToGov, informationSheet
   }>({
     directHire: null,
+    balikManggagawa: null,
   })
   const [loading, setLoading] = useState(true)
   const [selectedDocument, setSelectedDocument] = useState<{ id: string; name: string } | null>(null)
@@ -91,6 +94,7 @@ export default function ApplicantStatusPage() {
 
       const newApplications: typeof applications = {
         directHire: null,
+        balikManggagawa: null,
       }
 
       // Fetch Direct Hire application if exists
@@ -115,7 +119,26 @@ export default function ApplicantStatusPage() {
         }
       }
 
-      // TODO: Fetch other application types when they support applicant_user_id
+      // Fetch Balik Manggagawa application when available
+      if (appsData.data.hasBalikManggagawa && appsData.data.balikManggagawa) {
+        const bmResponse = await fetch(`/api/applicant/balik-manggagawa/${appsData.data.balikManggagawa.id}`, {
+          credentials: 'include',
+        })
+        const bmData = await bmResponse.json()
+
+        if (bmData.success && bmData.data) {
+          const docsResponse = await fetch(
+            `/api/documents?applicationId=${appsData.data.balikManggagawa.id}&applicationType=balik_manggagawa`,
+            { credentials: 'include' }
+          )
+          const docsData = await docsResponse.json()
+
+          newApplications.balikManggagawa = {
+            application: bmData.data,
+            documents: docsData.success ? (docsData.data || []) : [],
+          }
+        }
+      }
 
       setApplications(newApplications)
       
@@ -144,6 +167,23 @@ export default function ApplicantStatusPage() {
     if (application.status === 'approved') return 'Approved'
     if (application.status === 'rejected') return 'Rejected'
     return 'Pending'
+  }
+
+  const formatBmStatus = (status?: string) => {
+    const normalized = (status || '').toLowerCase()
+    switch (normalized) {
+      case 'for_approval':
+      case 'pending':
+        return 'For Approval'
+      case 'for_review':
+        return 'For Review'
+      case 'approved':
+        return 'Approved'
+      case 'rejected':
+        return 'Rejected'
+      default:
+        return 'Pending'
+    }
   }
 
   const getStatusBadge = (status: string) => {
@@ -183,7 +223,7 @@ export default function ApplicantStatusPage() {
     })
   }
 
-  const renderDirectHireApplication = (appData: ApplicationData) => {
+  const renderDirectHireApplication = (appData: ApplicationData<DirectHireApplication>) => {
     const { application, documents } = appData
     if (!application) return null
 
@@ -338,7 +378,125 @@ export default function ApplicantStatusPage() {
     )
   }
 
-  const hasAnyApplication = applications.directHire?.application !== null
+  const renderBalikManggagawaApplication = (appData: ApplicationData<BalikManggagawaClearance>) => {
+    const { application, documents } = appData
+    if (!application) return null
+
+    const statusLabel = formatBmStatus(application.status)
+
+    return (
+      <AccordionItem value="balik-manggagawa" className="border rounded-lg mb-4 bg-white">
+        <AccordionTrigger className="px-6 py-4 hover:no-underline">
+          <div className="flex items-center justify-between w-full pr-4">
+            <div className="flex flex-col text-left">
+              <h3 className="text-lg font-semibold text-gray-900">Balik Manggagawa</h3>
+              <p className="text-sm text-gray-500">Control Number: {application.control_number}</p>
+            </div>
+            <span className={getStatusBadge(statusLabel)}>
+              {statusLabel}
+            </span>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pb-6">
+          <div className="space-y-6 pt-4">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Application Information</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailItem label="Name" value={application.name_of_worker} />
+                <DetailItem label="Sex" value={application.sex.toUpperCase()} />
+                <DetailItem label="Destination" value={application.destination} />
+                <DetailItem label="Employer" value={application.employer} />
+                <DetailItem label="Position" value={application.position || 'N/A'} />
+                <DetailItem label="Job Type" value={application.job_type ? application.job_type.toUpperCase() : 'N/A'} />
+                <DetailItem
+                  label="Monthly Salary"
+                  value={`${application.salary_currency || 'USD'} ${Number(application.raw_salary || application.salary).toLocaleString()}`}
+                />
+                <DetailItem label="Submitted" value={formatDate(application.created_at)} />
+                <DetailItem label="Clearance Type" value={application.clearance_type ? formatClearanceType(application.clearance_type) : 'General BM'} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Status</h4>
+              <p className="text-sm text-gray-600">
+                Your Balik Manggagawa clearance is currently <span className="font-semibold text-gray-900">{statusLabel}</span>.{' '}
+                We will notify you if additional requirements are needed.
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Documents</h4>
+              {documents.length === 0 ? (
+                <p className="text-gray-500 text-sm">No documents uploaded for this application.</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-gray-400" />
+                        <div>
+                          <div className="font-medium text-sm">{formatDocumentType(doc.document_type)}</div>
+                          <div className="text-xs text-gray-500">{doc.file_name}</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDocument(doc)}
+                        className="flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    )
+  }
+
+  const DetailItem = ({ label, value }: { label: string; value: string | number }) => {
+    const display = value === null || value === undefined || value === '' ? 'N/A' : value
+    return (
+      <div>
+        <div className="text-sm text-gray-500 mb-1">{label}</div>
+        <div className="font-medium">{display}</div>
+      </div>
+    )
+  }
+
+  const formatDate = (value?: string) => {
+    if (!value) return 'N/A'
+    try {
+      return new Date(value).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    } catch {
+      return value
+    }
+  }
+
+  const formatClearanceType = (value?: string) => {
+    if (!value) return 'General BM'
+    return value
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
+  const hasAnyApplication =
+    applications.directHire?.application !== null ||
+    applications.balikManggagawa?.application !== null
 
   if (loading) {
     return (
@@ -383,9 +541,9 @@ export default function ApplicantStatusPage() {
           </div>
 
           {/* Applications Accordion */}
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion type="single" collapsible className="w-full space-y-4">
             {applications.directHire?.application && renderDirectHireApplication(applications.directHire)}
-            {/* TODO: Add other application types when they support applicant_user_id */}
+            {applications.balikManggagawa?.application && renderBalikManggagawaApplication(applications.balikManggagawa)}
           </Accordion>
         </div>
       </section>

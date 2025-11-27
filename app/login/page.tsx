@@ -110,7 +110,8 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
-      const result = await login(username, password)
+      const identifier = username.trim()
+      const result = await login(identifier, password)
       if (result.success) {
         const roleBasedDefault = result.user?.role === 'applicant' ? '/applicant' : '/dashboard'
         const redirect = searchParams?.get("from") || roleBasedDefault

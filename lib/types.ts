@@ -159,6 +159,7 @@ export interface BalikManggagawaClearance {
   active_email_address?: string;
   active_ph_mobile_number?: string;
   evaluator?: string;
+  applicant_user_id?: string | null;
   // Processing document fields (when linked from processing)
   personal_letter_file?: string;
   valid_passport_file?: string;

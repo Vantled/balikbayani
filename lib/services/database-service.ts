@@ -548,6 +548,7 @@ export class DatabaseService {
     evaluator?: string | null;
     time_received?: string | null;
     time_released?: string | null;
+    applicantUserId?: string | null;
   }): Promise<BalikManggagawaClearance> {
     // Generate control number based on clearance type with monthly and yearly sequences
     const now = new Date();
@@ -640,7 +641,7 @@ export class DatabaseService {
         date_arrival, date_departure, place_date_employment, date_blacklisting,
         total_deployed_ofws, reason_blacklisting, years_with_principal, employment_start_date, processing_date, remarks,
         no_of_months_years, date_of_departure, active_email_address, active_ph_mobile_number, evaluator,
-        time_received, time_released
+        time_received, time_released, applicant_user_id
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,
         $8,$9,$10,
@@ -648,7 +649,7 @@ export class DatabaseService {
         $16,$17,$18,$19,
         $20,$21,$22,$23,$24,$25,
         $26,$27,$28,$29,$30,
-        $31,$32
+        $31,$32,$33
       ) RETURNING *`;
     const insertParams = [
       controlNumber, clearanceData.nameOfWorker, clearanceData.sex, clearanceData.employer, clearanceData.destination, clearanceData.salary, (clearanceData.clearanceType ?? null),
@@ -657,7 +658,7 @@ export class DatabaseService {
       clearanceData.dateArrival ?? null, clearanceData.dateDeparture ?? null, clearanceData.placeDateEmployment ?? null, clearanceData.dateBlacklisting ?? null,
       clearanceData.totalDeployedOfws ?? null, clearanceData.reasonBlacklisting ?? null, clearanceData.yearsWithPrincipal ?? null, clearanceData.employmentStartDate ?? null, clearanceData.processingDate ?? null, clearanceData.remarks ?? null,
       clearanceData.noOfMonthsYears ?? null, clearanceData.dateOfDeparture ?? null, clearanceData.activeEmailAddress ?? null, clearanceData.activePhMobileNumber ?? null, clearanceData.evaluator ?? null,
-      clearanceData.time_received ?? null, clearanceData.time_released ?? null
+      clearanceData.time_received ?? null, clearanceData.time_released ?? null, clearanceData.applicantUserId ?? null
     ];
 
     let rows;
@@ -668,6 +669,7 @@ export class DatabaseService {
         // Missing columns - add them and retry once
         await db.query(`ALTER TABLE balik_manggagawa_clearance ADD COLUMN IF NOT EXISTS raw_salary DECIMAL(12,2)`);
         await db.query(`ALTER TABLE balik_manggagawa_clearance ADD COLUMN IF NOT EXISTS salary_currency VARCHAR(10)`);
+        await db.query(`ALTER TABLE balik_manggagawa_clearance ADD COLUMN IF NOT EXISTS applicant_user_id UUID REFERENCES users(id)`);
         ({ rows } = await db.query(insertSql, insertParams));
       } else {
         throw err;

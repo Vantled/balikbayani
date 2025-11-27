@@ -20,13 +20,14 @@ const USER_COOKIE = 'bb_user'
 
 export const login = async (username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> => {
   try {
+    const identifier = username.trim()
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       credentials: 'include', // Ensure cookies are sent and received
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: identifier, password }),
     });
 
     const data = await response.json();

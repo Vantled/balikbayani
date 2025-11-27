@@ -6,10 +6,11 @@ import { ApiResponse } from '@/lib/types';
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const body = await request.json();
-    const { username, password } = body;
+    const { username: rawIdentifier, password } = body;
+    const identifier = typeof rawIdentifier === 'string' ? rawIdentifier.trim() : '';
 
     // Validation
-    if (!username || !password) {
+    if (!identifier || !password) {
       return NextResponse.json({
         success: false,
         error: 'Username/email and password are required'
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
     // Use AuthService for secure authentication
-    const loginResult = await AuthService.loginUser(username, password, ipAddress, userAgent);
+    const loginResult = await AuthService.loginUser(identifier, password, ipAddress, userAgent);
 
     if (!loginResult.success) {
       return NextResponse.json({

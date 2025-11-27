@@ -25,7 +25,20 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const hasDirectHire = directHireResult.rows.length > 0
     const directHireApp = hasDirectHire ? directHireResult.rows[0] : null
 
-    // TODO: Add other application types (Balik Manggagawa, Gov-to-Gov, Information Sheet) when they support applicant_user_id
+    // Check for existing Balik Manggagawa application
+    const bmResult = await db.query(
+      `SELECT id, control_number, status, created_at 
+       FROM balik_manggagawa_clearance 
+       WHERE applicant_user_id = $1 
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [user.id]
+    )
+
+    const hasBalikManggagawa = bmResult.rows.length > 0
+    const balikManggagawaApp = hasBalikManggagawa ? bmResult.rows[0] : null
+
+    // TODO: Add other application types (Gov-to-Gov, Information Sheet) when they support applicant_user_id
 
     return NextResponse.json({
       success: true,
@@ -37,7 +50,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           status: directHireApp.status,
           createdAt: directHireApp.created_at,
         } : null,
-        // Future: hasBalikManggagawa, balikManggagawa, hasGovToGov, govToGov, hasInformationSheet, informationSheet
+        hasBalikManggagawa,
+        balikManggagawa: balikManggagawaApp ? {
+          id: balikManggagawaApp.id,
+          controlNumber: balikManggagawaApp.control_number,
+          status: balikManggagawaApp.status,
+          createdAt: balikManggagawaApp.created_at,
+        } : null,
+        // Future: hasGovToGov, govToGov, hasInformationSheet, informationSheet
       },
     })
   } catch (error) {

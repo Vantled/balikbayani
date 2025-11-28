@@ -46,6 +46,41 @@ interface Document {
   meta?: any
 }
 
+interface GovToGovRecord {
+  id: string
+  control_number?: string | null
+  last_name: string
+  first_name: string
+  middle_name?: string | null
+  sex: 'male' | 'female'
+  date_of_birth: string
+  age?: number | null
+  height?: number | null
+  weight?: number | null
+  educational_attainment: string
+  present_address: string
+  email_address?: string | null
+  contact_number?: string | null
+  passport_number: string
+  passport_validity: string
+  id_presented: string
+  id_number: string
+  with_taiwan_work_experience: boolean
+  taiwan_company?: string | null
+  taiwan_year_started?: number | null
+  taiwan_year_ended?: number | null
+  with_job_experience: boolean
+  other_company?: string | null
+  other_year_started?: number | null
+  other_year_ended?: number | null
+  remarks?: string | null
+  date_received_by_region?: string | null
+  date_card_released?: string | null
+  time_received?: string | null
+  time_released?: string | null
+  created_at: string
+  updated_at: string
+}
 interface ApplicationData<TApplication> {
   application: TApplication | null
   documents: Document[]
@@ -58,10 +93,11 @@ export default function ApplicantStatusPage() {
   const [applications, setApplications] = useState<{
     directHire: ApplicationData<DirectHireApplication> | null
     balikManggagawa: ApplicationData<BalikManggagawaClearance> | null
-    // Future: govToGov, informationSheet
+    govToGov: ApplicationData<GovToGovRecord> | null
   }>({
     directHire: null,
     balikManggagawa: null,
+    govToGov: null,
   })
   const [loading, setLoading] = useState(true)
   const [selectedDocument, setSelectedDocument] = useState<{ id: string; name: string } | null>(null)
@@ -90,6 +126,12 @@ export default function ApplicantStatusPage() {
       })
       // Clean up URL by removing query parameters
       router.replace('/applicant/status', { scroll: false })
+    } else if (submitted === 'gov-to-gov' && controlNumber) {
+      toast({
+        title: 'Application submitted successfully!',
+        description: `Your Gov-to-Gov application has been submitted. Reference ID: ${controlNumber}.`,
+      })
+      router.replace('/applicant/status', { scroll: false })
     }
   }, [searchParams, toast, router])
 
@@ -104,7 +146,7 @@ export default function ApplicantStatusPage() {
       const appsData = await appsResponse.json()
       
       if (!appsData.success) {
-        setApplications({ directHire: null })
+        setApplications({ directHire: null, balikManggagawa: null, govToGov: null })
         if (appsData.error) {
           toast({
             title: 'Unable to load applications',
@@ -118,6 +160,7 @@ export default function ApplicantStatusPage() {
       const newApplications: typeof applications = {
         directHire: null,
         balikManggagawa: null,
+        govToGov: null,
       }
 
       // Fetch Direct Hire application if exists
@@ -158,6 +201,26 @@ export default function ApplicantStatusPage() {
 
           newApplications.balikManggagawa = {
             application: bmData.data,
+            documents: docsData.success ? (docsData.data || []) : [],
+          }
+        }
+      }
+
+      if (appsData.data.hasGovToGov && appsData.data.govToGov) {
+        const govResponse = await fetch(`/api/applicant/gov-to-gov/${appsData.data.govToGov.id}`, {
+          credentials: 'include',
+        })
+        const govData = await govResponse.json()
+
+        if (govData.success && govData.data) {
+          const docsResponse = await fetch(
+            `/api/documents?applicationId=${appsData.data.govToGov.id}&applicationType=gov_to_gov`,
+            { credentials: 'include' }
+          )
+          const docsData = await docsResponse.json()
+
+          newApplications.govToGov = {
+            application: govData.data,
             documents: docsData.success ? (docsData.data || []) : [],
           }
         }
@@ -209,16 +272,28 @@ export default function ApplicantStatusPage() {
     }
   }
 
+  const getGovToGovStatus = (application: GovToGovRecord) => {
+    if (application.date_card_released) return 'Card Released'
+    if (application.date_received_by_region) return 'Received by Region'
+    return 'Processing'
+  }
+
   const getStatusBadge = (status: string) => {
     const baseClasses = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold'
     
     if (status === 'Approved') {
       return `${baseClasses} bg-green-100 text-green-800`
     }
+    if (status === 'Card Released') {
+      return `${baseClasses} bg-green-100 text-green-800`
+    }
     if (status === 'Rejected') {
       return `${baseClasses} bg-red-100 text-red-800`
     }
     if (status === 'For Interview' || status === 'Received from DHAD') {
+      return `${baseClasses} bg-blue-100 text-blue-800`
+    }
+    if (status === 'Received by Region') {
       return `${baseClasses} bg-blue-100 text-blue-800`
     }
     if (status === 'Evaluated' || status === 'For Confirmation' || status === 'Emailed to DHAD') {
@@ -480,6 +555,143 @@ export default function ApplicantStatusPage() {
     )
   }
 
+  const renderGovToGovApplication = (appData: ApplicationData<GovToGovRecord>) => {
+    const { application, documents } = appData
+    if (!application) return null
+
+    const status = getGovToGovStatus(application)
+    const reference = application.control_number || application.id
+    const fullName = [
+      application.first_name,
+      application.middle_name,
+      application.last_name,
+    ].filter(Boolean).join(' ')
+
+    const formatExperience = (
+      label: string,
+      active: boolean,
+      company?: string | null,
+      start?: number | null,
+      end?: number | null
+    ) => (
+      <div>
+        <div className="text-sm text-gray-500 mb-1">{label}</div>
+        <div className="font-medium">
+          {active
+            ? `${company || 'N/A'} (${start || '—'} - ${end || '—'})`
+            : 'No'}
+        </div>
+      </div>
+    )
+
+    return (
+      <AccordionItem value="gov-to-gov" className="border rounded-lg mb-4 bg-white">
+        <AccordionTrigger className="px-6 py-4 hover:no-underline">
+          <div className="flex items-center justify-between w-full pr-4">
+            <div className="text-left">
+              <h3 className="text-lg font-semibold text-gray-900">Gov-to-Gov</h3>
+              <p className="text-sm text-gray-500">Reference: {reference}</p>
+            </div>
+            <span className={getStatusBadge(status)}>
+              {status}
+            </span>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pb-6">
+          <div className="space-y-6 pt-4">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Applicant Information</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailItem label="Name" value={fullName || 'N/A'} />
+                <DetailItem label="Sex" value={application.sex.toUpperCase()} />
+                <DetailItem label="Date of Birth" value={formatDate(application.date_of_birth)} />
+                <DetailItem label="Height (cm)" value={application.height ?? 'N/A'} />
+                <DetailItem label="Weight (kg)" value={application.weight ?? 'N/A'} />
+                <DetailItem label="Educational Attainment" value={application.educational_attainment || 'N/A'} />
+                <DetailItem label="Email" value={application.email_address || 'N/A'} />
+                <DetailItem label="Contact Number" value={application.contact_number || 'N/A'} />
+                <DetailItem label="Present Address" value={application.present_address || 'N/A'} />
+                <DetailItem label="Submitted" value={formatDate(application.created_at)} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Identification</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailItem label="Passport Number" value={application.passport_number || 'N/A'} />
+                <DetailItem label="Passport Validity" value={formatDate(application.passport_validity)} />
+                <DetailItem label="ID Presented" value={application.id_presented || 'N/A'} />
+                <DetailItem label="ID Number" value={application.id_number || 'N/A'} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Experience</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {formatExperience(
+                  'Taiwan Work Experience',
+                  application.with_taiwan_work_experience,
+                  application.taiwan_company,
+                  application.taiwan_year_started,
+                  application.taiwan_year_ended
+                )}
+                {formatExperience(
+                  'Other Job Experience',
+                  application.with_job_experience,
+                  application.other_company,
+                  application.other_year_started,
+                  application.other_year_ended
+                )}
+                <DetailItem label="Remarks" value={application.remarks || 'N/A'} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <DetailItem label="Submitted" value={formatDate(application.created_at)} />
+                <DetailItem label="Received by Region" value={formatDate(application.date_received_by_region)} />
+                <DetailItem label="Card Released" value={formatDate(application.date_card_released)} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Documents</h4>
+              {documents.length === 0 ? (
+                <p className="text-gray-500 text-sm">No documents uploaded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-gray-400" />
+                        <div>
+                          <div className="font-medium text-sm">{formatDocumentType(doc.document_type)}</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDocument(doc)}
+                        className="flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    )
+  }
+
   const DetailItem = ({ label, value }: { label: string; value: string | number }) => {
     const display = value === null || value === undefined || value === '' ? 'N/A' : value
     return (
@@ -490,16 +702,20 @@ export default function ApplicantStatusPage() {
     )
   }
 
-  const formatDate = (value?: string) => {
+  const formatDate = (value?: string | Date | null) => {
     if (!value) return 'N/A'
     try {
-      return new Date(value).toLocaleDateString('en-US', {
+      const date = value instanceof Date ? value : new Date(value)
+      if (Number.isNaN(date.getTime())) {
+        return typeof value === 'string' ? value : 'N/A'
+      }
+      return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       })
     } catch {
-      return value
+      return typeof value === 'string' ? value : 'N/A'
     }
   }
 
@@ -513,7 +729,8 @@ export default function ApplicantStatusPage() {
 
   const hasAnyApplication =
     applications.directHire?.application !== null ||
-    applications.balikManggagawa?.application !== null
+    applications.balikManggagawa?.application !== null ||
+    applications.govToGov?.application !== null
 
   if (loading) {
     return (
@@ -561,6 +778,7 @@ export default function ApplicantStatusPage() {
           <Accordion type="single" collapsible className="w-full space-y-4">
             {applications.directHire?.application && renderDirectHireApplication(applications.directHire)}
             {applications.balikManggagawa?.application && renderBalikManggagawaApplication(applications.balikManggagawa)}
+            {applications.govToGov?.application && renderGovToGovApplication(applications.govToGov)}
           </Accordion>
         </div>
       </section>

@@ -176,6 +176,7 @@ export interface BalikManggagawaClearance {
 
 export interface GovToGovApplication {
   id: string;
+  control_number?: string | null;
   last_name: string;
   first_name: string;
   middle_name?: string;
@@ -193,15 +194,22 @@ export interface GovToGovApplication {
   id_presented: string;
   id_number: string;
   with_taiwan_work_experience: boolean;
-  taiwan_work_experience?: TaiwanWorkExperience;
+  taiwan_company?: string | null;
+  taiwan_year_started?: number | null;
+  taiwan_year_ended?: number | null;
   with_job_experience: boolean;
-  other_job_experience?: JobExperience;
+  other_company?: string | null;
+  other_year_started?: number | null;
+  other_year_ended?: number | null;
   created_at: Date;
   updated_at: Date;
   deleted_at?: Date;
   date_received_by_region?: Date;
   date_card_released?: Date;
   remarks?: string;
+  time_received?: Date | null;
+  time_released?: Date | null;
+  applicant_user_id?: string | null;
 }
 
 export interface TaiwanWorkExperience {

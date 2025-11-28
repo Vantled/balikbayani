@@ -16,6 +16,7 @@
     "db:manager": "node scripts/database-manager.js",
     "db:reset": "tsx lib/init-db.ts --reset",
     "db:migrate": "tsx lib/init-db.ts --migrate",
+    "db:migrate-pending": "tsx scripts/run-pending-migrations.ts",
     "db:migrate-bm-clearance-extended": "tsx scripts/migrate-bm-clearance-extended.ts",
     "db:security-migrate": "tsx lib/migrate-security.ts",
     "db:role-migrate": "tsx lib/migrate-role-hierarchy.ts",

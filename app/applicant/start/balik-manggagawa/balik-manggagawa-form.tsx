@@ -29,6 +29,7 @@ export default function BalikManggagawaApplicantForm({
 }: BalikManggagawaFormProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const STORAGE_KEY = 'bb_applicant_balik_manggagawa_form_v1'
   const [loading, setLoading] = useState(false)
   const [salaryPreview, setSalaryPreview] = useState<string>('')
   const [step, setStep] = useState<'form' | 'review'>('form')
@@ -43,6 +44,39 @@ export default function BalikManggagawaApplicantForm({
     salaryAmount: '',
     salaryCurrency: 'USD',
   })
+
+  // Load saved draft on mount
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as {
+        formData?: typeof formData
+        step?: typeof step
+      }
+      if (parsed.formData) {
+        setFormData(prev => ({ ...prev, ...parsed.formData }))
+      }
+      if (parsed.step === 'form' || parsed.step === 'review') {
+        setStep(parsed.step)
+      }
+    } catch (err) {
+      console.error('Failed to load BM applicant draft:', err)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-save draft whenever form data or step changes
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return
+      const payload = { formData, step }
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch (err) {
+      console.error('Failed to save BM applicant draft:', err)
+    }
+  }, [formData, step])
 
   useEffect(() => {
     const calculatePreview = async () => {

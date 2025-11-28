@@ -1085,8 +1085,9 @@ export class DatabaseService {
         taiwan_company, taiwan_year_started, taiwan_year_ended,
         other_company, other_year_started, other_year_ended,
         date_received_by_region, remarks,
-        time_received, time_released
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
+        time_received, time_released,
+        applicant_user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
       [
         appData.last_name, appData.first_name, appData.middle_name, appData.sex,
         appData.date_of_birth, appData.age, appData.height, appData.weight,
@@ -1099,7 +1100,8 @@ export class DatabaseService {
         (appData as any).date_received_by_region ? new Date((appData as any).date_received_by_region) : null,
         (appData as any).remarks || null,
         (appData as any).time_received || null,
-        (appData as any).time_released || null
+        (appData as any).time_released || null,
+        (appData as any).applicant_user_id || null
       ]
     );
     return rows[0];

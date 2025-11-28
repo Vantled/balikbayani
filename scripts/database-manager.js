@@ -119,7 +119,8 @@ async function initializeDatabase() {
     { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' },
     { file: 'migrations/20251126_create_applicant_otp_table.sql', desc: 'Creating applicant OTP table and adding applicant role' },
     { file: 'migrations/20251126_add_applicant_user_to_direct_hire.sql', desc: 'Adding applicant_user_id to direct_hire_applications' },
-    { file: 'migrations/20251127_add_applicant_user_to_balik_manggagawa.sql', desc: 'Adding applicant_user_id to balik_manggagawa_clearance' }
+    { file: 'migrations/20251127_add_applicant_user_to_balik_manggagawa.sql', desc: 'Adding applicant_user_id to balik_manggagawa_clearance' },
+    { file: 'migrations/20251128_add_applicant_user_to_gov_to_gov.sql', desc: 'Adding applicant_user_id to gov_to_gov_applications' }
   ];
 
   for (const migration of migrations) {

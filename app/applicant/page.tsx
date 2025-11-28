@@ -48,6 +48,12 @@ export default async function ApplicantHomePage({ searchParams }: { searchParams
             <p>Your control number is <span className="font-mono font-bold">{controlNumber}</span>. Keep it for reference.</p>
           </div>
         )}
+        {submittedModule === 'gov-to-gov' && controlNumber && (
+          <div className="rounded-2xl border border-[#cfe0ff] bg-[#f5f8ff] px-4 py-3 text-sm text-left text-[#0f62fe] shadow-inner">
+            <p className="font-semibold">Gov-to-Gov application submitted!</p>
+            <p>Your reference ID is <span className="font-mono font-bold">{controlNumber}</span>. Keep it for updates.</p>
+          </div>
+        )}
         <p className="text-sm uppercase tracking-[0.3em] text-[#0f62fe] font-semibold">Applicant Portal</p>
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
           Welcome to BalikBayani Portal!

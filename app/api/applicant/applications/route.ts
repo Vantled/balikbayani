@@ -4,6 +4,21 @@ import { ApiResponse } from '@/lib/types'
 import { AuthService } from '@/lib/services/auth-service'
 import { db } from '@/lib/database'
 
+const formatGovToGovReference = (id: string, createdAt: string) => {
+  const date = new Date(createdAt)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const monthDay = `${month}${day}`
+
+  const hash = Array.from(id).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  const monthly = String((hash % 1000) || 1).padStart(3, '0')
+  const yearly = String((Math.floor(hash / 1000) % 1000) || 1).padStart(3, '0')
+
+  // Match DH/BM style but with GG prefix and double dash: GG--YYYY-MMDD-XXX-YYY
+  return `GG--${year}-${monthDay}-${monthly}-${yearly}`
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const token = request.cookies.get('bb_auth_token')?.value
@@ -38,7 +53,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const hasBalikManggagawa = bmResult.rows.length > 0
     const balikManggagawaApp = hasBalikManggagawa ? bmResult.rows[0] : null
 
-    // TODO: Add other application types (Gov-to-Gov, Information Sheet) when they support applicant_user_id
+    // Check for existing Gov-to-Gov application
+    const govToGovResult = await db.query(
+      `SELECT id, created_at 
+       FROM gov_to_gov_applications
+       WHERE applicant_user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [user.id]
+    )
+
+    const hasGovToGov = govToGovResult.rows.length > 0
+    const govToGovApp = hasGovToGov ? govToGovResult.rows[0] : null
 
     return NextResponse.json({
       success: true,
@@ -57,7 +83,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           status: balikManggagawaApp.status,
           createdAt: balikManggagawaApp.created_at,
         } : null,
-        // Future: hasGovToGov, govToGov, hasInformationSheet, informationSheet
+        hasGovToGov,
+        govToGov: govToGovApp ? {
+          id: govToGovApp.id,
+          controlNumber: formatGovToGovReference(govToGovApp.id, govToGovApp.created_at),
+          createdAt: govToGovApp.created_at,
+        } : null,
+        // Future: hasInformationSheet, informationSheet
       },
     })
   } catch (error) {

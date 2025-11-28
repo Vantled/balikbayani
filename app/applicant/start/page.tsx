@@ -12,6 +12,7 @@ export default function ApplicantStartPage() {
   const { toast } = useToast()
   const [hasDirectHire, setHasDirectHire] = useState(false)
   const [hasBalikManggagawa, setHasBalikManggagawa] = useState(false)
+  const [hasGovToGov, setHasGovToGov] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export default function ApplicantStartPage() {
         if (data.success) {
           setHasDirectHire(Boolean(data.data.hasDirectHire))
           setHasBalikManggagawa(Boolean(data.data.hasBalikManggagawa))
+          setHasGovToGov(Boolean(data.data.hasGovToGov))
         } else {
           toast({
             title: 'Unable to load applications',
@@ -59,7 +61,7 @@ export default function ApplicantStartPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           <ApplicationCard
             title="Direct Hire"
             description="For applicants with a verified employer abroad. Provide your personal and job details to generate a control number and enter the evaluation queue."
@@ -78,6 +80,16 @@ export default function ApplicantStartPage() {
             href="/applicant/start/balik-manggagawa"
             trackHref="/applicant/status"
             alreadySubmittedText="You already have a Balik Manggagawa application."
+          />
+
+          <ApplicationCard
+            title="Gov-to-Gov"
+            description="For applicants under the government-to-government deployment program. Submit your personal data and experience details for screening."
+            disabled={hasGovToGov}
+            loading={loading}
+            href="/applicant/start/gov-to-gov"
+            trackHref="/applicant/status"
+            alreadySubmittedText="You already have a Gov-to-Gov application."
           />
         </div>
       </div>

@@ -14,6 +14,7 @@ interface DateWheelPickerProps {
   className?: string
   disabled?: boolean
   label?: string // Label to display at the top of the date picker modal
+  mode?: 'default' | 'dob'
 }
 
 export function DateWheelPicker({
@@ -25,6 +26,7 @@ export function DateWheelPicker({
   className,
   disabled = false,
   label,
+  mode = 'default',
 }: DateWheelPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -35,6 +37,7 @@ export function DateWheelPicker({
   const yearScrollRef = useRef<HTMLDivElement>(null)
   const monthScrollRef = useRef<HTMLDivElement>(null)
   const dayScrollRef = useRef<HTMLDivElement>(null)
+  const initializedRef = useRef(false)
 
   // Detect mobile vs desktop
   useEffect(() => {
@@ -46,6 +49,16 @@ export function DateWheelPicker({
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  useEffect(() => {
+    if (isMobile && isOpen) {
+      document.body.classList.add('overflow-hidden', 'touch-none')
+      return () => {
+        document.body.classList.remove('overflow-hidden', 'touch-none')
+      }
+    }
+    return () => {}
+  }, [isMobile, isOpen])
 
   // Get closest valid date to today
   const getClosestValidDate = (): { year: number; month: number; day: number } | null => {
@@ -81,7 +94,7 @@ export function DateWheelPicker({
     }
   }
 
-  // Parse initial value or set to closest valid date
+  // Parse initial value or set to closest valid date, then default to today
   useEffect(() => {
     if (value) {
       const date = new Date(value)
@@ -89,19 +102,34 @@ export function DateWheelPicker({
         setSelectedYear(date.getFullYear())
         setSelectedMonth(date.getMonth() + 1)
         setSelectedDay(date.getDate())
+        initializedRef.current = true
+        return
       }
+    }
+
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+    const withinMin = !minDate || todayStr >= minDate
+    const withinMax = !maxDate || todayStr <= maxDate
+
+    if (withinMin && withinMax) {
+      setSelectedYear(today.getFullYear())
+      setSelectedMonth(today.getMonth() + 1)
+      setSelectedDay(today.getDate())
+      initializedRef.current = true
+      return
+    }
+
+    const closestDate = getClosestValidDate()
+    if (closestDate) {
+      setSelectedYear(closestDate.year)
+      setSelectedMonth(closestDate.month)
+      setSelectedDay(closestDate.day)
+      initializedRef.current = true
     } else {
-      // No value provided, set to closest valid date to today
-      const closestDate = getClosestValidDate()
-      if (closestDate) {
-        setSelectedYear(closestDate.year)
-        setSelectedMonth(closestDate.month)
-        setSelectedDay(closestDate.day)
-      } else {
-        setSelectedYear(null)
-        setSelectedMonth(null)
-        setSelectedDay(null)
-      }
+      setSelectedYear(null)
+      setSelectedMonth(null)
+      setSelectedDay(null)
     }
   }, [value, minDate, maxDate])
 
@@ -109,8 +137,16 @@ export function DateWheelPicker({
   const getYearOptions = () => {
     const years: number[] = []
     const currentYear = new Date().getFullYear()
-    const minYear = minDate ? new Date(minDate).getFullYear() : currentYear - 10
-    const maxYear = maxDate ? new Date(maxDate).getFullYear() : currentYear + 20
+    const minYear = minDate
+      ? new Date(minDate).getFullYear()
+      : mode === 'dob'
+        ? currentYear - 100
+        : currentYear - 10
+    const maxYear = maxDate
+      ? new Date(maxDate).getFullYear()
+      : mode === 'dob'
+        ? currentYear
+        : currentYear + 20
     
     for (let y = minYear; y <= maxYear; y++) {
       years.push(y)
@@ -151,10 +187,26 @@ export function DateWheelPicker({
     return true
   }
 
-  // Filter months based on selected year
+  // Filter months based on selected year and min/max constraints
   const getValidMonths = () => {
-    // Always return all 12 months - let day filtering handle date restrictions
-    return getMonthOptions()
+    const months = getMonthOptions()
+    if (!selectedYear) return months
+
+    return months.filter(month => {
+      if (minDate) {
+        const min = new Date(minDate)
+        if (selectedYear === min.getFullYear() && month < min.getMonth() + 1) {
+          return false
+        }
+      }
+      if (maxDate) {
+        const max = new Date(maxDate)
+        if (selectedYear === max.getFullYear() && month > max.getMonth() + 1) {
+          return false
+        }
+      }
+      return true
+    })
   }
 
   // Filter years based on constraints

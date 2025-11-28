@@ -82,9 +82,11 @@ export default function ApplicantHeader() {
   return (
     <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between fixed top-0 left-0 w-full z-30">
       <div className="flex items-center">
-        <h1 className="text-[#1976D2] text-base md:text-lg lg:text-2xl font-bold">
-          BalikBayani Portal
-        </h1>
+        <Link href="/applicant" className="cursor-pointer">
+          <h1 className="text-[#1976D2] text-base md:text-lg lg:text-2xl font-bold hover:opacity-80 transition-opacity">
+            BalikBayani Portal
+          </h1>
+        </Link>
       </div>
 
       <div className="flex items-center gap-4">

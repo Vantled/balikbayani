@@ -67,7 +67,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const existing = await db.query(
-      'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 LIMIT 1',
+      'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
       [user.id]
     )
     if (existing.rows.length > 0) {

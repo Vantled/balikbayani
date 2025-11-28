@@ -1146,8 +1146,17 @@ export default function BalikManggagawaPage() {
                         setViewOpen(true)
                       }}
                     >
-                      <td className="py-3 px-4 text-center">{row.control_number || <span className="text-gray-400">-</span>}</td>
-                      <td className="py-3 px-4 text-center">{row.name_of_worker}</td>
+                      <td className="py-3 px-4 text-center">
+                        {row.control_number || <span className="text-gray-400">-</span>}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {row.name_of_worker}
+                        {row.applicant_user_id && (
+                          <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            Applicant
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-center">{(row.sex || '').toUpperCase()}</td>
                       <td className="py-3 px-4 text-center">{row.destination}</td>
                       <td className="py-3 px-4 text-center">{row.employer || <span className="text-gray-400">-</span>}</td>

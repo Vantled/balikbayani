@@ -9,6 +9,7 @@ export interface GovToGovListItem {
   middle_name?: string
   sex: string
   with_taiwan_work_experience: boolean
+  applicant_user_id?: string | null
 }
 
 export function useGovToGov(filters: any = {}) {

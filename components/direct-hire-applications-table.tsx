@@ -759,8 +759,17 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                         setOpen(true)
                       }}
                     >
-                    <td className="py-3 px-4 text-center">{application.control_number}</td>
-                    <td className="py-3 px-4 text-center">{(application.name || '').toUpperCase()}</td>
+                    <td className="py-3 px-4 text-center">
+                      {application.control_number}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {(application.name || '').toUpperCase()}
+                      {(application as any).applicant_user_id && (
+                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                          Applicant
+                        </div>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-center capitalize">{(application.sex || '').toUpperCase()}</td>
                     {(() => {
                       const raw = (application as any).raw_salary ?? (application as any).rawSalary

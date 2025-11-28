@@ -31,8 +31,9 @@ export default async function ApplicantStartBalikManggagawaPage() {
     redirect('/login?from=/applicant/start/balik-manggagawa')
   }
 
+  // Only block when there is an active (not soft-deleted) BM application
   const existingApp = await db.query(
-    'SELECT id FROM balik_manggagawa_clearance WHERE applicant_user_id = $1 LIMIT 1',
+    'SELECT id FROM balik_manggagawa_clearance WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
     [validatedUser.id]
   )
 

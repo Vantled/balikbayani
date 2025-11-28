@@ -458,9 +458,18 @@ export default function GovToGovPage() {
                       setSelected(row)
                       setViewOpen(true)
                     }}
-                  >
-                    <td className="py-3 px-4 text-center">{row.last_name}</td>
-                    <td className="py-3 px-4 text-center">{row.first_name}</td>
+                    >
+                    <td className="py-3 px-4 text-center">
+                      {row.last_name}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {row.first_name}
+                      {row.applicant_user_id && (
+                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                          Applicant
+                        </div>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-center">{row.middle_name}</td>
                     <td className="py-3 px-4 text-center">{String(row.sex).toUpperCase()}</td>
                     <td className="py-3 px-4 text-center">{row.with_taiwan_work_experience ? 'YES' : 'NO'}</td>

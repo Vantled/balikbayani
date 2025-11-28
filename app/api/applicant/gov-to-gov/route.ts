@@ -97,7 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const existing = await db.query(
-      'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 LIMIT 1',
+      'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
       [user.id]
     )
 

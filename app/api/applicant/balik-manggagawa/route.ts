@@ -20,7 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     // Only allow one BM application per applicant
     const existing = await db.query(
-      'SELECT id FROM balik_manggagawa_clearance WHERE applicant_user_id = $1 LIMIT 1',
+      'SELECT id FROM balik_manggagawa_clearance WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
       [user.id]
     )
     if (existing.rows.length > 0) {

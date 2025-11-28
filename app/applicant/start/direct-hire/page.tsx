@@ -32,9 +32,9 @@ export default async function ApplicantStartDirectHirePage() {
     redirect('/login?from=/applicant/start/direct-hire')
   }
 
-  // Check if applicant already has a Direct Hire application
+  // Check if applicant already has an active Direct Hire application (ignore soft-deleted)
   const existingApp = await db.query(
-    'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 LIMIT 1',
+    'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
     [validatedUser.id]
   )
 

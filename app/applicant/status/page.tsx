@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ApplicantHeader from '@/components/applicant-header'
 import DocumentViewerModal from '@/components/pdf-viewer-modal'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,7 @@ interface ApplicationData<TApplication> {
 
 export default function ApplicantStatusPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [applications, setApplications] = useState<{
     directHire: ApplicationData<DirectHireApplication> | null
@@ -69,6 +70,28 @@ export default function ApplicantStatusPage() {
   useEffect(() => {
     fetchApplications()
   }, [])
+
+  // Show success toast if redirected from successful submission
+  useEffect(() => {
+    const submitted = searchParams.get('submitted')
+    const controlNumber = searchParams.get('control')
+    
+    if (submitted === 'direct-hire' && controlNumber) {
+      toast({
+        title: 'Application submitted successfully!',
+        description: `Your Direct Hire application has been submitted. Control number: ${controlNumber}.`,
+      })
+      // Clean up URL by removing query parameters
+      router.replace('/applicant/status', { scroll: false })
+    } else if (submitted === 'balik-manggagawa' && controlNumber) {
+      toast({
+        title: 'Application submitted successfully!',
+        description: `Your Balik Manggagawa application has been submitted. Control number: ${controlNumber}.`,
+      })
+      // Clean up URL by removing query parameters
+      router.replace('/applicant/status', { scroll: false })
+    }
+  }, [searchParams, toast, router])
 
   const fetchApplications = async () => {
     try {
@@ -217,10 +240,6 @@ export default function ApplicantStatusPage() {
       name: doc.file_name,
     })
     setPdfViewerOpen(true)
-    toast({
-      title: 'Opening document',
-      description: `Loading ${doc.file_name}...`,
-    })
   }
 
   const renderDirectHireApplication = (appData: ApplicationData<DirectHireApplication>) => {
@@ -355,7 +374,6 @@ export default function ApplicantStatusPage() {
                         <FileText className="h-5 w-5 text-gray-400" />
                         <div>
                           <div className="font-medium text-sm">{formatDocumentType(doc.document_type)}</div>
-                          <div className="text-xs text-gray-500">{doc.file_name}</div>
                         </div>
                       </div>
                       <Button
@@ -413,7 +431,6 @@ export default function ApplicantStatusPage() {
                   value={`${application.salary_currency || 'USD'} ${Number(application.raw_salary || application.salary).toLocaleString()}`}
                 />
                 <DetailItem label="Submitted" value={formatDate(application.created_at)} />
-                <DetailItem label="Clearance Type" value={application.clearance_type ? formatClearanceType(application.clearance_type) : 'General BM'} />
               </div>
             </div>
 

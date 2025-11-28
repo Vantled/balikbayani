@@ -65,9 +65,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const normalizedCurrency = String(salaryCurrency || 'USD').toUpperCase()
-    const salaryUSD = normalizedCurrency === 'USD'
+    // Convert salary to USD (matching create-application-modal.tsx logic)
+    let salaryUSD = normalizedCurrency === 'USD'
       ? salaryValue
-      : Number(convertToUSD(salaryValue, normalizedCurrency).toFixed(2))
+      : convertToUSD(salaryValue, normalizedCurrency)
+    // Round to nearest hundredths (matching create-application-modal.tsx)
+    salaryUSD = Math.round((salaryUSD + Number.EPSILON) * 100) / 100
 
     const clearance = await DatabaseService.createBalikManggagawaClearance({
       nameOfWorker: String(nameOfWorker).toUpperCase(),

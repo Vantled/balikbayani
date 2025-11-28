@@ -138,14 +138,8 @@ export default function BalikManggagawaApplicantForm({
         return
       }
 
-      toast({
-        title: 'Balik Manggagawa application submitted!',
-        description: `Control number: ${data.data.controlNumber}. Redirecting to your dashboard...`,
-      })
-
-      setTimeout(() => {
-        router.push(`/applicant?submitted=balik-manggagawa&control=${encodeURIComponent(data.data.controlNumber)}`)
-      }, 1500)
+      // Redirect immediately to status page with success parameter
+      router.push(`/applicant/status?submitted=balik-manggagawa&control=${encodeURIComponent(data.data.controlNumber)}`)
     } catch (error) {
       console.error('Applicant BM submit error:', error)
       toast({

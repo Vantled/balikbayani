@@ -5,6 +5,7 @@ import { AuthService } from '@/lib/services/auth-service'
 import { DatabaseService } from '@/lib/services/database-service'
 import { db } from '@/lib/database'
 import { FileUploadService } from '@/lib/file-upload-service'
+import { convertToUSD } from '@/lib/currency-converter'
 
 const baseChecklist = () => ({
   evaluated: { checked: false, timestamp: null },
@@ -76,6 +77,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 409 })
     }
 
+    // Convert salary to USD (matching create-application-modal.tsx logic)
+    const normalizedCurrency = String(salaryCurrency || 'USD').toUpperCase()
+    let salaryUsd = normalizedCurrency === 'USD'
+      ? salaryValue
+      : convertToUSD(salaryValue, normalizedCurrency)
+    // Round to nearest hundredths (matching create-application-modal.tsx)
+    salaryUsd = Math.round((salaryUsd + Number.EPSILON) * 100) / 100
+
     const controlNumber = await DatabaseService.generateDirectHireControlNumber()
     const fullName = [
       firstName.toUpperCase(),
@@ -89,9 +98,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       email: contactEmail.toLowerCase(),
       cellphone: contactNumber,
       sex: sex === 'female' ? 'female' : 'male',
-      salary: salaryValue,
+      salary: salaryUsd,
       raw_salary: salaryValue,
-      salary_currency: salaryCurrency.toUpperCase(),
+      salary_currency: normalizedCurrency,
       status: 'pending',
       jobsite: jobsite.toUpperCase(),
       position: position.toUpperCase(),

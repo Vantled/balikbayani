@@ -233,19 +233,35 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         title: 'Step 2: Documents',
         description: 'Please upload all required documents and fill in their details.',
       })
+      // Scroll to top of page
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
     }
   }
 
   const goToReviewStep = () => {
     if (!validateInfo()) {
       setStep('info')
+      // Scroll to top of page
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
       return
     }
     if (!validateDocuments()) {
       setStep('documents')
+      // Scroll to top of page
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
       return
     }
     setStep('review')
+    // Scroll to top of page
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 100)
   }
 
   // Compute USD equivalent display similar to staff create modal
@@ -271,6 +287,14 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     }
     compute()
   }, [formState.salaryAmount, formState.salaryCurrency])
+
+  // Scroll to top when step changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [step])
 
   const validateDocuments = () => {
     const requiredDocs = [
@@ -469,11 +493,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         throw new Error(errorMessage)
       }
 
-      toast({
-        title: 'Application submitted successfully!',
-        description: `Your Direct Hire application has been submitted. Control number: ${data.data.controlNumber}. You will be redirected shortly.`,
-      })
-
       // Clear saved draft on successful submission
       try {
         if (typeof window !== 'undefined') {
@@ -483,10 +502,8 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         // ignore
       }
 
-      // Delay redirect to allow user to see the success message
-      setTimeout(() => {
-        router.push(`/applicant?submitted=direct-hire&control=${encodeURIComponent(data.data.controlNumber)}`)
-      }, 2000)
+      // Redirect immediately to status page with success parameter
+      router.push(`/applicant/status?submitted=direct-hire&control=${encodeURIComponent(data.data.controlNumber)}`)
     } catch (error: any) {
       console.error('Applicant direct hire submission error:', error)
       let errorMessage = 'Unable to submit your application. Please try again later.'
@@ -527,6 +544,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
             // When going back to info, clear document errors
             setDocErrors({})
             setStep('info')
+            // Scroll to top of page
+            setTimeout(() => {
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }, 100)
           }}
           className={`flex-1 text-left sm:text-center py-2 ${step === 'info' ? 'text-[#0f62fe] border-b-2 border-[#0f62fe]' : ''}`}
         >
@@ -1222,6 +1243,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
               onClick={() => {
                 setDocErrors({})
                 setStep('info')
+                // Scroll to top of page
+                setTimeout(() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }, 100)
               }}
             >
               Back
@@ -1242,7 +1267,13 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
               type="button"
               variant="outline"
               disabled={loading}
-              onClick={() => setStep('documents')}
+              onClick={() => {
+                setStep('documents')
+                // Scroll to top of page
+                setTimeout(() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }, 100)
+              }}
             >
               Back
             </Button>

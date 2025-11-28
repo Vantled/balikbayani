@@ -6,7 +6,7 @@ import { db } from '@/lib/database'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
     const token = request.cookies.get('bb_auth_token')?.value
@@ -19,7 +19,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
     const result = await db.query(
       'SELECT * FROM balik_manggagawa_clearance WHERE id = $1 LIMIT 1',
       [id]

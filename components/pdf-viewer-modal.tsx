@@ -20,6 +20,21 @@ export default function DocumentViewerModal({ isOpen, onClose, documentId, docum
   const [error, setError] = useState<string | null>(null)
   const [fileType, setFileType] = useState<'pdf' | 'image' | null>(null)
 
+  // Truncate filename to 15 characters while preserving extension
+  const getTruncatedFileName = (fileName: string): string => {
+    const lastDotIndex = fileName.lastIndexOf('.')
+    if (lastDotIndex === -1) {
+      // No extension found
+      return fileName.length > 15 ? `${fileName.substring(0, 15)}...` : fileName
+    }
+    const baseName = fileName.substring(0, lastDotIndex)
+    const extension = fileName.substring(lastDotIndex)
+    if (baseName.length > 15) {
+      return `${baseName.substring(0, 15)}...${extension}`
+    }
+    return fileName
+  }
+
   useEffect(() => {
     if (isOpen && (documentId || fileBlob)) {
       loadDocument()
@@ -83,20 +98,22 @@ export default function DocumentViewerModal({ isOpen, onClose, documentId, docum
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-full h-[90vh] p-0 rounded-2xl overflow-hidden z-[70]">
-        <div className="bg-[#1976D2] text-white px-6 py-4 flex items-center justify-between">
-          <DialogTitle className="text-lg font-bold flex items-center gap-2">
+      <DialogContent className="max-w-6xl w-[95vw] h-[70vh] max-h-[70vh] p-0 rounded-2xl overflow-hidden z-[70] md:w-full md:h-[90vh] md:max-h-[90vh]">
+        <div className="bg-[#1976D2] text-white px-4 py-3 md:px-6 md:py-4 flex items-center justify-between gap-2">
+          <DialogTitle className="text-base md:text-lg font-bold flex items-center gap-2 truncate flex-1 min-w-0">
             <span>{fileType === 'image' ? '🖼️' : '📄'}</span>
-            {documentName}
+            <span className="truncate" title={documentName}>
+              {getTruncatedFileName(documentName)}
+            </span>
           </DialogTitle>
           <DialogClose asChild>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-blue-600">
+            <Button variant="ghost" size="icon" className="text-white hover:bg-blue-600 flex-shrink-0">
               <X className="h-5 w-5" />
             </Button>
           </DialogClose>
         </div>
         
-        <div className="h-[calc(90vh-80px)] relative">
+        <div className="h-[calc(70vh-64px)] md:h-[calc(90vh-80px)] relative overflow-hidden">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
               <div className="flex items-center gap-2">
@@ -120,20 +137,25 @@ export default function DocumentViewerModal({ isOpen, onClose, documentId, docum
           {documentUrl && !loading && !error && (
             <>
               {fileType === 'pdf' && (
-                <iframe
-                  src={documentUrl}
-                  className="w-full h-full border-0"
-                  title={documentName}
-                />
+                <div className="w-full h-full flex items-center justify-center bg-gray-50 p-2 md:p-0 overflow-auto">
+                  <div className="scale-75 md:scale-100 origin-top-left md:origin-center w-full h-full flex items-center justify-center">
+                    <iframe
+                      src={documentUrl}
+                      className="w-full h-full border-0"
+                      title={documentName}
+                    />
+                  </div>
+                </div>
               )}
               {fileType === 'image' && (
-                <div className="w-full h-full flex items-center justify-center bg-gray-50 p-4">
-                  <img
-                    src={documentUrl}
-                    alt={documentName}
-                    className="max-w-full max-h-full object-contain"
-                    style={{ maxHeight: 'calc(90vh - 120px)' }}
-                  />
+                <div className="w-full h-full flex items-center justify-center bg-gray-50 p-2 md:p-4 overflow-auto">
+                  <div className="scale-75 md:scale-100 origin-center">
+                    <img
+                      src={documentUrl}
+                      alt={documentName}
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
                 </div>
               )}
             </>

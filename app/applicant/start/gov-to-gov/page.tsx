@@ -31,8 +31,9 @@ export default async function ApplicantStartGovToGovPage() {
     redirect('/login?from=/applicant/start/gov-to-gov')
   }
 
+  // Only block when there is an active (not soft-deleted) Gov-to-Gov application
   const existing = await db.query(
-    'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 LIMIT 1',
+    'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
     [validatedUser.id]
   )
 

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     // Check for existing Direct Hire application
     const directHireResult = await db.query(
-      'SELECT id, control_number, status, created_at FROM direct_hire_applications WHERE applicant_user_id = $1 LIMIT 1',
+      'SELECT id, control_number, status, created_at FROM direct_hire_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
       [user.id]
     )
 
@@ -45,6 +45,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       `SELECT id, control_number, status, created_at 
        FROM balik_manggagawa_clearance 
        WHERE applicant_user_id = $1 
+         AND deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 1`,
       [user.id]
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       `SELECT id, created_at 
        FROM gov_to_gov_applications
        WHERE applicant_user_id = $1
+         AND deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 1`,
       [user.id]

@@ -18,7 +18,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     // Get client IP and user agent
-    const ipAddress = request.headers.get('x-forwarded-for') || 
+    const rawForwardedFor = request.headers.get('x-forwarded-for') || ''
+    const firstForwardedIp = rawForwardedFor.split(',')[0]?.trim()
+    const ipAddress = firstForwardedIp || 
                      request.headers.get('x-real-ip') || 
                      'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';

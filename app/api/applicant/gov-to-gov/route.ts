@@ -4,13 +4,14 @@ import { ApiResponse } from '@/lib/types'
 import { AuthService } from '@/lib/services/auth-service'
 import { DatabaseService } from '@/lib/services/database-service'
 import { db } from '@/lib/database'
+import { NotificationService } from '@/lib/services/notification-service'
 
 const toUpper = (value: string | undefined | null) => (value || '').toString().trim().toUpperCase()
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 const isValidContactNumber = (value: string) => /^09\d{9}$/.test(value)
 
-// Generate GG-style reference similar to DH/BM control numbers
+// Generate GG-style control number similar to BM format: GG-YYYY-MMDD-XXX-YYY
 const formatGovToGovReference = (id: string, createdAt: Date) => {
   const year = createdAt.getFullYear()
   const month = String(createdAt.getMonth() + 1).padStart(2, '0')
@@ -22,8 +23,8 @@ const formatGovToGovReference = (id: string, createdAt: Date) => {
   const monthly = String((hash % 1000) || 1).padStart(3, '0')
   const yearly = String((Math.floor(hash / 1000) % 1000) || 1).padStart(3, '0')
 
-  // Match DH/BM style but with GG prefix and double dash: GG--YYYY-MMDD-XXX-YYY
-  return `GG--${year}-${monthDay}-${monthly}-${yearly}`
+  // Match BM style but with GG prefix: GG-YYYY-MMDD-XXX-YYY
+  return `GG-${year}-${monthDay}-${monthly}-${yearly}`
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
@@ -53,8 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       contact_number: body.contact_number,
       passport_number: body.passport_number,
       passport_validity: body.passport_validity,
-      id_presented: body.id_presented,
-      id_number: body.id_number,
+      // ID fields are handled by higher accounts only and are not required from applicants
     }
 
     for (const [field, value] of Object.entries(requiredFields)) {
@@ -126,8 +126,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       contact_number: normalizedContact,
       passport_number: toUpper(body.passport_number),
       passport_validity: passportValidity,
-      id_presented: toUpper(body.id_presented),
-      id_number: toUpper(body.id_number),
+      // ID fields are managed by higher accounts; store placeholder for now
+      id_presented: body.id_presented ? toUpper(body.id_presented) : 'PENDING',
+      id_number: body.id_number ? toUpper(body.id_number) : 'PENDING',
       with_taiwan_work_experience: withTaiwanExperience === 'yes' || withTaiwanExperience === 'true',
       with_job_experience: withJobExperience === 'yes' || withJobExperience === 'true',
       taiwan_company: body.taiwan_company ? toUpper(body.taiwan_company) : null,
@@ -157,6 +158,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const created = await DatabaseService.createGovToGovApplication(payload as any)
+
+    // Create submission notification for applicant
+    try {
+      await NotificationService.createNotification(
+        user.id,
+        'status_change',
+        'Gov-to-Gov Application Submitted',
+        `Your Gov-to-Gov application has been submitted. Control number: ${formatGovToGovReference(created.id, created.created_at ? new Date(created.created_at) : new Date())}.`,
+        'gov_to_gov',
+        created.id
+      )
+    } catch (error) {
+      console.error('Error creating Gov-to-Gov submission notification:', error)
+    }
 
     return NextResponse.json({
       success: true,

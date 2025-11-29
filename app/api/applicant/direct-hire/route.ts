@@ -6,6 +6,7 @@ import { DatabaseService } from '@/lib/services/database-service'
 import { db } from '@/lib/database'
 import { FileUploadService } from '@/lib/file-upload-service'
 import { convertToUSD } from '@/lib/currency-converter'
+import { NotificationService } from '@/lib/services/notification-service'
 
 const baseChecklist = () => ({
   evaluated: { checked: false, timestamp: null },
@@ -171,6 +172,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
           console.error(`Failed to upload ${doc.key}:`, error)
         }
       }
+    }
+
+    // Create submission notification for applicant
+    try {
+      await NotificationService.createNotification(
+        user.id,
+        'status_change',
+        'Direct Hire Application Submitted',
+        `Your Direct Hire application has been submitted. Control number: ${application.control_number}.`,
+        'direct_hire',
+        application.id
+      )
+    } catch (error) {
+      console.error('Error creating Direct Hire submission notification:', error)
     }
 
     return NextResponse.json({

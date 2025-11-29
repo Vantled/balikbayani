@@ -4,6 +4,7 @@ import { ApiResponse } from '@/lib/types'
 import { AuthService } from '@/lib/services/auth-service'
 import { db } from '@/lib/database'
 
+// Generate GG-style control number similar to BM format: GG-YYYY-MMDD-XXX-YYY
 const formatGovToGovReference = (id: string, createdAt: string) => {
   const date = new Date(createdAt)
   const year = date.getFullYear()
@@ -15,8 +16,8 @@ const formatGovToGovReference = (id: string, createdAt: string) => {
   const monthly = String((hash % 1000) || 1).padStart(3, '0')
   const yearly = String((Math.floor(hash / 1000) % 1000) || 1).padStart(3, '0')
 
-  // Match DH/BM style but with GG prefix and double dash: GG--YYYY-MMDD-XXX-YYY
-  return `GG--${year}-${monthDay}-${monthly}-${yearly}`
+  // Match BM style but with GG prefix: GG-YYYY-MMDD-XXX-YYY
+  return `GG-${year}-${monthDay}-${monthly}-${yearly}`
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {

@@ -222,6 +222,22 @@ export async function DELETE(
       newValues: { deleted_at: new Date().toISOString() },
     });
 
+    // Create notification for applicant if application belongs to one
+    if (existing.applicant_user_id) {
+      try {
+        const { NotificationService } = await import('@/lib/services/notification-service');
+        await NotificationService.notifyApplicationDeleted(
+          existing.applicant_user_id,
+          'balik_manggagawa',
+          id,
+          existing.control_number || undefined
+        );
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        // Don't fail the request if notification creation fails
+      }
+    }
+
     const response: ApiResponse = {
       success: true,
       message: 'Clearance deleted successfully'
@@ -318,12 +334,33 @@ export async function PATCH(
       if (Object.keys(oldValues).length > 0 || Object.keys(newValues).length > 0) {
         // Determine specific action based on status change
         let auditAction = 'update';
+        const oldStatus = existing.status;
+        const newStatus = status || oldStatus;
+        
         if (status === 'for_clearance' && existing.status !== 'for_clearance') {
           auditAction = 'for_compliance';
         } else if (status === 'approved' && existing.status !== 'approved') {
           auditAction = 'approved';
         } else if (status === 'rejected' && existing.status !== 'rejected') {
           auditAction = 'rejected';
+        }
+
+        // Create notification for applicant if status changed and application belongs to one
+        if (status && oldStatus !== newStatus && updated.applicant_user_id) {
+          try {
+            const { NotificationService } = await import('@/lib/services/notification-service');
+            await NotificationService.notifyStatusChange(
+              updated.applicant_user_id,
+              'balik_manggagawa',
+              id,
+              oldStatus,
+              newStatus,
+              updated.control_number || undefined
+            );
+          } catch (error) {
+            console.error('Error creating notification:', error);
+            // Don't fail the request if notification creation fails
+          }
         }
 
         // Build newValues for audit log

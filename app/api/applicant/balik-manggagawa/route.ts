@@ -5,6 +5,7 @@ import AuthService from '@/lib/services/auth-service'
 import { db } from '@/lib/database'
 import { DatabaseService } from '@/lib/services/database-service'
 import { convertToUSD } from '@/lib/currency-converter'
+import { NotificationService } from '@/lib/services/notification-service'
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
@@ -87,6 +88,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       time_released: null,
       applicantUserId: user.id,
     })
+
+    // Create submission notification for applicant
+    try {
+      await NotificationService.createNotification(
+        user.id,
+        'status_change',
+        'Balik Manggagawa Application Submitted',
+        `Your Balik Manggagawa application has been submitted. Control number: ${clearance.control_number}.`,
+        'balik_manggagawa',
+        clearance.id
+      )
+    } catch (error) {
+      console.error('Error creating BM submission notification:', error)
+    }
 
     const response: ApiResponse = {
       success: true,

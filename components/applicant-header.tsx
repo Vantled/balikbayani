@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { UserCircle, LogOut, User, Menu, Home, PlayCircle, ListChecks } from "lucide-react"
+import ApplicantNotifications from "@/components/applicant-notifications"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { logout, getUser, validateSession } from "@/lib/auth"
@@ -124,6 +125,9 @@ export default function ApplicantHeader() {
           </Link>
         </nav>
 
+        {/* Notifications */}
+        <ApplicantNotifications />
+
         {/* User avatar + hamburger menu */}
         <div className="flex items-center gap-2">
         <UserCircle className="h-7 lg:h-8 w-7 lg:w-8 text-gray-700" />
@@ -164,11 +168,12 @@ export default function ApplicantHeader() {
               <ListChecks className="mr-2 h-4 w-4" />
               <span>Track Status</span>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/profile" className="flex items-center">
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </Link>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => router.push("/applicant/profile")}
+            >
+              <User className="mr-2 h-4 w-4" />
+              <span>Profile</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer text-red-600 focus:text-red-600"

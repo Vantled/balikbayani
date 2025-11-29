@@ -4,6 +4,7 @@ import { DatabaseService } from '@/lib/services/database-service'
 import { ApiResponse } from '@/lib/types'
 import { recordAuditLog } from '@/lib/server/audit-logger'
 import { extractChangedValues } from '@/lib/utils/objectDiff'
+import { NotificationService } from '@/lib/services/notification-service'
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -94,6 +95,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       } else if (wasReceivedByRegion) {
         auditAction = 'received_by_region';
       }
+
+      // If card was released and application belongs to an applicant, notify them
+      if (wasCardReleased && (existingApplication as any).applicant_user_id) {
+        try {
+          await NotificationService.notifyStatusChange(
+            (existingApplication as any).applicant_user_id,
+            'gov_to_gov',
+            id,
+            existingApplication.date_card_released ? 'card_released' : 'processing',
+            'card_released',
+            (existingApplication as any).control_number || undefined
+          )
+        } catch (error) {
+          console.error('Error creating Gov-to-Gov card released notification:', error)
+        }
+      }
       
       await recordAuditLog(request, {
         action: auditAction,
@@ -133,6 +150,22 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         oldValues: { control_number: existingApplication.control_number },
         newValues: null,
       });
+    }
+
+    // Create notification for applicant if application belongs to one
+    if (existingApplication?.applicant_user_id) {
+      try {
+        const { NotificationService } = await import('@/lib/services/notification-service');
+        await NotificationService.notifyApplicationDeleted(
+          existingApplication.applicant_user_id,
+          'gov_to_gov',
+          id,
+          existingApplication.control_number || undefined
+        );
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        // Don't fail the request if notification creation fails
+      }
     }
     
     return NextResponse.json({ success: true, data: deleted, message: 'Application soft deleted' } as ApiResponse)

@@ -129,7 +129,7 @@ export default function ApplicantStatusPage() {
     } else if (submitted === 'gov-to-gov' && controlNumber) {
       toast({
         title: 'Application submitted successfully!',
-        description: `Your Gov-to-Gov application has been submitted. Reference ID: ${controlNumber}.`,
+        description: `Your Gov-to-Gov application has been submitted. Control number: ${controlNumber}.`,
       })
       router.replace('/applicant/status', { scroll: false })
     }

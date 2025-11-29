@@ -1,6 +1,7 @@
 // app/api/direct-hire/[id]/status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/database'
+import { NotificationService } from '@/lib/services/notification-service'
 import { DatabaseService } from '@/lib/services/database-service'
 import { recordAuditLog } from '@/lib/server/audit-logger'
 
@@ -49,7 +50,7 @@ export async function PUT(
 
     // Update application with new status_checklist
     const result = await db.query(
-      'UPDATE direct_hire_applications SET status_checklist = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status_checklist, status',
+      'UPDATE direct_hire_applications SET status_checklist = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status_checklist, status, control_number, applicant_user_id',
       [JSON.stringify(updatedChecklist), id]
     )
 
@@ -73,6 +74,22 @@ export async function PUT(
           }
         },
       })
+
+      // If status moved to for_confirmation and application belongs to an applicant, notify them
+      if (status === 'for_confirmation' && (existingApplication as any).applicant_user_id) {
+        try {
+          await NotificationService.notifyStatusChange(
+            (existingApplication as any).applicant_user_id,
+            'direct_hire',
+            id,
+            existingApplication.status,
+            'for_confirmation',
+            (existingApplication as any).control_number || undefined
+          )
+        } catch (error) {
+          console.error('Error creating DH status notification:', error)
+        }
+      }
     }
 
     return NextResponse.json({

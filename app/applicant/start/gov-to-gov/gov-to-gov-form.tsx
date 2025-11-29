@@ -62,8 +62,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     contactNumber: '09',
     passportNumber: '',
     passportValidity: '',
-    idPresented: '',
-    idNumber: '',
     withTaiwanExperience: 'no',
     taiwanCompany: '',
     taiwanYearStarted: '',
@@ -72,7 +70,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     otherCompany: '',
     otherYearStarted: '',
     otherYearEnded: '',
-    remarks: '',
   })
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const yearOptions = useMemo(() => {
@@ -189,8 +186,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     } else if (formState.passportValidity < todayIso) {
       errors.passportValidity = 'Passport validity must be in the future.'
     }
-    if (!formState.idPresented.trim()) errors.idPresented = 'ID presented is required.'
-    if (!formState.idNumber.trim()) errors.idNumber = 'ID number is required.'
 
     if (formState.withTaiwanExperience === 'yes') {
       if (!formState.taiwanCompany.trim()) errors.taiwanCompany = 'Company name is required.'
@@ -226,7 +221,10 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
   const goToExperienceStep = () => {
     if (!validateDetails()) return
     setStep('experience')
-    scrollToTop()
+    // Defer scroll until after the new section has rendered
+    setTimeout(() => {
+      scrollToTop()
+    }, 0)
   }
 
   const goToReviewStep = () => {
@@ -285,8 +283,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
           contact_number: formState.contactNumber.trim(),
           passport_number: formState.passportNumber,
           passport_validity: formState.passportValidity,
-          id_presented: formState.idPresented,
-          id_number: formState.idNumber,
           with_taiwan_work_experience: formState.withTaiwanExperience === 'yes',
           with_job_experience: formState.withOtherExperience === 'yes',
           taiwan_company: formState.taiwanCompany,
@@ -295,7 +291,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
           other_company: formState.otherCompany,
           other_year_started: formState.otherYearStarted,
           other_year_ended: formState.otherYearEnded,
-          remarks: formState.remarks,
         }),
       })
 
@@ -338,7 +333,10 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
       <button
         type="button"
         className={`flex-1 text-left sm:text-center py-2 ${step === 'details' ? 'text-[#0f62fe] border-b-2 border-[#0f62fe]' : ''}`}
-        onClick={() => setStep('details')}
+        onClick={() => {
+          setStep('details')
+          scrollToTop()
+        }}
       >
         1. Personal Details
       </button>
@@ -348,6 +346,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
         onClick={() => {
           if (step === 'details' && !validateDetails()) return
           setStep('experience')
+          scrollToTop()
         }}
       >
         2. IDs & Experience
@@ -591,36 +590,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="idPresented">ID Presented</Label>
-            <Select
-              value={formState.idPresented}
-              onValueChange={value => updateField('idPresented', value)}
-            >
-              <SelectTrigger id="idPresented" className={fieldErrors.idPresented ? 'border-red-500 focus:border-red-500' : ''}>
-                <SelectValue placeholder="Select ID" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PASSPORT">Passport</SelectItem>
-                <SelectItem value="UMID">UMID</SelectItem>
-                <SelectItem value="SSS">SSS</SelectItem>
-                <SelectItem value="DRIVER'S LICENSE">Driver's License</SelectItem>
-              </SelectContent>
-            </Select>
-            {fieldErrors.idPresented && <p className="text-xs text-red-500">{fieldErrors.idPresented}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="idNumber">ID Number</Label>
-            <Input
-              id="idNumber"
-              value={formState.idNumber}
-              onChange={e => updateField('idNumber', e.target.value)}
-              className={fieldErrors.idNumber ? 'border-red-500 focus:border-red-500' : ''}
-            />
-            {fieldErrors.idNumber && <p className="text-xs text-red-500">{fieldErrors.idNumber}</p>}
-          </div>
-        </div>
+        {/* ID Presented and ID Number are managed by higher accounts only */}
       </section>
 
       <section className="space-y-4 pt-4 sm:pt-6">
@@ -784,17 +754,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
             </div>
           </div>
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="remarks">Remarks (optional)</Label>
-          <Textarea
-            id="remarks"
-            value={formState.remarks}
-            onChange={e => updateField('remarks', e.target.value)}
-            placeholder="Additional context for your application"
-            className="min-h-[90px]"
-          />
-        </div>
       </section>
     </>
   )
@@ -820,8 +779,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
           <SummaryItem label="Email" value={formState.emailAddress || 'N/A'} />
           <SummaryItem label="Passport Number" value={formState.passportNumber || 'N/A'} />
           <SummaryItem label="Passport Validity" value={formState.passportValidity || 'N/A'} />
-          <SummaryItem label="ID Presented" value={formState.idPresented || 'N/A'} />
-          <SummaryItem label="ID Number" value={formState.idNumber || 'N/A'} />
         </div>
         <div className="pt-4 border-t">
           <SummaryItem
@@ -836,7 +793,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               ? `${formState.otherCompany || 'N/A'} (${formState.otherYearStarted || '-'} - ${formState.otherYearEnded || '-'})`
               : 'NO'}
           />
-          <SummaryItem label="Remarks" value={formState.remarks || 'N/A'} />
         </div>
       </div>
     </section>
@@ -878,7 +834,10 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
             <Button
               type="button"
               variant="outline"
-              onClick={() => setStep('details')}
+              onClick={() => {
+                setStep('details')
+                scrollToTop()
+              }}
               disabled={loading}
             >
               Back
@@ -899,7 +858,10 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
             <Button
               type="button"
               variant="outline"
-              onClick={() => setStep('experience')}
+              onClick={() => {
+                setStep('experience')
+                scrollToTop()
+              }}
               disabled={loading}
             >
               Back

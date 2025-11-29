@@ -122,6 +122,24 @@ export async function PUT(
           // Include status change in audit log
           oldValues.status = oldStatus;
           newValues.status = newStatus;
+
+          // Create notification for applicant if application belongs to one
+          if (result.applicant_user_id) {
+            try {
+              const { NotificationService } = await import('@/lib/services/notification-service');
+              await NotificationService.notifyStatusChange(
+                result.applicant_user_id,
+                'direct_hire',
+                result.id,
+                oldStatus,
+                newStatus,
+                result.control_number || undefined
+              );
+            } catch (error) {
+              console.error('Error creating notification:', error);
+              // Don't fail the request if notification creation fails
+            }
+          }
         }
         
         if (newStatus === 'approved' && oldStatus !== 'approved') {
@@ -254,6 +272,22 @@ export async function DELETE(
       oldValues: before,
       newValues: { deleted_at: new Date().toISOString() },
     });
+
+    // Create notification for applicant if application belongs to one
+    if ((existingApplication as any).applicant_user_id) {
+      try {
+        const { NotificationService } = await import('@/lib/services/notification-service');
+        await NotificationService.notifyApplicationDeleted(
+          (existingApplication as any).applicant_user_id,
+          'direct_hire',
+          id,
+          (existingApplication as any).control_number || undefined
+        );
+      } catch (error) {
+        console.error('Error creating delete notification for direct hire:', error);
+        // Do not fail the request if notification creation fails
+      }
+    }
 
     const response: ApiResponse = {
       success: true,

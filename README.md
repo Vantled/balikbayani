@@ -4,13 +4,13 @@ A modern web application for managing overseas employment and job opportunities 
 
 ## Features
 
-- 🔐 Secure authentication system
-- 📊 Interactive dashboard
-- 📝 Information sheet management
-- 🤝 Government-to-government agreements
-- 💼 Job fairs management
-- 👥 Balik Manggagawa program
-- 🎯 Direct hire processing
+- Secure authentication system
+- Interactive dashboard
+- Information sheet management
+- Government-to-government agreements
+- Job fairs management
+- Balik Manggagawa program
+- Direct hire processing
 
 ## Tech Stack
 
@@ -246,12 +246,12 @@ npm run db:generate-sample-data
 - **Job Fairs** - With multiple email addresses and contact numbers
 
 **Features:**
-- ✅ Follows all validation rules and constraints
-- ✅ Proper capitalization (all uppercase where required)
-- ✅ Realistic Filipino names, destinations, and positions
-- ✅ Unique control numbers generated correctly
-- ✅ Related data included (emails, contacts, documents)
-- ✅ Timestamps spread over the past year
+- Follows all validation rules and constraints
+- Proper capitalization (all uppercase where required)
+- Realistic Filipino names, destinations, and positions
+- Unique control numbers generated correctly
+- Related data included (emails, contacts, documents)
+- Timestamps spread over the past year
 
 **Note:** This script uses your database credentials from `.env.local` and will automatically handle existing records to avoid duplicate control numbers.
 
@@ -267,10 +267,10 @@ npm run db:cleanup-sample-data
 - Verify that all tables are empty after cleanup
 
 **Features:**
-- ✅ Safe deletion order (respects foreign key constraints)
-- ✅ Includes confirmation prompt (requires typing "YES")
-- ✅ Verification report showing record counts after cleanup
-- ✅ Control numbers automatically reset to 001-001 on next record creation
+- Safe deletion order (respects foreign key constraints)
+- Includes confirmation prompt (requires typing "YES")
+- Verification report showing record counts after cleanup
+- Control numbers automatically reset to 001-001 on next record creation
 
 **Warning:** This operation is **irreversible**. All data in the specified tables will be permanently deleted. The script will prompt for confirmation before proceeding.
 
@@ -333,10 +333,6 @@ npm run db:reset
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Security
 

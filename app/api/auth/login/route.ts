@@ -35,13 +35,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 401 });
     }
 
-    // Remove sensitive data from response
+    // Remove sensitive data from response, but keep all name fields
     const { password_hash, ...userWithoutPassword } = loginResult.user!;
+    
+    // Ensure name fields are included in the response
+    const userResponse = {
+      ...userWithoutPassword,
+      first_name: userWithoutPassword.first_name || null,
+      middle_name: userWithoutPassword.middle_name || null,
+      last_name: userWithoutPassword.last_name || null,
+    };
 
     const response = NextResponse.json({
       success: true,
       data: {
-        user: userWithoutPassword,
+        user: userResponse,
         token: loginResult.token
       },
       message: 'Login successful'
@@ -72,8 +80,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     });
     
     response.cookies.set('bb_auth_token', loginResult.token!, cookieOptions);
-    // Set readable user cookie for UI (non-HttpOnly)
-    response.cookies.set('bb_user', JSON.stringify(userWithoutPassword), {
+    // Set readable user cookie for UI (non-HttpOnly) - include all name fields
+    response.cookies.set('bb_user', JSON.stringify(userResponse), {
       httpOnly: false,
       secure: useSecureCookies,
       sameSite: 'lax' as const,

@@ -2691,9 +2691,9 @@ export class DatabaseService {
    */
   static async getUsersWithPermissions(requestingUserRole?: string): Promise<User[]> {
     try {
-      // If requesting user is superadmin, include all users including superadmins
-      // Otherwise, exclude superadmin accounts
-      const roleConditions = ["u.role <> 'applicant'"];
+      // If requesting user is superadmin, include all users including superadmins and applicants
+      // Otherwise, exclude superadmin accounts (but include applicants)
+      const roleConditions: string[] = [];
       if (requestingUserRole !== 'superadmin') {
         roleConditions.push("u.role <> 'superadmin'");
       }

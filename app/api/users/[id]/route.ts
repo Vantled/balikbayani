@@ -47,10 +47,12 @@ export async function PUT(
       }, { status: 400 });
     }
 
+    // Allow changing applicant to staff/admin/superadmin, but not changing other roles to applicant
+    // Also allow changing between staff/admin/superadmin
     if (!['superadmin', 'admin', 'staff'].includes(role)) {
       return NextResponse.json({
         success: false,
-        error: 'Invalid role'
+        error: 'Invalid role. Only staff, admin, and superadmin roles can be assigned through user management.'
       }, { status: 400 });
     }
 

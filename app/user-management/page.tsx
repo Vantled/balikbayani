@@ -24,6 +24,9 @@ interface User {
   username: string;
   email: string;
   full_name: string;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
   role: UserRole;
   is_approved: boolean;
   is_active: boolean;
@@ -558,6 +561,10 @@ export default function UserManagementPage() {
 
   // Compute which permissions should be shown for the target user
   const getVisiblePermissionsForUser = (user: User): string[] => {
+    // Applicants don't have permissions
+    if (user.role === 'applicant') {
+      return [];
+    }
     // Hide Data Backups for all non-superadmin users
     if (user.role !== 'superadmin') {
       return availablePermissions.filter((p) => p !== 'data_backups');
@@ -699,11 +706,12 @@ export default function UserManagementPage() {
     const variants = {
       superadmin: 'destructive',
       admin: 'default',
-      staff: 'secondary'
+      staff: 'secondary',
+      applicant: 'outline'
     } as const;
 
     return (
-      <Badge variant={variants[role as keyof typeof variants]}>
+      <Badge variant={variants[role as keyof typeof variants] || 'outline'}>
         {role.charAt(0).toUpperCase() + role.slice(1)}
       </Badge>
     );
@@ -738,6 +746,8 @@ export default function UserManagementPage() {
 
   const maybeOpenDelete = (user: User, roleClicks: number, statusClicks: number) => {
     if (!currentUser || !isSuperadmin(currentUser)) return;
+    // Don't allow deleting applicant accounts
+    if (user.role === 'applicant') return;
     if (roleClicks >= 5 && statusClicks >= 5) {
       setUserToDelete(user);
       setDeleteDialogOpen(true);
@@ -846,6 +856,17 @@ export default function UserManagementPage() {
                             }}
                             onSelect={(e) => e.preventDefault()}
                           >Staff</DropdownMenuCheckboxItem>
+                          <DropdownMenuCheckboxItem
+                            checked={roleDraft.includes('applicant')}
+                            onCheckedChange={(v)=>{
+                              setRoleDraft(prev=>{
+                                const set = new Set(prev.length === 0 ? [] : prev); // If "All" was selected, start fresh
+                                if (v) set.add('applicant'); else set.delete('applicant');
+                                return Array.from(set);
+                              });
+                            }}
+                            onSelect={(e) => e.preventDefault()}
+                          >Applicant</DropdownMenuCheckboxItem>
                         </div>
                       </div>
                       <div>
@@ -1117,8 +1138,8 @@ export default function UserManagementPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
-                          {/* Only show Edit button for active users */}
-                          {mounted && currentUser && (isAdmin(currentUser) || isSuperadmin(currentUser)) && user.is_active && (
+                          {/* Only show Edit button for active users, but not for applicants */}
+                          {mounted && currentUser && (isAdmin(currentUser) || isSuperadmin(currentUser)) && user.is_active && user.role !== 'applicant' && (
                                 <Dialog open={editDialogOpen && selectedUser?.id === user.id} onOpenChange={setEditDialogOpen}>
                                   <DialogTrigger asChild>
                                     <Button
@@ -1126,7 +1147,10 @@ export default function UserManagementPage() {
                                       size="sm"
                                       onClick={() => {
                                         setSelectedUser(user);
-                                        setFormData({ ...formData, role: user.role });
+                                        // For applicants, default to 'staff' in the form (they can change to staff/admin/superadmin)
+                                        // For other roles, use their current role
+                                        const defaultRole = user.role === 'applicant' ? 'staff' : (user.role as StaffRole);
+                                        setFormData({ ...formData, role: defaultRole });
                                         initPermissionsForUser(user);
                                       }}
                                       title="Edit User"
@@ -1157,65 +1181,78 @@ export default function UserManagementPage() {
                                                   <SelectItem value="superadmin">Superadmin</SelectItem>
                                                 </SelectContent>
                                               </Select>
+                                              {user.role === 'applicant' && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                  Current role: Applicant. You can change this to Staff, Admin, or Superadmin.
+                                                </p>
+                                              )}
                                             </div>
                                           );
                                         }
                                         return null;
                                       })()}
 
-                                      <div>
-                                        <Label>Page Permissions</Label>
-                                        <div className="mt-2">
-                                              <DropdownMenu>
-                                            <div className="flex items-center gap-2 w-full">
-                                              <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="flex-1 overflow-hidden">
-                                                  {(() => {
-                                                    const visible = getVisiblePermissionsForUser(user)
-                                                    const selectedKeys = visible.filter((p) => userPermissions[p])
-                                                        const selectedLabelsFull = selectedKeys.map((p) => getPermissionDisplayName(p))
-                                                        const selectedLabelsAbbrev = selectedKeys.map((p) => getPermissionAbbrev(p))
-                                                        const maxToShow = 5
-                                                    let label = 'Select pages'
-                                                        if (selectedLabelsAbbrev.length > 0) {
-                                                          const shown = selectedLabelsAbbrev.slice(0, maxToShow)
-                                                          const remaining = selectedLabelsAbbrev.length - shown.length
-                                                      label = remaining > 0 ? `${shown.join(', ')} and ${remaining} more` : shown.join(', ')
-                                                    }
-                                                    return (
-                                                          <span title={selectedLabelsFull.join(', ')} className="block overflow-hidden text-ellipsis whitespace-nowrap text-left flex-1 pr-2 min-w-0">{label}</span>
-                                                    )
-                                                  })()}
-                                                </Button>
-                                              </DropdownMenuTrigger>
-                                              {(() => {
-                                                const visible = getVisiblePermissionsForUser(user)
-                                                const selectedCount = visible.filter((p) => userPermissions[p]).length
-                                                return (
-                                                  <span className="text-xs text-gray-500 whitespace-nowrap shrink-0">{selectedCount}/{visible.length} selected</span>
-                                                )
-                                              })()}
-                                            </div>
-                                            <DropdownMenuContent className="w-64">
-                                              {getVisiblePermissionsForUser(user).map((permission) => (
-                                                <DropdownMenuCheckboxItem
-                                                  key={permission}
-                                                  checked={!!userPermissions[permission]}
-                                                  disabled={formData.role !== 'staff'}
-                                                  // Keep menu open when toggling multiple items
-                                                  onSelect={(e) => e.preventDefault()}
-                                                  onCheckedChange={(v) => handlePermissionChange(permission, Boolean(v))}
-                                                >
-                                                  {getPermissionDisplayName(permission)}
-                                                </DropdownMenuCheckboxItem>
-                                              ))}
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
+                                      {user.role !== 'applicant' && (
+                                        <div>
+                                          <Label>Page Permissions</Label>
+                                          <div className="mt-2">
+                                                <DropdownMenu>
+                                              <div className="flex items-center gap-2 w-full">
+                                                <DropdownMenuTrigger asChild>
+                                                  <Button variant="outline" className="flex-1 overflow-hidden">
+                                                    {(() => {
+                                                      const visible = getVisiblePermissionsForUser(user)
+                                                      const selectedKeys = visible.filter((p) => userPermissions[p])
+                                                          const selectedLabelsFull = selectedKeys.map((p) => getPermissionDisplayName(p))
+                                                          const selectedLabelsAbbrev = selectedKeys.map((p) => getPermissionAbbrev(p))
+                                                          const maxToShow = 5
+                                                      let label = 'Select pages'
+                                                          if (selectedLabelsAbbrev.length > 0) {
+                                                            const shown = selectedLabelsAbbrev.slice(0, maxToShow)
+                                                            const remaining = selectedLabelsAbbrev.length - shown.length
+                                                        label = remaining > 0 ? `${shown.join(', ')} and ${remaining} more` : shown.join(', ')
+                                                      }
+                                                      return (
+                                                            <span title={selectedLabelsFull.join(', ')} className="block overflow-hidden text-ellipsis whitespace-nowrap text-left flex-1 pr-2 min-w-0">{label}</span>
+                                                      )
+                                                    })()}
+                                                  </Button>
+                                                </DropdownMenuTrigger>
+                                                {(() => {
+                                                  const visible = getVisiblePermissionsForUser(user)
+                                                  const selectedCount = visible.filter((p) => userPermissions[p]).length
+                                                  return (
+                                                    <span className="text-xs text-gray-500 whitespace-nowrap shrink-0">{selectedCount}/{visible.length} selected</span>
+                                                  )
+                                                })()}
+                                              </div>
+                                              <DropdownMenuContent className="w-64">
+                                                {getVisiblePermissionsForUser(user).map((permission) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={permission}
+                                                    checked={!!userPermissions[permission]}
+                                                    disabled={formData.role !== 'staff'}
+                                                    // Keep menu open when toggling multiple items
+                                                    onSelect={(e) => e.preventDefault()}
+                                                    onCheckedChange={(v) => handlePermissionChange(permission, Boolean(v))}
+                                                  >
+                                                    {getPermissionDisplayName(permission)}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </div>
+                                          {formData.role !== 'staff' && (
+                                            <p className="text-xs text-gray-500 mt-2">Admins and Superadmins have full access by default. Page permissions are only configurable for Staff.</p>
+                                          )}
                                         </div>
-                                        {formData.role !== 'staff' && (
-                                          <p className="text-xs text-gray-500 mt-2">Admins and Superadmins have full access by default. Page permissions are only configurable for Staff.</p>
-                                        )}
-                                      </div>
+                                      )}
+                                      {user.role === 'applicant' && (
+                                        <div>
+                                          <Label>Page Permissions</Label>
+                                          <p className="text-sm text-muted-foreground mt-2">Applicants do not have page permissions.</p>
+                                        </div>
+                                      )}
 
                                       <div className="flex justify-end space-x-2">
                                         <Button variant="outline" onClick={() => setEditDialogOpen(false)}>

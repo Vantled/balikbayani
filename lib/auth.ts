@@ -77,6 +77,9 @@ export const register = async (userData: {
   email: string
   password: string
   full_name: string
+  first_name?: string | null
+  middle_name?: string | null
+  last_name?: string | null
   verification_token: string
 }): Promise<{ success: boolean; error?: string }> => {
   try {

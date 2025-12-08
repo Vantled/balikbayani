@@ -10,18 +10,31 @@ const usernameRegex = /^[a-z0-9._-]{4,30}$/i;
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const body = await request.json();
-    const { username, email, password, full_name, verification_token } = body;
+    const { username, email, password, full_name, first_name, middle_name, last_name, verification_token } = body;
 
-    if (!username || !email || !password || !full_name || !verification_token) {
+    // Support both old format (full_name) and new format (first_name, middle_name, last_name)
+    const firstName = first_name?.trim() || '';
+    const middleName = middle_name?.trim() || '';
+    const lastName = last_name?.trim() || '';
+    const fullNameFromParts = [firstName, middleName, lastName].filter(Boolean).join(' ');
+    const trimmedFullName = full_name?.trim() || fullNameFromParts;
+
+    if (!username || !email || !password || !verification_token) {
       return NextResponse.json({
         success: false,
         error: 'All fields are required.'
       }, { status: 400 });
     }
 
+    if (!trimmedFullName && (!firstName || !lastName)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Name is required.'
+      }, { status: 400 });
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedUsername = username.trim().toLowerCase();
-    const trimmedFullName = full_name.trim();
 
     if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json({
@@ -67,7 +80,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       username: normalizedUsername,
       email: normalizedEmail,
       password,
-      full_name: trimmedFullName
+      full_name: trimmedFullName,
+      first_name: firstName || null,
+      middle_name: middleName || null,
+      last_name: lastName || null
     });
 
     if (!registerResult.success) {

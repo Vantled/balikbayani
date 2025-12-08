@@ -164,6 +164,9 @@ export default function RegisterPage() {
         email: normalizedEmail,
         password: formData.password,
         full_name: formattedFullName,
+        first_name: formData.firstName.trim().toUpperCase(),
+        middle_name: formData.middleName.trim() ? formData.middleName.trim().toUpperCase() : null,
+        last_name: formData.lastName.trim().toUpperCase(),
         verification_token: verificationResult.verificationToken,
       })
 

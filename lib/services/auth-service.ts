@@ -99,6 +99,9 @@ export class AuthService {
     email: string;
     password: string;
     full_name: string;
+    first_name?: string | null;
+    middle_name?: string | null;
+    last_name?: string | null;
   }): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       // Check if user already exists
@@ -114,12 +117,23 @@ export class AuthService {
       // Hash password
       const passwordHash = await this.hashPassword(userData.password);
 
-      // Create applicant account
+      // Create applicant account with separate name fields
       const result = await db.query(
-        `INSERT INTO users (username, email, password_hash, full_name, role, is_approved, is_first_login)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO users (username, email, password_hash, full_name, first_name, middle_name, last_name, role, is_approved, is_first_login)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [userData.username, userData.email, passwordHash, userData.full_name, 'applicant', true, true]
+        [
+          userData.username, 
+          userData.email, 
+          passwordHash, 
+          userData.full_name,
+          userData.first_name || null,
+          userData.middle_name || null,
+          userData.last_name || null,
+          'applicant', 
+          true, 
+          true
+        ]
       );
 
       const user = result.rows[0];

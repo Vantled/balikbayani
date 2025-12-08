@@ -41,12 +41,11 @@ export default async function ApplicantStartGovToGovPage() {
     redirect('/applicant/status')
   }
 
-  const fullName = (user?.full_name || '').trim()
-  const nameParts = fullName.split(/\s+/).filter(Boolean)
+  // Use separate name fields if available, otherwise fall back to parsing full_name
   const defaultNames = {
-    first: nameParts[0] || '',
-    last: nameParts.length > 1 ? nameParts[nameParts.length - 1] : '',
-    middle: nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '',
+    first: (user?.first_name || '').trim() || ((user?.full_name || '').split(/\s+/)[0] || ''),
+    last: (user?.last_name || '').trim() || ((user?.full_name || '').split(/\s+/).length > 1 ? (user?.full_name || '').split(/\s+/).slice(-1)[0] : ''),
+    middle: (user?.middle_name || '').trim() || '',
   }
 
   return (

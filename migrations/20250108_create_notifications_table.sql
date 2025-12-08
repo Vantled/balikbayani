@@ -19,3 +19,5 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON applicant_notifications(
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON applicant_notifications(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON applicant_notifications(user_id, is_read) WHERE is_read = FALSE;
 
+
+

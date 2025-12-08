@@ -226,7 +226,6 @@ export default function RegisterPage() {
                     id="firstName"
                     value={formData.firstName}
                     onChange={event => updateField('firstName', event.target.value)}
-                    placeholder="JUAN"
                     required
                   />
                 </div>
@@ -238,7 +237,6 @@ export default function RegisterPage() {
                     id="middleName"
                     value={formData.middleName}
                     onChange={event => updateField('middleName', event.target.value)}
-                    placeholder="REYES"
                   />
                 </div>
                 <div className="space-y-2">
@@ -249,7 +247,6 @@ export default function RegisterPage() {
                     id="lastName"
                     value={formData.lastName}
                     onChange={event => updateField('lastName', event.target.value)}
-                    placeholder="DELA CRUZ"
                     required
                   />
                 </div>
@@ -263,7 +260,6 @@ export default function RegisterPage() {
                   id="username"
                   value={formData.username}
                   onChange={event => updateField('username', event.target.value)}
-                  placeholder="juandelacruz"
                   required
                 />
                 <p className="text-xs text-gray-500">Use lowercase letters, numbers, dots, or hyphens.</p>
@@ -308,7 +304,6 @@ export default function RegisterPage() {
                     type="email"
                     value={formData.email}
                     onChange={event => updateField('email', event.target.value)}
-                    placeholder="you@example.com"
                     required
                     className="sm:flex-1"
                   />

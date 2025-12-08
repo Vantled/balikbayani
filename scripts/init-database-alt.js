@@ -606,7 +606,7 @@ async function initializeDatabase() {
       { file: 'migrations/20250107_add_job_type_column.sql', desc: 'Adding job_type column to balik_manggagawa_clearance' },
       { file: 'migrations/20250128_add_user_permissions.sql', desc: 'Creating user_permissions table' },
       { file: 'migrations/20250108_add_time_received_released.sql', desc: 'Adding time_received and time_released columns for process cycle time tracking' },
-      { file: 'migrations/20250108_add_g2g_date_fields.sql', desc: 'Adding date_received_by_region and date_card_released columns to Gov-to-Gov applications' },
+      { file: 'migrations/20250108_add_g2g_date_fields.sql', desc: 'Adding date_received_by_region, date_card_released, and remarks columns to Gov-to-Gov applications' },
       { file: 'migrations/20251126_create_applicant_otp_table.sql', desc: 'Creating applicant OTP table and adding applicant role' },
       { file: 'migrations/20251126_add_applicant_user_to_direct_hire.sql', desc: 'Adding applicant_user_id to direct_hire_applications' },
       { file: 'migrations/20251127_add_applicant_user_to_balik_manggagawa.sql', desc: 'Adding applicant_user_id to balik_manggagawa_clearance' },

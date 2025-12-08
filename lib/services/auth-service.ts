@@ -750,6 +750,9 @@ export class AuthService {
   static async updateUserProfile(
     userId: string,
     updateData: {
+      first_name?: string | null;
+      middle_name?: string | null;
+      last_name?: string | null;
       full_name?: string;
       email?: string;
       username?: string;
@@ -763,6 +766,18 @@ export class AuthService {
       let paramIndex = 1;
 
       // Build dynamic update query
+      if (updateData.first_name !== undefined) {
+        fields.push(`first_name = $${paramIndex++}`);
+        values.push(updateData.first_name);
+      }
+      if (updateData.middle_name !== undefined) {
+        fields.push(`middle_name = $${paramIndex++}`);
+        values.push(updateData.middle_name);
+      }
+      if (updateData.last_name !== undefined) {
+        fields.push(`last_name = $${paramIndex++}`);
+        values.push(updateData.last_name);
+      }
       if (updateData.full_name !== undefined) {
         fields.push(`full_name = $${paramIndex++}`);
         values.push(updateData.full_name);

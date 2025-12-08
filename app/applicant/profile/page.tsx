@@ -23,7 +23,9 @@ import {
 } from '@/components/ui/dialog'
 
 interface ProfileFormData {
-  full_name: string
+  first_name: string
+  middle_name: string
+  last_name: string
   email: string
   username: string
   current_password: string
@@ -36,12 +38,17 @@ export default function ApplicantProfilePage() {
   const [saving, setSaving] = useState(false)
   const [showPasswordFields, setShowPasswordFields] = useState(false)
   const [showCurrentPasswordModal, setShowCurrentPasswordModal] = useState(false)
-  const [originalData, setOriginalData] = useState<{ email: string; username: string }>({
+  const [originalData, setOriginalData] = useState<{ first_name: string; middle_name: string; last_name: string; email: string; username: string }>({
+    first_name: '',
+    middle_name: '',
+    last_name: '',
     email: '',
     username: '',
   })
   const [formData, setFormData] = useState<ProfileFormData>({
-    full_name: '',
+    first_name: '',
+    middle_name: '',
+    last_name: '',
     email: '',
     username: '',
     current_password: '',
@@ -62,7 +69,9 @@ export default function ApplicantProfilePage() {
     }
     setUser(currentUser)
     const initialData = {
-      full_name: currentUser.full_name || '',
+      first_name: (currentUser.first_name || '').trim(),
+      middle_name: (currentUser.middle_name || '').trim(),
+      last_name: (currentUser.last_name || '').trim(),
       email: currentUser.email || '',
       username: currentUser.username || '',
       current_password: '',
@@ -70,6 +79,9 @@ export default function ApplicantProfilePage() {
     }
     setFormData(initialData)
     setOriginalData({
+      first_name: (currentUser.first_name || '').trim(),
+      middle_name: (currentUser.middle_name || '').trim(),
+      last_name: (currentUser.last_name || '').trim(),
       email: currentUser.email || '',
       username: currentUser.username || '',
     })
@@ -81,11 +93,11 @@ export default function ApplicantProfilePage() {
   }
 
   const handleSaveProfile = async () => {
-    // Validate required fields (excluding full_name as it's read-only)
-    if (!formData.email.trim() || !formData.username.trim()) {
+    // Validate required fields
+    if (!formData.first_name.trim() || !formData.last_name.trim() || !formData.email.trim() || !formData.username.trim()) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Please fill in all required fields (First name, Last name, Email, and Username)',
         variant: 'destructive',
       })
       return
@@ -124,6 +136,9 @@ export default function ApplicantProfilePage() {
 
     try {
       const updateData: any = {
+        first_name: formData.first_name.trim().toUpperCase(),
+        middle_name: formData.middle_name.trim() ? formData.middle_name.trim().toUpperCase() : null,
+        last_name: formData.last_name.trim().toUpperCase(),
         email: formData.email.trim(),
         username: formData.username.trim(),
         current_password: formData.current_password,
@@ -155,6 +170,10 @@ export default function ApplicantProfilePage() {
         if (data.data?.user) {
           setUser((prev: any) => ({
             ...prev,
+            first_name: data.data.user.first_name || '',
+            middle_name: data.data.user.middle_name || '',
+            last_name: data.data.user.last_name || '',
+            full_name: data.data.user.full_name || '',
             email: data.data.user.email,
             username: data.data.user.username,
           }))
@@ -162,6 +181,9 @@ export default function ApplicantProfilePage() {
           // Update form data with the new values from API response
           setFormData(prev => ({
             ...prev,
+            first_name: (data.data.user.first_name || '').trim(),
+            middle_name: (data.data.user.middle_name || '').trim(),
+            last_name: (data.data.user.last_name || '').trim(),
             email: data.data.user.email,
             username: data.data.user.username,
             current_password: '',
@@ -170,6 +192,9 @@ export default function ApplicantProfilePage() {
 
           // Update original data to reflect saved state
           setOriginalData({
+            first_name: (data.data.user.first_name || '').trim(),
+            middle_name: (data.data.user.middle_name || '').trim(),
+            last_name: (data.data.user.last_name || '').trim(),
             email: data.data.user.email,
             username: data.data.user.username,
           })
@@ -177,6 +202,10 @@ export default function ApplicantProfilePage() {
           // Update the user cookie to reflect the changes
           const updatedUser = {
             ...user,
+            first_name: data.data.user.first_name || '',
+            middle_name: data.data.user.middle_name || '',
+            last_name: data.data.user.last_name || '',
+            full_name: data.data.user.full_name || '',
             email: data.data.user.email,
             username: data.data.user.username,
           }
@@ -205,11 +234,14 @@ export default function ApplicantProfilePage() {
 
   // Check if there are any changes
   const hasChanges = useMemo(() => {
+    const firstNameChanged = formData.first_name.trim() !== originalData.first_name
+    const middleNameChanged = formData.middle_name.trim() !== originalData.middle_name
+    const lastNameChanged = formData.last_name.trim() !== originalData.last_name
     const emailChanged = formData.email.trim() !== originalData.email
     const usernameChanged = formData.username.trim() !== originalData.username
     const passwordChanged = showPasswordFields && formData.new_password.trim() !== ''
-    return emailChanged || usernameChanged || passwordChanged
-  }, [formData.email, formData.username, formData.new_password, originalData.email, originalData.username, showPasswordFields])
+    return firstNameChanged || middleNameChanged || lastNameChanged || emailChanged || usernameChanged || passwordChanged
+  }, [formData.first_name, formData.middle_name, formData.last_name, formData.email, formData.username, formData.new_password, originalData, showPasswordFields])
 
   if (loading) {
     return (
@@ -248,20 +280,37 @@ export default function ApplicantProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="full_name">Full Name *</Label>
+                    <Label htmlFor="first_name">First Name *</Label>
                     <Input
-                      id="full_name"
-                      value={formData.full_name}
-                      disabled
-                      className="bg-gray-50 cursor-not-allowed"
-                      placeholder="Enter your full name"
+                      id="first_name"
+                      value={formData.first_name}
+                      onChange={(e) => handleInputChange('first_name', e.target.value.toUpperCase())}
+                      placeholder="JUAN"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Full name cannot be changed
-                    </p>
                   </div>
+                  <div>
+                    <Label htmlFor="middle_name">Middle Name</Label>
+                    <Input
+                      id="middle_name"
+                      value={formData.middle_name}
+                      onChange={(e) => handleInputChange('middle_name', e.target.value.toUpperCase())}
+                      placeholder="REYES"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="last_name">Last Name *</Label>
+                    <Input
+                      id="last_name"
+                      value={formData.last_name}
+                      onChange={(e) => handleInputChange('last_name', e.target.value.toUpperCase())}
+                      placeholder="DELA CRUZ"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="username">Username *</Label>
                     <Input
@@ -271,18 +320,18 @@ export default function ApplicantProfilePage() {
                       placeholder="Enter username"
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="email">Email Address *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      placeholder="Enter your email address"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    placeholder="Enter your email address"
-                  />
-                </div>
 
                 <div className="pt-4 border-t">
                   <div className="mb-4">
@@ -346,7 +395,9 @@ export default function ApplicantProfilePage() {
                       variant="outline"
                       onClick={() => {
                         setFormData({
-                          full_name: user.full_name || '',
+                          first_name: (user.first_name || '').trim(),
+                          middle_name: (user.middle_name || '').trim(),
+                          last_name: (user.last_name || '').trim(),
                           email: user.email || '',
                           username: user.username || '',
                           current_password: '',
@@ -355,6 +406,9 @@ export default function ApplicantProfilePage() {
                         setShowPasswordFields(false)
                         setShowCurrentPasswordModal(false)
                         setOriginalData({
+                          first_name: (user.first_name || '').trim(),
+                          middle_name: (user.middle_name || '').trim(),
+                          last_name: (user.last_name || '').trim(),
                           email: user.email || '',
                           username: user.username || '',
                         })

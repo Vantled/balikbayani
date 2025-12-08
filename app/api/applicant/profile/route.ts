@@ -22,6 +22,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       username: user.username,
       email: user.email,
       full_name: user.full_name,
+      first_name: user.first_name || null,
+      middle_name: user.middle_name || null,
+      last_name: user.last_name || null,
       role: user.role,
       is_approved: user.is_approved,
       is_active: user.is_active,
@@ -56,12 +59,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     const body = await request.json()
-    const { email, username, current_password, new_password } = body
+    const { first_name, middle_name, last_name, email, username, current_password, new_password } = body
 
-    // Validate required fields (full_name is read-only, so not required in request)
-    if (!email?.trim() || !username?.trim()) {
+    // Validate required fields
+    if (!first_name?.trim() || !last_name?.trim() || !email?.trim() || !username?.trim()) {
       return NextResponse.json(
-        { success: false, error: 'Email and username are required' },
+        { success: false, error: 'First name, last name, email, and username are required' },
         { status: 400 }
       )
     }
@@ -125,8 +128,17 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
       }
     }
 
-    // Prepare update data (full_name is read-only, so not included in updates)
+    // Prepare update data - update names and reconstruct full_name
+    const firstName = first_name.trim().toUpperCase()
+    const middleName = middle_name?.trim() ? middle_name.trim().toUpperCase() : null
+    const lastName = last_name.trim().toUpperCase()
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ')
+
     const updateData: any = {
+      first_name: firstName,
+      middle_name: middleName,
+      last_name: lastName,
+      full_name: fullName,
       email: email.trim(),
       username: username.trim(),
     }
@@ -155,12 +167,18 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
       'users',
       user.id,
       {
+        first_name: user.first_name || null,
+        middle_name: user.middle_name || null,
+        last_name: user.last_name || null,
         full_name: user.full_name,
         email: user.email,
         username: user.username,
       },
       {
-        full_name: user.full_name, // Keep original full_name since it's read-only
+        first_name: updateData.first_name,
+        middle_name: updateData.middle_name,
+        last_name: updateData.last_name,
+        full_name: updateData.full_name,
         email: updateData.email,
         username: updateData.username,
         password_changed: !!new_password,
@@ -179,6 +197,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
       username: result.user.username,
       email: result.user.email,
       full_name: result.user.full_name,
+      first_name: result.user.first_name || null,
+      middle_name: result.user.middle_name || null,
+      last_name: result.user.last_name || null,
       role: result.user.role,
       is_approved: result.user.is_approved,
       is_active: result.user.is_active,

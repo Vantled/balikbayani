@@ -15,6 +15,9 @@ export interface User {
   email: string;
   password_hash?: string;
   full_name: string;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
   role: UserRole;
   is_approved: boolean;
   is_active: boolean;

@@ -587,7 +587,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   id="firstName"
                   value={formState.firstName}
                   onChange={e => updateField('firstName', e.target.value)}
-                  placeholder="JUAN"
                   required
                   className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
                 />
@@ -599,7 +598,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   id="middleName"
                   value={formState.middleName}
                   onChange={e => updateField('middleName', e.target.value)}
-                  placeholder="REYES"
                 />
               </div>
               <div className="space-y-2">
@@ -608,7 +606,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   id="lastName"
                   value={formState.lastName}
                   onChange={e => updateField('lastName', e.target.value)}
-                  placeholder="DELA CRUZ"
                   required
                   className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
                 />
@@ -669,7 +666,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
             type="email"
             value={formState.contactEmail}
             onChange={e => updateField('contactEmail', e.target.value)}
-            placeholder="you@example.com"
             className={fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500' : ''}
           />
           {fieldErrors.contactEmail && <p className="text-xs text-red-500">{fieldErrors.contactEmail}</p>}

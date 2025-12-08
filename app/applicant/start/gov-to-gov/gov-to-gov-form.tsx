@@ -374,7 +374,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="firstName"
               value={formState.firstName}
               onChange={e => updateField('firstName', e.target.value)}
-              placeholder="JUAN"
               className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
             />
             {fieldErrors.firstName && <p className="text-xs text-red-500">{fieldErrors.firstName}</p>}
@@ -385,7 +384,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="middleName"
               value={formState.middleName}
               onChange={e => updateField('middleName', e.target.value)}
-              placeholder="SANTOS"
             />
           </div>
           <div className="space-y-2">
@@ -394,7 +392,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="lastName"
               value={formState.lastName}
               onChange={e => updateField('lastName', e.target.value)}
-              placeholder="DELA CRUZ"
               className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
             />
             {fieldErrors.lastName && <p className="text-xs text-red-500">{fieldErrors.lastName}</p>}
@@ -508,7 +505,6 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               value={formState.emailAddress}
               onChange={e => updateRawField('emailAddress', e.target.value)}
               className={fieldErrors.emailAddress ? 'border-red-500 focus:border-red-500' : ''}
-              placeholder="you@example.com"
             />
             {fieldErrors.emailAddress && <p className="text-xs text-red-500">{fieldErrors.emailAddress}</p>}
           </div>

@@ -287,7 +287,6 @@ export default function ApplicantProfilePage() {
                       id="first_name"
                       value={formData.first_name}
                       onChange={(e) => handleInputChange('first_name', e.target.value.toUpperCase())}
-                      placeholder="JUAN"
                     />
                   </div>
                   <div>
@@ -296,7 +295,6 @@ export default function ApplicantProfilePage() {
                       id="middle_name"
                       value={formData.middle_name}
                       onChange={(e) => handleInputChange('middle_name', e.target.value.toUpperCase())}
-                      placeholder="REYES"
                     />
                   </div>
                   <div>
@@ -305,7 +303,6 @@ export default function ApplicantProfilePage() {
                       id="last_name"
                       value={formData.last_name}
                       onChange={(e) => handleInputChange('last_name', e.target.value.toUpperCase())}
-                      placeholder="DELA CRUZ"
                     />
                   </div>
                 </div>
@@ -317,7 +314,6 @@ export default function ApplicantProfilePage() {
                       id="username"
                       value={formData.username}
                       onChange={(e) => handleInputChange('username', e.target.value)}
-                      placeholder="Enter username"
                     />
                   </div>
                   <div>
@@ -327,7 +323,6 @@ export default function ApplicantProfilePage() {
                       type="email"
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
-                      placeholder="Enter your email address"
                     />
                   </div>
                 </div>

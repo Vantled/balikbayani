@@ -25,7 +25,7 @@ const JOB_TYPES = [
 
 export default function BalikManggagawaApplicantForm({
   defaultNames,
-  defaultSex = 'female',
+  defaultSex,
 }: BalikManggagawaFormProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -36,13 +36,13 @@ export default function BalikManggagawaApplicantForm({
 
   const [formData, setFormData] = useState({
     nameOfWorker: buildDefaultName(defaultNames),
-    sex: defaultSex,
+    sex: defaultSex || '',
     employer: '',
     destination: '',
     position: '',
-    jobType: 'professional',
+    jobType: '',
     salaryAmount: '',
-    salaryCurrency: 'USD',
+    salaryCurrency: '',
   })
 
   // Load saved draft on mount
@@ -105,6 +105,11 @@ export default function BalikManggagawaApplicantForm({
       return false
     }
 
+    if (!formData.sex) {
+      toast({ title: 'Sex required', description: 'Please select your sex.', variant: 'destructive' })
+      return false
+    }
+
     if (!formData.destination.trim()) {
       toast({ title: 'Destination required', description: 'Please provide your job destination.', variant: 'destructive' })
       return false
@@ -115,8 +120,18 @@ export default function BalikManggagawaApplicantForm({
       return false
     }
 
+    if (!formData.jobType) {
+      toast({ title: 'Job type required', description: 'Please select your job type.', variant: 'destructive' })
+      return false
+    }
+
     if (!formData.salaryAmount || Number(formData.salaryAmount) <= 0) {
       toast({ title: 'Salary required', description: 'Please provide a valid monthly salary amount.', variant: 'destructive' })
+      return false
+    }
+
+    if (!formData.salaryCurrency) {
+      toast({ title: 'Currency required', description: 'Please select a salary currency.', variant: 'destructive' })
       return false
     }
 
@@ -226,6 +241,9 @@ export default function BalikManggagawaApplicantForm({
                   Male
                 </label>
               </div>
+              {!formData.sex && (
+                <p className="text-xs text-red-500 mt-1">Please select your sex.</p>
+              )}
             </div>
 
             <div>
@@ -267,6 +285,7 @@ export default function BalikManggagawaApplicantForm({
                   value={formData.jobType}
                   onChange={(e) => updateField('jobType', e.target.value)}
                 >
+                  <option value="">---</option>
                   {JOB_TYPES.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -293,6 +312,7 @@ export default function BalikManggagawaApplicantForm({
                   value={formData.salaryCurrency}
                   onChange={(e) => updateField('salaryCurrency', e.target.value)}
                 >
+                  <option value="">---</option>
                   {AVAILABLE_CURRENCIES.map((currency) => (
                     <option key={currency.value} value={currency.value}>
                       {currency.value}
@@ -328,7 +348,7 @@ export default function BalikManggagawaApplicantForm({
               <SummaryItem label="Job Type" value={formData.jobType ? formData.jobType.toUpperCase() : 'N/A'} />
               <SummaryItem
                 label="Monthly Salary"
-                value={`${formData.salaryCurrency || 'USD'} ${formData.salaryAmount || '0'}`}
+                value={`${formData.salaryCurrency || 'N/A'} ${formData.salaryAmount || '0'}`}
               />
             </div>
           </div>

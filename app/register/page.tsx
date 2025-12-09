@@ -54,6 +54,22 @@ export default function RegisterPage() {
     [formData.email]
   )
 
+  const requiredFilled = useMemo(() => {
+    const requiredFieldsPresent =
+      formData.firstName.trim() &&
+      formData.lastName.trim() &&
+      formData.username.trim() &&
+      formData.password &&
+      formData.confirmPassword &&
+      normalizedEmail
+
+    const passwordsMatch = formData.password === formData.confirmPassword
+    const emailValid = emailPattern.test(normalizedEmail)
+    const otpComplete = otpValue.length === 6
+
+    return Boolean(requiredFieldsPresent && passwordsMatch && emailValid && otpComplete)
+  }, [formData, normalizedEmail, otpValue])
+
   useEffect(() => {
     if (resendCooldown <= 0) return
     const timer = setTimeout(() => setResendCooldown(prev => Math.max(prev - 1, 0)), 1000)
@@ -172,10 +188,12 @@ export default function RegisterPage() {
 
       if (result.success) {
         toast({
-          title: 'Account created',
-          description: 'You can now sign in to the BalikBayani Portal.',
+          title: 'Registration successful',
+          description: 'Redirecting you to the login page to sign in.',
         })
-        router.push('/login?registered=true')
+        setTimeout(() => {
+          router.push('/login?registered=true')
+        }, 1200)
       } else {
         toast({
           title: 'Registration failed',
@@ -343,7 +361,7 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 className="w-full bg-[#1976D2] hover:bg-[#0f62fe]"
-                disabled={registering}
+                disabled={registering || !requiredFilled}
               >
                 {registering ? 'Creating account...' : 'Create account'}
               </Button>

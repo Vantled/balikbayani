@@ -7,17 +7,34 @@ import { OtpService } from '@/lib/services/otp-service';
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usernameRegex = /^[a-z0-9._-]{4,30}$/i;
 
+const splitFullName = (fullName: string) => {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (parts.length === 0) return { first: '', middle: '', last: '' }
+  if (parts.length === 1) return { first: parts[0], middle: '', last: '' }
+  if (parts.length === 2) return { first: parts[0], middle: '', last: parts[1] }
+
+  return {
+    first: parts[0],
+    middle: parts.slice(1, -1).join(' '),
+    last: parts.slice(-1).join(' '),
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const body = await request.json();
     const { username, email, password, full_name, first_name, middle_name, last_name, verification_token } = body;
 
-    // Support both old format (full_name) and new format (first_name, middle_name, last_name)
-    const firstName = first_name?.trim() || '';
-    const middleName = middle_name?.trim() || '';
-    const lastName = last_name?.trim() || '';
-    const fullNameFromParts = [firstName, middleName, lastName].filter(Boolean).join(' ');
-    const trimmedFullName = full_name?.trim() || fullNameFromParts;
+    // Normalize and ensure we always store separated name parts
+    const parsedFromFull = full_name ? splitFullName(full_name) : { first: '', middle: '', last: '' }
+    const firstName = (first_name?.trim() || parsedFromFull.first || '').toUpperCase();
+    const middleName = (middle_name?.trim() || parsedFromFull.middle || '').toUpperCase();
+    const lastName = (last_name?.trim() || parsedFromFull.last || '').toUpperCase();
+    const normalizedFullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
 
     if (!username || !email || !password || !verification_token) {
       return NextResponse.json({
@@ -26,7 +43,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 400 });
     }
 
-    if (!trimmedFullName && (!firstName || !lastName)) {
+    if (!firstName || !lastName) {
       return NextResponse.json({
         success: false,
         error: 'Name is required.'
@@ -57,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 400 });
     }
 
-    if (trimmedFullName.length < 3) {
+    if (normalizedFullName.length < 3) {
       return NextResponse.json({
         success: false,
         error: 'Full name must be at least 3 characters long.'
@@ -80,7 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       username: normalizedUsername,
       email: normalizedEmail,
       password,
-      full_name: trimmedFullName,
+      full_name: normalizedFullName,
       first_name: firstName || null,
       middle_name: middleName || null,
       last_name: lastName || null

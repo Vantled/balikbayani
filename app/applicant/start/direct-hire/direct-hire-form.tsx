@@ -64,15 +64,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     firstName: defaultNames?.first || '',
     middleName: defaultNames?.middle || '',
     lastName: defaultNames?.last || '',
-    sex: 'male',
+    sex: '',
     contactEmail: defaultEmail || '',
     contactNumber: '09',
     jobsite: '',
     position: '',
-    jobType: 'professional',
+    jobType: '',
     employer: '',
     salaryAmount: '',
-    salaryCurrency: 'USD',
+    salaryCurrency: '',
   })
 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof typeof formState, string>>>({})
@@ -672,7 +672,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         </div>
           </section>
 
-          <section className="space-y-4">
+          <section className="space-y-4 mt-4 md:mt-8">
             <h2 className="text-lg font-semibold text-gray-900">Job Information</h2>
             <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -705,11 +705,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
               <div className="space-y-2">
                 <Label htmlFor="jobType">Job type</Label>
                 <Select
-                  value={formState.jobType}
+                  value={formState.jobType || undefined}
                   onValueChange={value => updateField('jobType', value)}
                 >
               <SelectTrigger id="jobType" className={`bg-white ${fieldErrors.jobType ? 'border-red-500 focus:border-red-500' : ''}`}>
-                    <SelectValue placeholder="Select job type" />
+                    <SelectValue placeholder="---" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="professional">Professional</SelectItem>
@@ -748,11 +748,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                 <div className="space-y-2">
                   <Label htmlFor="salaryCurrency">Currency</Label>
                 <Select
-                  value={formState.salaryCurrency}
+                  value={formState.salaryCurrency || undefined}
                   onValueChange={value => updateField('salaryCurrency', value)}
                 >
                   <SelectTrigger id="salaryCurrency" className={`bg-white ${fieldErrors.salaryCurrency ? 'border-red-500 focus:border-red-500' : ''}`}>
-                    <SelectValue placeholder="Currency" />
+                    <SelectValue placeholder="---" />
                   </SelectTrigger>
                   <SelectContent>
                     {AVAILABLE_CURRENCIES.map(currency => (
@@ -1179,16 +1179,16 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   label="Full Name"
                   value={[formState.firstName, formState.middleName, formState.lastName].filter(Boolean).join(' ') || 'N/A'}
                 />
-                <SummaryItem label="Sex" value={formState.sex.toUpperCase()} />
+                <SummaryItem label="Sex" value={formState.sex ? formState.sex.toUpperCase() : 'N/A'} />
                 <SummaryItem label="Email" value={formState.contactEmail || 'N/A'} />
                 <SummaryItem label="Phone Number" value={formState.contactNumber || 'N/A'} />
                 <SummaryItem label="Job Site" value={formState.jobsite} />
                 <SummaryItem label="Position" value={formState.position} />
-                <SummaryItem label="Job Type" value={formState.jobType.toUpperCase()} />
+                <SummaryItem label="Job Type" value={formState.jobType ? formState.jobType.toUpperCase() : 'N/A'} />
                 <SummaryItem label="Employer" value={formState.employer || 'N/A'} />
                 <SummaryItem
                   label="Monthly Salary"
-                  value={`${formState.salaryCurrency || 'USD'} ${formState.salaryAmount || '0'}`}
+                  value={`${formState.salaryCurrency || 'N/A'} ${formState.salaryAmount || '0'}`}
                 />
               </div>
             </div>

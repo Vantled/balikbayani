@@ -58,34 +58,66 @@ export default function ApplicantProfilePage() {
   const router = useRouter()
 
   useEffect(() => {
-    const currentUser = getUser()
-    if (!currentUser) {
-      router.push('/login')
-      return
+    const loadProfile = async () => {
+      const cachedUser = getUser()
+      if (!cachedUser) {
+        router.push('/login')
+        return
+      }
+      if (cachedUser.role !== 'applicant') {
+        router.push('/dashboard')
+        return
+      }
+
+      const applyUserState = (userData: any) => {
+        const initialData = {
+          first_name: (userData.first_name || '').trim(),
+          middle_name: (userData.middle_name || '').trim(),
+          last_name: (userData.last_name || '').trim(),
+          email: userData.email || '',
+          username: userData.username || '',
+          current_password: '',
+          new_password: '',
+        }
+        setUser(userData)
+        setFormData(initialData)
+        setOriginalData({
+          first_name: initialData.first_name,
+          middle_name: initialData.middle_name,
+          last_name: initialData.last_name,
+          email: initialData.email,
+          username: initialData.username,
+        })
+        Cookies.set('bb_user', JSON.stringify(userData), { expires: 1 })
+      }
+
+      try {
+        const response = await fetch('/api/applicant/profile', {
+          method: 'GET',
+          credentials: 'include',
+        })
+
+        if (response.status === 401) {
+          setLoading(false)
+          router.push('/login?from=/applicant/profile')
+          return
+        }
+
+        const data = await response.json()
+        if (data.success && data.data?.user) {
+          applyUserState(data.data.user)
+        } else {
+          applyUserState(cachedUser)
+        }
+      } catch (error) {
+        console.error('Failed to load profile:', error)
+        applyUserState(cachedUser)
+      } finally {
+        setLoading(false)
+      }
     }
-    if (currentUser.role !== 'applicant') {
-      router.push('/dashboard')
-      return
-    }
-    setUser(currentUser)
-    const initialData = {
-      first_name: (currentUser.first_name || '').trim(),
-      middle_name: (currentUser.middle_name || '').trim(),
-      last_name: (currentUser.last_name || '').trim(),
-      email: currentUser.email || '',
-      username: currentUser.username || '',
-      current_password: '',
-      new_password: '',
-    }
-    setFormData(initialData)
-    setOriginalData({
-      first_name: (currentUser.first_name || '').trim(),
-      middle_name: (currentUser.middle_name || '').trim(),
-      last_name: (currentUser.last_name || '').trim(),
-      email: currentUser.email || '',
-      username: currentUser.username || '',
-    })
-    setLoading(false)
+
+    loadProfile()
   }, [router])
 
   const handleInputChange = (field: keyof ProfileFormData, value: string) => {

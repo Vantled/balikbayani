@@ -41,11 +41,17 @@ export default async function ApplicantStartBalikManggagawaPage() {
     redirect('/applicant/status')
   }
 
-  // Use separate name fields if available, otherwise fall back to parsing full_name
+  const preferredUser = validatedUser || user
+
+  // Use separate name fields from the authenticated user; fall back to parsing full_name for legacy records
   const defaultNames = {
-    first: (user?.first_name || '').trim() || ((user?.full_name || '').split(/\s+/)[0] || ''),
-    last: (user?.last_name || '').trim() || ((user?.full_name || '').split(/\s+/).length > 1 ? (user?.full_name || '').split(/\s+/).slice(-1)[0] : ''),
-    middle: (user?.middle_name || '').trim() || '',
+    first: (preferredUser?.first_name || '').trim() || ((preferredUser?.full_name || '').split(/\s+/)[0] || ''),
+    last:
+      (preferredUser?.last_name || '').trim() ||
+      ((preferredUser?.full_name || '').split(/\s+/).length > 1
+        ? (preferredUser?.full_name || '').split(/\s+/).slice(-1)[0]
+        : ''),
+    middle: (preferredUser?.middle_name || '').trim() || '',
   }
 
   return (
@@ -63,7 +69,6 @@ export default async function ApplicantStartBalikManggagawaPage() {
 
           <BalikManggagawaApplicantForm
             defaultNames={defaultNames}
-            defaultSex={user?.sex === 'male' ? 'male' : 'female'}
           />
         </div>
       </section>

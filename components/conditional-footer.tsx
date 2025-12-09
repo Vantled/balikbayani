@@ -32,14 +32,14 @@ export function ConditionalFooter() {
         <p className="break-words px-2 mt-1">This is a secure government system. Unauthorized access is prohibited and subject to legal action.</p>
       </footer>
     return (
-      <div className="sm:fixed sm:bottom-0 sm:left-0 w-full z-40 max-w-full">
+      <div className="fixed bottom-0 left-0 w-full z-40 max-w-full sm:static sm:mt-8">
         {authFooter}
       </div>
     )
   }
 
   return (
-    <div className="fixed bottom-0 left-0 w-full z-40">
+    <div className="fixed bottom-0 left-0 w-full z-40 sm:static sm:mt-8">
       {baseFooter}
     </div>
   )

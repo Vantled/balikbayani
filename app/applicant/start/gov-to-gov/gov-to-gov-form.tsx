@@ -52,7 +52,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     firstName: (defaultNames?.first || '').toUpperCase(),
     middleName: (defaultNames?.middle || '').toUpperCase(),
     lastName: (defaultNames?.last || '').toUpperCase(),
-    sex: 'female',
+    sex: '',
     dateOfBirth: '',
     height: '',
     weight: '',
@@ -766,7 +766,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
         <div className="grid gap-4 md:grid-cols-2">
           <SummaryItem label="First Name" value={formState.firstName} />
           <SummaryItem label="Last Name" value={formState.lastName} />
-          <SummaryItem label="Sex" value={formState.sex.toUpperCase()} />
+          <SummaryItem label="Sex" value={formState.sex ? formState.sex.toUpperCase() : 'N/A'} />
           <SummaryItem label="Date of Birth" value={formState.dateOfBirth || 'N/A'} />
           <SummaryItem label="Height (cm)" value={formState.height || 'N/A'} />
           <SummaryItem label="Weight (kg)" value={formState.weight || 'N/A'} />

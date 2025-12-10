@@ -192,7 +192,7 @@ export default function RegisterPage() {
           description: 'Redirecting you to the login page to sign in.',
         })
         setTimeout(() => {
-          router.push('/login?registered=true')
+        router.push('/login?registered=true')
         }, 1200)
       } else {
         toast({

@@ -6,7 +6,15 @@ import ApplicantHeader from '@/components/applicant-header'
 import { AuthService } from '@/lib/services/auth-service'
 import { db } from '@/lib/database'
 
-export default async function ApplicantStartDirectHirePage() {
+export default async function ApplicantStartDirectHirePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string; corrections?: string }>
+}) {
+  const params = await searchParams
+  const editApplicationId = params.edit
+  const isCorrectionMode = params.corrections === 'true'
+  
   const cookieStore = await cookies()
   const userCookie = cookieStore.get('bb_user')
   const token = cookieStore.get('bb_auth_token')?.value
@@ -32,14 +40,38 @@ export default async function ApplicantStartDirectHirePage() {
     redirect('/login?from=/applicant/start/direct-hire')
   }
 
-  // Check if applicant already has an active Direct Hire application (ignore soft-deleted)
-  const existingApp = await db.query(
-    'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
-    [validatedUser.id]
-  )
+  // If editing, fetch application data
+  let applicationData: any = null
+  let correctionFields: string[] = []
+  if (editApplicationId && isCorrectionMode) {
+    const appResult = await db.query(
+      'SELECT id, needs_correction, correction_fields FROM direct_hire_applications WHERE id = $1 AND applicant_user_id = $2 AND deleted_at IS NULL',
+      [editApplicationId, validatedUser.id]
+    )
+    if (appResult.rows.length > 0) {
+      applicationData = appResult.rows[0]
+      if (applicationData.needs_correction && applicationData.correction_fields) {
+        try {
+          correctionFields = Array.isArray(applicationData.correction_fields) 
+            ? applicationData.correction_fields 
+            : JSON.parse(applicationData.correction_fields || '[]')
+        } catch {
+          correctionFields = []
+        }
+      }
+    } else {
+      redirect('/applicant/status')
+    }
+  } else {
+    // Check if applicant already has an active Direct Hire application (ignore soft-deleted)
+    const existingApp = await db.query(
+      'SELECT id FROM direct_hire_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
+      [validatedUser.id]
+    )
 
-  if (existingApp.rows.length > 0) {
-    redirect('/applicant/status')
+    if (existingApp.rows.length > 0) {
+      redirect('/applicant/status')
+    }
   }
 
   const preferredUser = validatedUser || user
@@ -71,6 +103,9 @@ export default async function ApplicantStartDirectHirePage() {
         <DirectHireApplicantForm
           defaultEmail={user?.email}
           defaultNames={defaultNames}
+          applicationId={editApplicationId}
+          needsCorrection={isCorrectionMode && applicationData?.needs_correction}
+          correctionFields={correctionFields}
         />
       </div>
     </section>

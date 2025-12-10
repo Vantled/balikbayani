@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { useState, useEffect } from "react"
 import { validateSession } from "@/lib/auth"
+import StaffNotifications from "@/components/staff-notifications"
 
 export default function Header() {
   const { toast } = useToast()
@@ -254,8 +255,12 @@ export default function Header() {
         </nav>
         )}
         {mounted && authReady && (
-          <div className="flex items-center gap-2">
-            <UserCircle className="h-7 lg:h-8 w-7 lg:w-8 text-gray-700" />
+          <>
+            {/* Notifications */}
+            <StaffNotifications />
+            
+            <div className="flex items-center gap-2">
+              <UserCircle className="h-7 lg:h-8 w-7 lg:w-8 text-gray-700" />
             <span className="text-xs lg:text-sm hidden md:inline">
               {currentUser?.full_name || ''}
             </span>
@@ -285,7 +290,8 @@ export default function Header() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </header>

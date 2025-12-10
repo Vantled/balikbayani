@@ -61,27 +61,27 @@ export default function ApplicantProfilePage() {
     const loadProfile = async () => {
       const cachedUser = getUser()
       if (!cachedUser) {
-        router.push('/login')
-        return
-      }
+      router.push('/login')
+      return
+    }
       if (cachedUser.role !== 'applicant') {
-        router.push('/dashboard')
-        return
-      }
+      router.push('/dashboard')
+      return
+    }
 
       const applyUserState = (userData: any) => {
-        const initialData = {
+    const initialData = {
           first_name: (userData.first_name || '').trim(),
           middle_name: (userData.middle_name || '').trim(),
           last_name: (userData.last_name || '').trim(),
           email: userData.email || '',
           username: userData.username || '',
-          current_password: '',
-          new_password: '',
-        }
+      current_password: '',
+      new_password: '',
+    }
         setUser(userData)
-        setFormData(initialData)
-        setOriginalData({
+    setFormData(initialData)
+    setOriginalData({
           first_name: initialData.first_name,
           middle_name: initialData.middle_name,
           last_name: initialData.last_name,
@@ -113,7 +113,7 @@ export default function ApplicantProfilePage() {
         console.error('Failed to load profile:', error)
         applyUserState(cachedUser)
       } finally {
-        setLoading(false)
+    setLoading(false)
       }
     }
 

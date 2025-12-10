@@ -93,6 +93,9 @@ export interface DirectHireApplication {
   employer: string;
   salary_currency?: string;
   raw_salary?: number;
+  needs_correction?: boolean;
+  correction_fields?: string[] | null;
+  correction_note?: string | null;
   status_checklist: {
     evaluated: { checked: boolean; timestamp?: string };
     for_confirmation: { checked: boolean; timestamp?: string };
@@ -109,6 +112,16 @@ export interface DirectHireApplication {
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;
+}
+
+export interface DirectHireCorrection {
+  id: string;
+  application_id: string;
+  field_key: string;
+  message: string;
+  created_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
 }
 
 export interface PersonalInfo {

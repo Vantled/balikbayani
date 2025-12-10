@@ -612,7 +612,10 @@ async function initializeDatabase() {
       { file: 'migrations/20251126_add_applicant_user_to_direct_hire.sql', desc: 'Adding applicant_user_id to direct_hire_applications' },
       { file: 'migrations/20251127_add_applicant_user_to_balik_manggagawa.sql', desc: 'Adding applicant_user_id to balik_manggagawa_clearance' },
       { file: 'migrations/20251128_add_applicant_user_to_gov_to_gov.sql', desc: 'Adding applicant_user_id to gov_to_gov_applications' },
-      { file: 'migrations/20250108_create_notifications_table.sql', desc: 'Creating applicant notifications table' }
+      { file: 'migrations/20250108_create_notifications_table.sql', desc: 'Creating applicant notifications table' },
+      { file: 'migrations/20250301_add_direct_hire_corrections.sql', desc: 'Adding corrections workflow for Direct Hire applications' },
+      { file: 'migrations/20250302_create_staff_notifications_table.sql', desc: 'Creating staff notifications table' },
+      { file: 'migrations/20250303_create_application_views_table.sql', desc: 'Creating application views tracking table' }
     ];
 
     for (const migration of migrations) {

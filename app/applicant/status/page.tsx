@@ -26,6 +26,9 @@ interface DirectHireApplication {
   position: string
   job_type: 'household' | 'professional'
   employer: string
+  needs_correction?: boolean
+  correction_fields?: string[] | null
+  correction_note?: string | null
   status_checklist: {
     evaluated: { checked: boolean; timestamp?: string }
     for_confirmation: { checked: boolean; timestamp?: string }
@@ -102,10 +105,29 @@ export default function ApplicantStatusPage() {
   const [loading, setLoading] = useState(true)
   const [selectedDocument, setSelectedDocument] = useState<{ id: string; name: string } | null>(null)
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [directHireCorrections, setDirectHireCorrections] = useState<{ field_key: string; message: string }[]>([])
+  const [directHireCorrectionsLoading, setDirectHireCorrectionsLoading] = useState(false)
 
   useEffect(() => {
     fetchApplications()
   }, [])
+
+  const fetchDirectHireCorrections = async (applicationId: string) => {
+    try {
+      setDirectHireCorrectionsLoading(true)
+      const res = await fetch(`/api/direct-hire/${applicationId}/corrections`)
+      const data = await res.json()
+      if (data.success) {
+        setDirectHireCorrections(data.data || [])
+      } else {
+        setDirectHireCorrections([])
+      }
+    } catch {
+      setDirectHireCorrections([])
+    } finally {
+      setDirectHireCorrectionsLoading(false)
+    }
+  }
 
   // Show success toast if redirected from successful submission
   useEffect(() => {
@@ -134,6 +156,15 @@ export default function ApplicantStatusPage() {
       router.replace('/applicant/status', { scroll: false })
     }
   }, [searchParams, toast, router])
+
+  useEffect(() => {
+    const app = applications.directHire?.application
+    if (app && app.needs_correction) {
+      void fetchDirectHireCorrections(app.id)
+    } else {
+      setDirectHireCorrections([])
+    }
+  }, [applications.directHire?.application?.id, applications.directHire?.application?.needs_correction])
 
   const fetchApplications = async () => {
     try {
@@ -340,6 +371,81 @@ export default function ApplicantStatusPage() {
         </AccordionTrigger>
         <AccordionContent className="px-6 pb-6">
           <div className="space-y-6 pt-4">
+            {application.needs_correction && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-800">Action required</div>
+                    <div className="text-xs text-amber-700">Some fields need correction before processing continues.</div>
+                  </div>
+                </div>
+                {directHireCorrectionsLoading ? (
+                  <div className="text-sm text-amber-800">Loading corrections...</div>
+                ) : directHireCorrections.length === 0 ? (
+                  <div className="text-sm text-amber-800">Corrections will appear here once available.</div>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {directHireCorrections.map((c, idx) => {
+                      // Convert technical field key to user-friendly label
+                      const getFieldLabel = (fieldKey: string): string => {
+                        const fieldLabelMap: Record<string, string> = {
+                          name: 'Name',
+                          email: 'Email',
+                          cellphone: 'Phone Number',
+                          sex: 'Sex',
+                          jobsite: 'Job Site',
+                          position: 'Position',
+                          job_type: 'Job Type',
+                          employer: 'Employer',
+                          salary: 'Salary',
+                          raw_salary: 'Salary',
+                          salary_currency: 'Salary Currency',
+                          evaluator: 'Evaluator',
+                          passport_number: 'Passport Number',
+                          passport_validity: 'Passport Validity',
+                          visa_category: 'Visa Category',
+                          visa_type: 'Visa Type',
+                          visa_number: 'Visa Number',
+                          visa_validity: 'Visa Validity',
+                          ec_issued_date: 'Employment Contract Issued Date',
+                          ec_verification: 'Employment Contract Verification Type',
+                        }
+                        
+                        if (fieldKey.startsWith('document_')) {
+                          const docType = fieldKey.replace('document_', '')
+                          return docType
+                            .split('_')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join(' ')
+                        }
+                        
+                        return fieldLabelMap[fieldKey] || fieldKey
+                          .split('_')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ')
+                      }
+                      
+                      return (
+                        <li key={idx} className="rounded-md bg-white border p-2">
+                          <div className="font-semibold text-gray-900">{getFieldLabel(c.field_key)}</div>
+                          <div className="text-gray-700">{c.message}</div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      router.push(`/applicant/start/direct-hire?edit=${application.id}&corrections=true`)
+                    }}
+                  >
+                    Open Application Form to Make Corrections
+                  </Button>
+                </div>
+              </div>
+            )}
             {/* Application Details */}
             <div>
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Application Information</h4>

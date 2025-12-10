@@ -1,7 +1,7 @@
 // app/applicant/start/direct-hire/direct-hire-form.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,9 +22,12 @@ interface DirectHireApplicantFormProps {
     middle?: string
     last?: string
   }
+  applicationId?: string
+  needsCorrection?: boolean
+  correctionFields?: string[]
 }
 
-export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: DirectHireApplicantFormProps) {
+export default function DirectHireApplicantForm({ defaultEmail, defaultNames, applicationId, needsCorrection = false, correctionFields = [] }: DirectHireApplicantFormProps) {
   const router = useRouter()
   const { toast } = useToast()
 
@@ -89,16 +92,152 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     ecVerification: '',
   })
 
+  const [existingDocs, setExistingDocs] = useState<{
+    passport: boolean
+    workVisa: boolean
+    employmentContract: boolean
+    tesdaLicense: boolean
+  }>({
+    passport: false,
+    workVisa: false,
+    employmentContract: false,
+    tesdaLicense: false,
+  })
+
+  const [existingDocInfo, setExistingDocInfo] = useState<{
+    passport?: { fileName: string; id: string }
+    workVisa?: { fileName: string; id: string }
+    employmentContract?: { fileName: string; id: string }
+    tesdaLicense?: { fileName: string; id: string }
+  }>({})
+
+  const [correctionReasons, setCorrectionReasons] = useState<Record<string, string>>({})
+  
+  // Track initial values to detect changes
+  const [initialFormState, setInitialFormState] = useState<typeof formState | null>(null)
+  const [initialDocMeta, setInitialDocMeta] = useState<typeof docMeta | null>(null)
+  const [initialDocuments, setInitialDocuments] = useState<typeof documents | null>(null)
+
+  // Helper function to map optional document keys to correction field keys
+  const getOptionalDocFieldKey = (docKey: string): string => {
+    const mapping: Record<string, string> = {
+      countrySpecific: 'document_country_specific',
+      complianceForm: 'document_compliance_form',
+      medicalCertificate: 'document_medical_certificate',
+      peosCertificate: 'document_peos_certificate',
+      clearance: 'document_clearance',
+      insuranceCoverage: 'document_insurance_coverage',
+      eregistration: 'document_eregistration',
+      pdosCertificate: 'document_pdos_certificate',
+    }
+    return mapping[docKey] || `document_${docKey}`
+  }
+
+  // Check if any flagged fields have changed
+  const hasChanges = (): boolean => {
+    if (!needsCorrection) return true // Allow normal form submission when not in correction mode
+    if (!initialFormState || !initialDocMeta || !initialDocuments) return false // Disable until initial values are loaded
+    
+    // Check form fields
+    for (const fieldKey of correctionFields) {
+      if (fieldKey === 'name') {
+        const currentName = `${formState.firstName} ${formState.middleName} ${formState.lastName}`.trim()
+        const initialName = `${initialFormState.firstName} ${initialFormState.middleName} ${initialFormState.lastName}`.trim()
+        if (currentName !== initialName) return true
+      } else if (fieldKey === 'email' && formState.contactEmail !== initialFormState.contactEmail) {
+        return true
+      } else if (fieldKey === 'cellphone' && formState.contactNumber !== initialFormState.contactNumber) {
+        return true
+      } else if (fieldKey === 'sex' && formState.sex !== initialFormState.sex) {
+        return true
+      } else if (fieldKey === 'jobsite' && formState.jobsite !== initialFormState.jobsite) {
+        return true
+      } else if (fieldKey === 'position' && formState.position !== initialFormState.position) {
+        return true
+      } else if (fieldKey === 'job_type' && formState.jobType !== initialFormState.jobType) {
+        return true
+      } else if (fieldKey === 'employer' && formState.employer !== initialFormState.employer) {
+        return true
+      } else if (fieldKey === 'raw_salary' && formState.salaryAmount !== initialFormState.salaryAmount) {
+        return true
+      } else if (fieldKey === 'salary_currency' && formState.salaryCurrency !== initialFormState.salaryCurrency) {
+        return true
+      } else if (fieldKey === 'passport_number' && docMeta.passportNumber !== initialDocMeta.passportNumber) {
+        return true
+      } else if (fieldKey === 'passport_validity' && docMeta.passportExpiry !== initialDocMeta.passportExpiry) {
+        return true
+      } else if (fieldKey === 'visa_category' && docMeta.visaCategory !== initialDocMeta.visaCategory) {
+        return true
+      } else if (fieldKey === 'visa_type' && docMeta.visaType !== initialDocMeta.visaType) {
+        return true
+      } else if (fieldKey === 'visa_number' && docMeta.visaNumber !== initialDocMeta.visaNumber) {
+        return true
+      } else if (fieldKey === 'visa_validity' && docMeta.visaValidity !== initialDocMeta.visaValidity) {
+        return true
+      } else if (fieldKey === 'ec_issued_date' && docMeta.ecIssuedDate !== initialDocMeta.ecIssuedDate) {
+        return true
+      } else if (fieldKey === 'ec_verification' && docMeta.ecVerification !== initialDocMeta.ecVerification) {
+        return true
+      } else if (fieldKey.startsWith('document_')) {
+        const docType = fieldKey.replace('document_', '')
+        const docKeyMap: Record<string, keyof typeof documents> = {
+          passport: 'passport',
+          work_visa: 'workVisa',
+          employment_contract: 'employmentContract',
+          tesda_license: 'tesdaLicense',
+          country_specific: 'countrySpecific',
+          compliance_form: 'complianceForm',
+          medical_certificate: 'medicalCertificate',
+          peos_certificate: 'peosCertificate',
+          clearance: 'clearance',
+          insurance_coverage: 'insuranceCoverage',
+          eregistration: 'eregistration',
+          pdos_certificate: 'pdosCertificate',
+        }
+        const docKey = docKeyMap[docType]
+        if (docKey) {
+          const currentDoc = documents[docKey]
+          const initialDoc = initialDocuments?.[docKey] ?? null
+          // Check if document changed: both null/undefined = no change, one is null and other isn't = change
+          const currentExists = currentDoc !== null && currentDoc !== undefined
+          const initialExists = initialDoc !== null && initialDoc !== undefined
+          if (currentExists !== initialExists) {
+            console.log(`Document ${docKey} changed: current exists=${currentExists}, initial exists=${initialExists}`)
+            return true // One exists and other doesn't = change
+          }
+          if (currentExists && initialExists && currentDoc !== initialDoc) {
+            console.log(`Document ${docKey} changed: different file objects`)
+            return true // Both exist but different = change
+          }
+          // Also check file name/size if both are File objects
+          if (currentDoc instanceof File && initialDoc instanceof File) {
+            if (currentDoc.name !== initialDoc.name || currentDoc.size !== initialDoc.size) {
+              console.log(`Document ${docKey} changed: file name or size different`)
+              return true
+            }
+          }
+        }
+      }
+    }
+    
+    return false
+  }
+
+  // Memoize the hasChanges result so React re-renders when dependencies change
+  const formHasChanges = useMemo(() => {
+    return hasChanges()
+  }, [documents, formState, docMeta, initialFormState, initialDocMeta, initialDocuments, correctionFields, needsCorrection])
+
   const passportComplete =
-    !!documents.passport && !!docMeta.passportNumber.trim() && !!docMeta.passportExpiry
+    (!!documents.passport || existingDocs.passport) && !!docMeta.passportNumber.trim() && !!docMeta.passportExpiry
   const workVisaComplete =
-    !!documents.workVisa &&
+    (!!documents.workVisa || existingDocs.workVisa) &&
     !!docMeta.visaCategory &&
     !!docMeta.visaType &&
     !!docMeta.visaNumber.trim() &&
     !!docMeta.visaValidity
   const employmentContractComplete =
-    !!documents.employmentContract && !!docMeta.ecIssuedDate && !!docMeta.ecVerification
+    (!!documents.employmentContract || existingDocs.employmentContract) && !!docMeta.ecIssuedDate && !!docMeta.ecVerification
 
   const documentChecklist = [
     { label: 'Passport', complete: passportComplete },
@@ -107,8 +246,422 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     { label: 'TESDA / PRC License', complete: !!documents.tesdaLicense },
   ]
 
-  // Load saved draft from localStorage on mount (client-side only)
+  // Helper function to check if a field is editable (for correction mode)
+  const isFieldEditable = (fieldKey: string): boolean => {
+    if (!needsCorrection) return true
+    return correctionFields.includes(fieldKey)
+  }
+
+  // Helper function to check if a field is flagged for correction
+  const isFieldFlagged = (fieldKey: string): boolean => {
+    if (!needsCorrection) return false
+    return correctionFields.includes(fieldKey)
+  }
+
+  // Helper function to get correction reason for a field
+  const getCorrectionReason = (fieldKey: string): string => {
+    // First try exact match
+    if (correctionReasons[fieldKey]) {
+      return correctionReasons[fieldKey]
+    }
+    // If no exact match and field is flagged, return empty string (will show fallback message)
+    return ''
+  }
+
+  // Helper function to get className for flagged fields
+  const getFlaggedFieldClassName = (fieldKey: string, baseClassName: string = ''): string => {
+    const flagged = isFieldFlagged(fieldKey)
+    const editable = isFieldEditable(fieldKey)
+    let className = baseClassName
+    
+    if (!editable) {
+      className += ' bg-gray-100 cursor-not-allowed'
+    }
+    if (flagged) {
+      className += ' border-red-500 border-2 bg-red-50'
+    }
+    return className.trim()
+  }
+
+  // Map form field names to database field keys for flagging
+  const getFieldKeyForFormField = (formField: string): string => {
+    const mapping: Record<string, string> = {
+      firstName: 'name',
+      middleName: 'name',
+      lastName: 'name',
+      contactEmail: 'email',
+      contactNumber: 'cellphone',
+      sex: 'sex',
+      jobsite: 'jobsite',
+      position: 'position',
+      jobType: 'job_type',
+      employer: 'employer',
+      salaryAmount: 'raw_salary',
+      salaryCurrency: 'salary_currency',
+      passportNumber: 'passport_number',
+      passportExpiry: 'passport_validity',
+      visaCategory: 'visa_category',
+      visaType: 'visa_type',
+      visaNumber: 'visa_number',
+      visaValidity: 'visa_validity',
+      ecIssuedDate: 'ec_issued_date',
+      ecVerification: 'ec_verification',
+    }
+    return mapping[formField] || formField
+  }
+
+  // Load existing application data when editing
   useEffect(() => {
+    if (!applicationId) return
+    
+    const loadApplication = async () => {
+      try {
+        const response = await fetch(`/api/applicant/direct-hire/${applicationId}`, {
+          credentials: 'include',
+        })
+        if (!response.ok) return
+        
+        const data = await response.json()
+        if (!data.success || !data.data) return
+        
+        const app = data.data
+        
+        // Parse name into first, middle, last
+        const nameParts = (app.name || '').split(' ').filter(Boolean)
+        const firstName = nameParts[0] || ''
+        const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : (nameParts[1] || '')
+        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+        
+        const loadedFormState = {
+          firstName: firstName,
+          middleName: middleName,
+          lastName: lastName,
+          sex: app.sex || '',
+          contactEmail: app.email || defaultEmail || '',
+          contactNumber: app.cellphone || '09',
+          jobsite: app.jobsite || '',
+          position: app.position || '',
+          jobType: app.job_type || '',
+          employer: (app as any).employer || '',
+          salaryAmount: String((app as any).raw_salary || app.salary || ''),
+          salaryCurrency: (app as any).salary_currency || '',
+        }
+        setFormState(loadedFormState)
+        // Store initial state for change detection
+        if (needsCorrection) {
+          setInitialFormState(loadedFormState)
+        }
+        
+        // Load corrections if in correction mode
+        if (needsCorrection) {
+          try {
+            const correctionsResponse = await fetch(`/api/direct-hire/${applicationId}/corrections`, {
+              credentials: 'include',
+            })
+            if (correctionsResponse.ok) {
+              const correctionsData = await correctionsResponse.json()
+              if (correctionsData.success && correctionsData.data && Array.isArray(correctionsData.data)) {
+                const reasons: Record<string, string> = {}
+                correctionsData.data.forEach((correction: { field_key: string; message: string }) => {
+                  const key = correction.field_key
+                  const message = correction.message
+                  if (key && message) {
+                    reasons[key] = message
+                    // Handle 'salary' field key mapping to both raw_salary and salary_currency
+                    if (key === 'salary') {
+                      reasons['raw_salary'] = message
+                      reasons['salary_currency'] = message
+                    }
+                  }
+                })
+                console.log('Loaded correction reasons:', reasons, 'for correctionFields:', correctionFields)
+                setCorrectionReasons(reasons)
+              } else {
+                console.warn('Corrections API response format unexpected:', correctionsData)
+              }
+            } else {
+              console.warn('Failed to fetch corrections:', correctionsResponse.status, correctionsResponse.statusText)
+            }
+          } catch (err) {
+            console.error('Failed to load corrections:', err)
+          }
+        }
+        
+        // Load documents and metadata
+        const docsResponse = await fetch(
+          `/api/documents?applicationId=${applicationId}&applicationType=direct_hire`,
+          { credentials: 'include' }
+        )
+        if (docsResponse.ok) {
+          const docsData = await docsResponse.json()
+          if (docsData.success && docsData.data) {
+            const docs = docsData.data as any[]
+            
+            // Extract metadata from documents and fetch files
+            const existing = { passport: false, workVisa: false, employmentContract: false, tesdaLicense: false }
+            const documentMap: Record<string, any> = {}
+            const docInfo: typeof existingDocInfo = {}
+            
+            docs.forEach(doc => {
+              const type = doc.document_type
+              documentMap[type] = doc
+              
+              if (type === 'passport') {
+                existing.passport = true
+                docInfo.passport = { fileName: doc.file_name, id: doc.id }
+              }
+              if (type === 'work_visa') {
+                existing.workVisa = true
+                docInfo.workVisa = { fileName: doc.file_name, id: doc.id }
+              }
+              if (type === 'employment_contract') {
+                existing.employmentContract = true
+                docInfo.employmentContract = { fileName: doc.file_name, id: doc.id }
+              }
+              if (type === 'tesda_license') {
+                existing.tesdaLicense = true
+                docInfo.tesdaLicense = { fileName: doc.file_name, id: doc.id }
+              }
+              
+            })
+            
+            setExistingDocs(existing)
+            setExistingDocInfo(docInfo)
+            
+            // Collect docMeta values and store initial state
+            const loadedDocMeta: typeof docMeta = {
+              passportNumber: '',
+              passportExpiry: '',
+              visaCategory: '',
+              visaType: '',
+              visaNumber: '',
+              visaValidity: '',
+              ecIssuedDate: '',
+              ecVerification: '',
+            }
+            
+            docs.forEach(doc => {
+              if (doc.meta) {
+                // Parse metadata if it's a string
+                let meta = doc.meta
+                if (typeof meta === 'string') {
+                  try {
+                    meta = JSON.parse(meta)
+                  } catch (e) {
+                    console.warn('Failed to parse document metadata:', e, 'for document:', doc.document_type)
+                    meta = {}
+                  }
+                }
+                
+                // Ensure meta is an object
+                if (typeof meta !== 'object' || meta === null) {
+                  console.warn('Document metadata is not an object for:', doc.document_type, 'meta:', meta)
+                  return
+                }
+                
+                // Debug logging for passport
+                if (doc.document_type === 'passport') {
+                  console.log('Loading passport metadata:', meta, 'keys:', Object.keys(meta))
+                }
+                
+                if (doc.document_type === 'passport') {
+                  // Try both snake_case and camelCase keys
+                  if (meta.passport_number || meta.passportNumber) {
+                    loadedDocMeta.passportNumber = String(meta.passport_number || meta.passportNumber).trim()
+                  }
+                  if (meta.passport_expiry || meta.passportExpiry) {
+                    loadedDocMeta.passportExpiry = String(meta.passport_expiry || meta.passportExpiry).trim()
+                  }
+                } else if (doc.document_type === 'work_visa') {
+                  if (meta.visa_category) loadedDocMeta.visaCategory = String(meta.visa_category).trim()
+                  if (meta.visa_type) loadedDocMeta.visaType = String(meta.visa_type).trim()
+                  if (meta.visa_number) loadedDocMeta.visaNumber = String(meta.visa_number).trim()
+                  if (meta.visa_validity) loadedDocMeta.visaValidity = String(meta.visa_validity).trim()
+                } else if (doc.document_type === 'employment_contract') {
+                  if (meta.ec_issued_date) loadedDocMeta.ecIssuedDate = String(meta.ec_issued_date).trim()
+                  if (meta.ec_verification) loadedDocMeta.ecVerification = String(meta.ec_verification).trim()
+                }
+              } else {
+                // Log when document exists but has no metadata
+                console.warn('Document', doc.document_type, 'exists but has no metadata')
+              }
+            })
+            
+            console.log('Loaded document metadata:', loadedDocMeta)
+            
+            setDocMeta(loadedDocMeta)
+            if (needsCorrection) {
+              setInitialDocMeta({ ...loadedDocMeta })
+            }
+            
+            // Fetch document files and create File objects
+            const fetchDocumentFiles = async () => {
+              const filePromises = [
+                { key: 'passport', doc: documentMap['passport'] },
+                { key: 'workVisa', doc: documentMap['work_visa'] },
+                { key: 'employmentContract', doc: documentMap['employment_contract'] },
+                { key: 'tesdaLicense', doc: documentMap['tesda_license'] },
+              ].map(async ({ key, doc }) => {
+                if (!doc || !doc.id) return null
+                
+                try {
+                  const fileResponse = await fetch(`/api/documents/${doc.id}/view`, {
+                    credentials: 'include',
+                  })
+                  if (!fileResponse.ok) return null
+                  
+                  const blob = await fileResponse.blob()
+                  const fileName = doc.file_name || `${key}.pdf`
+                  const file = new File([blob], fileName, { type: blob.type || doc.mime_type || 'application/pdf' })
+                  return { key, file }
+                } catch (err) {
+                  console.error(`Failed to fetch ${key} document:`, err)
+                  return null
+                }
+              })
+              
+              const results = await Promise.all(filePromises)
+              const newDocuments = { ...documents }
+              results.forEach(result => {
+                if (result) {
+                  newDocuments[result.key as keyof typeof documents] = result.file
+                }
+              })
+              setDocuments(newDocuments)
+              
+              // Store initial documents for change detection
+              // Include all document keys, even if they're null/undefined
+              if (needsCorrection) {
+                const initialDocsState: typeof documents = {
+                  passport: newDocuments.passport ?? null,
+                  workVisa: newDocuments.workVisa ?? null,
+                  employmentContract: newDocuments.employmentContract ?? null,
+                  tesdaLicense: newDocuments.tesdaLicense ?? null,
+                  countrySpecific: newDocuments.countrySpecific ?? null,
+                  complianceForm: newDocuments.complianceForm ?? null,
+                  medicalCertificate: newDocuments.medicalCertificate ?? null,
+                  peosCertificate: newDocuments.peosCertificate ?? null,
+                  clearance: newDocuments.clearance ?? null,
+                  insuranceCoverage: newDocuments.insuranceCoverage ?? null,
+                  eregistration: newDocuments.eregistration ?? null,
+                  pdosCertificate: newDocuments.pdosCertificate ?? null,
+                }
+                setInitialDocuments(initialDocsState)
+              }
+            }
+            
+            await fetchDocumentFiles()
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load application data:', err)
+      }
+    }
+    
+    void loadApplication()
+  }, [applicationId, defaultEmail])
+
+  // Scroll to first flagged field when form loads in correction mode
+  useEffect(() => {
+    if (!needsCorrection || correctionFields.length === 0) return
+    
+    // Wait for form to render, then scroll to first flagged field
+    const timer = setTimeout(() => {
+      // Find the first flagged field and scroll to it
+      const fieldSelectors = [
+        'firstName', 'middleName', 'lastName', // name
+        'contactEmail', // email
+        'contactNumber', // cellphone
+        'sex-male', 'sex-female', // sex
+        'jobsite', // jobsite
+        'position', // position
+        'jobType', // job_type
+        'employer', // employer
+        'salaryAmount', // raw_salary
+        'salaryCurrency', // salary_currency
+        'passportNumber', // passport_number
+        'passportExpiry', // passport_validity
+        'visaCategory', // visa_category
+        'visaType', // visa_type
+        'visaNumber', // visa_number
+        'visaValidity', // visa_validity
+        'ecIssuedDate', // ec_issued_date
+        'ecVerification', // ec_verification
+      ]
+      
+      for (const fieldKey of correctionFields) {
+        let selector: string | null = null
+        
+        if (fieldKey === 'name') {
+          selector = 'firstName'
+        } else if (fieldKey === 'email') {
+          selector = 'contactEmail'
+        } else if (fieldKey === 'cellphone') {
+          selector = 'contactNumber'
+        } else if (fieldKey === 'sex') {
+          selector = 'sex-male'
+        } else if (fieldKey === 'jobsite') {
+          selector = 'jobsite'
+        } else if (fieldKey === 'position') {
+          selector = 'position'
+        } else if (fieldKey === 'job_type') {
+          selector = 'jobType'
+        } else if (fieldKey === 'employer') {
+          selector = 'employer'
+        } else if (fieldKey === 'raw_salary') {
+          selector = 'salaryAmount'
+        } else if (fieldKey === 'salary_currency') {
+          selector = 'salaryCurrency'
+        } else if (fieldKey === 'passport_number') {
+          selector = 'passportNumber'
+        } else if (fieldKey === 'passport_validity') {
+          selector = 'passportExpiry'
+        } else if (fieldKey === 'visa_category') {
+          selector = 'visaCategory'
+        } else if (fieldKey === 'visa_type') {
+          selector = 'visaType'
+        } else if (fieldKey === 'visa_number') {
+          selector = 'visaNumber'
+        } else if (fieldKey === 'visa_validity') {
+          selector = 'visaValidity'
+        } else if (fieldKey === 'ec_issued_date') {
+          selector = 'ecIssuedDate'
+        } else if (fieldKey === 'ec_verification') {
+          selector = 'ecVerification'
+        } else if (fieldKey.startsWith('document_')) {
+          // For documents, scroll to documents section
+          selector = 'documents-section'
+        }
+        
+        if (selector) {
+          const element = document.getElementById(selector) || document.querySelector(`[id*="${selector}"]`)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            // Highlight the field briefly
+            element.classList.add('ring-2', 'ring-red-500')
+            setTimeout(() => {
+              element.classList.remove('ring-2', 'ring-red-500')
+            }, 2000)
+            break
+          }
+        }
+      }
+      
+      // If no specific field found but we're in correction mode, scroll to documents section
+      if (correctionFields.some(f => f.startsWith('document_'))) {
+        const docsSection = document.getElementById('documents-section') || document.querySelector('[data-section="documents"]')
+        if (docsSection) {
+          docsSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }
+    }, 500)
+    
+    return () => clearTimeout(timer)
+  }, [needsCorrection, correctionFields])
+
+  // Load saved draft from localStorage on mount (client-side only) - skip if editing
+  useEffect(() => {
+    if (applicationId) return // Skip localStorage load when editing
     try {
       if (typeof window === 'undefined') return
       const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -137,7 +690,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
       console.error('Failed to load saved applicant form state:', err)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [applicationId])
 
   // Auto-save draft to localStorage whenever form fields or metadata change
   useEffect(() => {
@@ -390,6 +943,33 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
     return true
   }
 
+  // Map form field names to database column names
+  const mapFormFieldToDbField = (formField: string): string => {
+    const mapping: Record<string, string> = {
+      firstName: 'name', // Will be combined with middleName and lastName
+      middleName: 'name', // Part of name
+      lastName: 'name', // Part of name
+      contactEmail: 'email',
+      contactNumber: 'cellphone',
+      sex: 'sex',
+      jobsite: 'jobsite',
+      position: 'position',
+      jobType: 'job_type',
+      employer: 'employer',
+      salaryAmount: 'raw_salary',
+      salaryCurrency: 'salary_currency',
+      passportNumber: 'passport_number',
+      passportExpiry: 'passport_validity',
+      visaCategory: 'visa_category',
+      visaType: 'visa_type',
+      visaNumber: 'visa_number',
+      visaValidity: 'visa_validity',
+      ecIssuedDate: 'ec_issued_date',
+      ecVerification: 'ec_verification',
+    }
+    return mapping[formField] || formField
+  }
+
   const handleSubmit = async () => {
     if (step !== 'review') {
       return
@@ -399,6 +979,171 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
       return
     }
 
+    // Validate session before submission
+    const isSessionValid = await validateSession()
+    if (!isSessionValid) {
+      toast({
+        title: 'Session expired',
+        description: 'Your session has expired. Please log in again to submit your application.',
+        variant: 'destructive',
+      })
+      setTimeout(() => {
+        router.push('/login?from=/applicant/start/direct-hire&sessionExpired=true')
+      }, 2000)
+      return
+    }
+
+    // Handle correction mode submission
+    if (needsCorrection && applicationId) {
+      setLoading(true)
+      toast({
+        title: 'Submitting corrections...',
+        description: 'Please wait while we process your corrections.',
+      })
+
+      try {
+        // Build payload with only editable fields
+        const payload: Record<string, string> = {}
+        
+        // Handle name fields (combine into single name field)
+        if (isFieldEditable('name')) {
+          const nameParts = [
+            formState.firstName,
+            formState.middleName,
+            formState.lastName
+          ].filter(Boolean)
+          if (nameParts.length > 0) {
+            payload.name = nameParts.join(' ').toUpperCase()
+          }
+        }
+        
+        // Handle other form fields
+        if (isFieldEditable('email')) payload.email = formState.contactEmail
+        if (isFieldEditable('cellphone')) payload.cellphone = formState.contactNumber
+        if (isFieldEditable('sex')) payload.sex = formState.sex
+        if (isFieldEditable('jobsite')) payload.jobsite = formState.jobsite.toUpperCase()
+        if (isFieldEditable('position')) payload.position = formState.position.toUpperCase()
+        if (isFieldEditable('job_type')) payload.job_type = formState.jobType
+        if (isFieldEditable('employer')) payload.employer = formState.employer.toUpperCase()
+        if (isFieldEditable('raw_salary')) {
+          payload.raw_salary = String(Number(formState.salaryAmount))
+        }
+        if (isFieldEditable('salary_currency')) payload.salary_currency = formState.salaryCurrency
+        
+        // Handle document metadata fields
+        if (isFieldEditable('passport_number')) payload.passport_number = docMeta.passportNumber.toUpperCase()
+        if (isFieldEditable('passport_validity')) payload.passport_validity = docMeta.passportExpiry
+        if (isFieldEditable('visa_category')) payload.visa_category = docMeta.visaCategory
+        if (isFieldEditable('visa_type')) payload.visa_type = docMeta.visaType
+        if (isFieldEditable('visa_number')) payload.visa_number = docMeta.visaNumber.toUpperCase()
+        if (isFieldEditable('visa_validity')) payload.visa_validity = docMeta.visaValidity
+        if (isFieldEditable('ec_issued_date')) payload.ec_issued_date = docMeta.ecIssuedDate
+        if (isFieldEditable('ec_verification')) payload.ec_verification = docMeta.ecVerification
+
+        // Check if any documents need to be uploaded
+        const documentFields = ['document_passport', 'document_work_visa', 'document_employment_contract', 'document_tesda_license', 
+                                'document_country_specific', 'document_compliance_form', 'document_medical_certificate', 
+                                'document_peos_certificate', 'document_clearance', 'document_insurance_coverage', 
+                                'document_eregistration', 'document_pdos_certificate']
+        const hasDocumentCorrections = documentFields.some(field => isFieldEditable(field))
+        const hasNewDocuments = Object.values(documents).some(file => file !== null)
+        
+        let response: Response
+        if (hasDocumentCorrections && hasNewDocuments) {
+          // Use FormData to send files
+          const formData = new FormData()
+          
+          // Add form fields
+          Object.entries(payload).forEach(([key, value]) => {
+            formData.append(key, value)
+          })
+          
+          // Add document files
+          if (isFieldEditable('document_passport') && documents.passport) {
+            formData.append('passport', documents.passport)
+            if (docMeta.passportNumber) formData.append('passportNumber', docMeta.passportNumber.toUpperCase())
+            if (docMeta.passportExpiry) formData.append('passportExpiry', docMeta.passportExpiry)
+          }
+          if (isFieldEditable('document_work_visa') && documents.workVisa) {
+            formData.append('workVisa', documents.workVisa)
+            if (docMeta.visaCategory) formData.append('visaCategory', docMeta.visaCategory)
+            if (docMeta.visaType) formData.append('visaType', docMeta.visaType)
+            if (docMeta.visaNumber) formData.append('visaNumber', docMeta.visaNumber.toUpperCase())
+            if (docMeta.visaValidity) formData.append('visaValidity', docMeta.visaValidity)
+          }
+          if (isFieldEditable('document_employment_contract') && documents.employmentContract) {
+            formData.append('employmentContract', documents.employmentContract)
+            if (docMeta.ecIssuedDate) formData.append('ecIssuedDate', docMeta.ecIssuedDate)
+            if (docMeta.ecVerification) formData.append('ecVerification', docMeta.ecVerification)
+          }
+          if (isFieldEditable('document_tesda_license') && documents.tesdaLicense) {
+            formData.append('tesdaLicense', documents.tesdaLicense)
+          }
+          if (isFieldEditable('document_country_specific') && documents.countrySpecific) {
+            formData.append('countrySpecific', documents.countrySpecific)
+          }
+          if (isFieldEditable('document_compliance_form') && documents.complianceForm) {
+            formData.append('complianceForm', documents.complianceForm)
+          }
+          if (isFieldEditable('document_medical_certificate') && documents.medicalCertificate) {
+            formData.append('medicalCertificate', documents.medicalCertificate)
+          }
+          if (isFieldEditable('document_peos_certificate') && documents.peosCertificate) {
+            formData.append('peosCertificate', documents.peosCertificate)
+          }
+          if (isFieldEditable('document_clearance') && documents.clearance) {
+            formData.append('clearance', documents.clearance)
+          }
+          if (isFieldEditable('document_insurance_coverage') && documents.insuranceCoverage) {
+            formData.append('insuranceCoverage', documents.insuranceCoverage)
+          }
+          if (isFieldEditable('document_eregistration') && documents.eregistration) {
+            formData.append('eregistration', documents.eregistration)
+          }
+          if (isFieldEditable('document_pdos_certificate') && documents.pdosCertificate) {
+            formData.append('pdosCertificate', documents.pdosCertificate)
+          }
+          
+          response = await fetch(`/api/direct-hire/${applicationId}/corrections/resolve`, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          })
+        } else {
+          // Use JSON for form fields only
+          response = await fetch(`/api/direct-hire/${applicationId}/corrections/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload }),
+            credentials: 'include',
+          })
+        }
+
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to submit corrections')
+        }
+
+        toast({
+          title: 'Corrections submitted',
+          description: 'Your corrections have been submitted for review.',
+        })
+        
+        router.push('/applicant/status')
+        return
+      } catch (error: any) {
+        console.error('Correction submission error:', error)
+        toast({
+          title: 'Error',
+          description: error?.message || 'Failed to submit corrections. Please try again.',
+          variant: 'destructive',
+        })
+        setLoading(false)
+        return
+      }
+    }
+
+    // Original submission flow for new applications
     const salaryNumber = Number(formState.salaryAmount)
     const payload = new FormData()
     Object.entries(formState).forEach(([key, value]) => {
@@ -418,20 +1163,6 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
         payload.append(key, String(value))
       }
     })
-
-    // Validate session before submission
-    const isSessionValid = await validateSession()
-    if (!isSessionValid) {
-      toast({
-        title: 'Session expired',
-        description: 'Your session has expired. Please log in again to submit your application.',
-        variant: 'destructive',
-      })
-      setTimeout(() => {
-        router.push('/login?from=/applicant/start/direct-hire&sessionExpired=true')
-      }, 2000)
-      return
-    }
 
     setLoading(true)
     toast({
@@ -588,9 +1319,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   value={formState.firstName}
                   onChange={e => updateField('firstName', e.target.value)}
                   required
-                  className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
+                  disabled={!isFieldEditable('name')}
+                  className={`${fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('name') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('name') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                 />
                 {fieldErrors.firstName && <p className="text-xs text-red-500">{fieldErrors.firstName}</p>}
+                {isFieldFlagged('name') && (
+                  <p className="text-xs text-red-600 font-medium">
+                    This part was not accepted due to the reason: {getCorrectionReason('name') || 'Field requires correction'}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="middleName">Middle name</Label>
@@ -598,6 +1335,8 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   id="middleName"
                   value={formState.middleName}
                   onChange={e => updateField('middleName', e.target.value)}
+                  disabled={!isFieldEditable('name')}
+                  className={`${!isFieldEditable('name') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('name') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                 />
               </div>
               <div className="space-y-2">
@@ -607,30 +1346,37 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   value={formState.lastName}
                   onChange={e => updateField('lastName', e.target.value)}
                   required
-                  className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
+                  disabled={!isFieldEditable('name')}
+                  className={`${fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('name') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('name') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                 />
                 {fieldErrors.lastName && <p className="text-xs text-red-500">{fieldErrors.lastName}</p>}
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
+              <div className={`space-y-2 ${isFieldFlagged('sex') ? 'p-2 border-2 border-red-500 rounded bg-red-50' : ''}`}>
                 <Label>Sex</Label>
                 <RadioGroup
                   className="flex gap-6"
                   value={formState.sex}
                   onValueChange={value => updateField('sex', value)}
+                  disabled={!isFieldEditable('sex')}
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="male" id="sex-male" />
-                    <Label htmlFor="sex-male" className="font-normal">Male</Label>
+                    <RadioGroupItem value="male" id="sex-male" disabled={!isFieldEditable('sex')} />
+                    <Label htmlFor="sex-male" className={`font-normal ${!isFieldEditable('sex') ? 'text-gray-400 cursor-not-allowed' : ''}`}>Male</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="female" id="sex-female" />
-                    <Label htmlFor="sex-female" className="font-normal">Female</Label>
+                    <RadioGroupItem value="female" id="sex-female" disabled={!isFieldEditable('sex')} />
+                    <Label htmlFor="sex-female" className={`font-normal ${!isFieldEditable('sex') ? 'text-gray-400 cursor-not-allowed' : ''}`}>Female</Label>
                   </div>
                 </RadioGroup>
             {fieldErrors.sex && <p className="text-xs text-red-500">{fieldErrors.sex}</p>}
+            {isFieldFlagged('sex') && (
+              <p className="text-xs text-red-600 font-medium">
+                This part was not accepted due to the reason: {getCorrectionReason('sex') || 'Field requires correction'}
+              </p>
+            )}
               </div>
           <div className="space-y-2">
             <Label htmlFor="contactNumber">Phone Number</Label>
@@ -653,9 +1399,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                 updateField('contactNumber', next)
               }}
               placeholder="09XXXXXXXXX"
-              className={fieldErrors.contactNumber ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('cellphone')}
+              className={`${fieldErrors.contactNumber ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('cellphone') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('cellphone') ? 'border-red-500 border-2 bg-red-50' : ''}`}
             />
             {fieldErrors.contactNumber && <p className="text-xs text-red-500">{fieldErrors.contactNumber}</p>}
+            {isFieldFlagged('cellphone') && (
+              <p className="text-xs text-red-600 font-medium">
+                This part was not accepted due to the reason: {getCorrectionReason('cellphone') || 'Field requires correction'}
+              </p>
+            )}
           </div>
             </div>
 
@@ -666,9 +1418,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
             type="email"
             value={formState.contactEmail}
             onChange={e => updateField('contactEmail', e.target.value)}
-            className={fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500' : ''}
+            disabled={!isFieldEditable('email')}
+            className={`${fieldErrors.contactEmail ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('email') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('email') ? 'border-red-500 border-2 bg-red-50' : ''}`}
           />
           {fieldErrors.contactEmail && <p className="text-xs text-red-500">{fieldErrors.contactEmail}</p>}
+          {isFieldFlagged('email') && (
+            <p className="text-xs text-red-600 font-medium">
+              This part was not accepted due to the reason: {getCorrectionReason('email') || 'Field requires correction'}
+            </p>
+          )}
         </div>
           </section>
 
@@ -683,9 +1441,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
               onChange={e => updateField('jobsite', e.target.value)}
               placeholder="COUNTRY"
               required
-              className={fieldErrors.jobsite ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('jobsite')}
+              className={`${fieldErrors.jobsite ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('jobsite') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('jobsite') ? 'border-red-500 border-2 bg-red-50' : ''}`}
             />
             {fieldErrors.jobsite && <p className="text-xs text-red-500">{fieldErrors.jobsite}</p>}
+            {isFieldFlagged('jobsite') && (
+              <p className="text-xs text-red-600 font-medium">
+                This part was not accepted due to the reason: {getCorrectionReason('jobsite') || 'Field requires correction'}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="position">Position</Label>
@@ -695,9 +1459,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
               onChange={e => updateField('position', e.target.value)}
               placeholder="POSITION TITLE"
               required
-              className={fieldErrors.position ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('position')}
+              className={`${fieldErrors.position ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('position') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('position') ? 'border-red-500 border-2 bg-red-50' : ''}`}
             />
             {fieldErrors.position && <p className="text-xs text-red-500">{fieldErrors.position}</p>}
+            {isFieldFlagged('position') && (
+              <p className="text-xs text-red-600 font-medium">
+                This part was not accepted due to the reason: {getCorrectionReason('position') || 'Field requires correction'}
+              </p>
+            )}
           </div>
             </div>
 
@@ -707,8 +1477,9 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                 <Select
                   value={formState.jobType || undefined}
                   onValueChange={value => updateField('jobType', value)}
+                  disabled={!isFieldEditable('job_type')}
                 >
-              <SelectTrigger id="jobType" className={`bg-white ${fieldErrors.jobType ? 'border-red-500 focus:border-red-500' : ''}`}>
+              <SelectTrigger id="jobType" className={`bg-white ${fieldErrors.jobType ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('job_type') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('job_type') ? 'border-red-500 border-2 bg-red-50' : ''}`}>
                     <SelectValue placeholder="---" />
                   </SelectTrigger>
                   <SelectContent>
@@ -717,6 +1488,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   </SelectContent>
                 </Select>
             {fieldErrors.jobType && <p className="text-xs text-red-500">{fieldErrors.jobType}</p>}
+            {isFieldFlagged('job_type') && (
+              <p className="text-xs text-red-600 font-medium">
+                This part was not accepted due to the reason: {getCorrectionReason('job_type') || 'Field requires correction'}
+              </p>
+            )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="employer">Employer</Label>
@@ -725,7 +1501,14 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   value={formState.employer}
                   onChange={e => updateField('employer', e.target.value)}
                   placeholder="EMPLOYER NAME"
+                  disabled={!isFieldEditable('employer')}
+                  className={`${!isFieldEditable('employer') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('employer') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                 />
+                {isFieldFlagged('employer') && (
+                  <p className="text-xs text-red-600 font-medium">
+                    This part was not accepted due to the reason: {getCorrectionReason('employer') || 'Field requires correction'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -741,17 +1524,24 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                     onChange={e => updateField('salaryAmount', e.target.value)}
                     placeholder="Enter amount"
                     required
-                    className={fieldErrors.salaryAmount ? 'border-red-500 focus:border-red-500' : ''}
+                    disabled={!isFieldEditable('raw_salary')}
+                    className={`${fieldErrors.salaryAmount ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('raw_salary') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('raw_salary') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                   />
                   {fieldErrors.salaryAmount && <p className="text-xs text-red-500">{fieldErrors.salaryAmount}</p>}
+                  {isFieldFlagged('raw_salary') && (
+                    <p className="text-xs text-red-600 font-medium">
+                      This part was not accepted due to the reason: {getCorrectionReason('raw_salary') || 'Field requires correction'}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="salaryCurrency">Currency</Label>
                 <Select
                   value={formState.salaryCurrency || undefined}
                   onValueChange={value => updateField('salaryCurrency', value)}
+                  disabled={!isFieldEditable('salary_currency')}
                 >
-                  <SelectTrigger id="salaryCurrency" className={`bg-white ${fieldErrors.salaryCurrency ? 'border-red-500 focus:border-red-500' : ''}`}>
+                  <SelectTrigger id="salaryCurrency" className={`bg-white ${fieldErrors.salaryCurrency ? 'border-red-500 focus:border-red-500' : ''} ${!isFieldEditable('salary_currency') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('salary_currency') ? 'border-red-500 border-2 bg-red-50' : ''}`}>
                     <SelectValue placeholder="---" />
                   </SelectTrigger>
                   <SelectContent>
@@ -763,6 +1553,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   </SelectContent>
                 </Select>
                   {fieldErrors.salaryCurrency && <p className="text-xs text-red-500">{fieldErrors.salaryCurrency}</p>}
+                  {isFieldFlagged('salary_currency') && (
+                    <p className="text-xs text-red-600 font-medium">
+                      This part was not accepted due to the reason: {getCorrectionReason('salary_currency') || 'Field requires correction'}
+                    </p>
+                  )}
                 </div>
               </div>
               {usdDisplay && formState.salaryCurrency !== 'USD' && (
@@ -778,7 +1573,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
 
       {step === 'documents' && (
         <>
-          <section className="space-y-6">
+          <section id="documents-section" data-section="documents" className="space-y-6">
             <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
             <div className="rounded-2xl border border-dashed border-gray-300 p-4 space-y-4">
               <h3 className="text-sm font-semibold text-gray-800">Required Documents</h3>
@@ -795,15 +1590,31 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   >
                     Passport (valid at least 1 year)
                   </Label>
+                  {existingDocs.passport && existingDocInfo.passport && (
+                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      <span className="font-medium">Previously uploaded:</span> {existingDocInfo.passport.fileName}
+                    </div>
+                  )}
                   <Input
                     id="passportFile"
                     type="file"
                     accept=".pdf,.docx,.jpg,.jpeg,.png"
                     onChange={event => handleFileChange('passport', event.target.files?.[0] || null)}
-                    className={docErrors.passport ? 'border-red-500 focus:border-red-500' : ''}
+                    disabled={needsCorrection && !isFieldFlagged('document_passport')}
+                    className={`${docErrors.passport ? 'border-red-500 focus:border-red-500' : ''} ${needsCorrection && !isFieldFlagged('document_passport') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('document_passport') ? 'border-red-500 border-2' : ''}`}
                   />
+                  {isFieldFlagged('document_passport') && (
+                    <p className="text-xs text-red-600 font-medium mt-1">
+                      This part was not accepted due to the reason: {getCorrectionReason('document_passport') || 'Document requires correction'}
+                    </p>
+                  )}
+                  {documents.passport && !existingDocs.passport && (
+                    <div className="text-xs text-green-600 mt-1">
+                      Selected: {documents.passport.name}
+                    </div>
+                  )}
                   {docErrors.passport && <p className="text-xs text-red-500">{docErrors.passport}</p>}
-                  {documents.passport && (
+                  {(documents.passport || existingDocs.passport) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 min-w-0 w-full">
                       <div className="space-y-1">
                         <Label
@@ -817,10 +1628,16 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           value={docMeta.passportNumber}
                           onChange={e => setDocMeta(prev => ({ ...prev, passportNumber: e.target.value.toUpperCase() }))}
                           placeholder="E.g. P1234567"
+                          disabled={!isFieldEditable('passport_number')}
                           className={`text-xs ${
                             passportComplete ? 'border-green-500 focus:border-green-500' : ''
-                          }`}
+                          } ${!isFieldEditable('passport_number') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('passport_number') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                         />
+                        {isFieldFlagged('passport_number') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('passport_number') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label
@@ -834,9 +1651,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           onChange={(date) => setDocMeta(prev => ({ ...prev, passportExpiry: date }))}
                           minDate={getPassportMinDate()}
                           placeholder="Select date"
-                          className={passportComplete ? 'border-green-500' : ''}
+                          disabled={!isFieldEditable('passport_validity')}
+                          className={`${passportComplete ? 'border-green-500' : ''} ${!isFieldEditable('passport_validity') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('passport_validity') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                           label="Passport Expiry Date"
                         />
+                        {isFieldFlagged('passport_validity') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('passport_validity') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -854,15 +1677,31 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   >
                     Valid Work Visa, Entry/Work Permit
                   </Label>
+                  {existingDocs.workVisa && existingDocInfo.workVisa && (
+                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      <span className="font-medium">Previously uploaded:</span> {existingDocInfo.workVisa.fileName}
+                    </div>
+                  )}
                   <Input
                     id="workVisaFile"
                     type="file"
                     accept=".pdf,.docx,.jpg,.jpeg,.png"
                     onChange={event => handleFileChange('workVisa', event.target.files?.[0] || null)}
-                    className={docErrors.workVisa ? 'border-red-500 focus:border-red-500' : ''}
+                    disabled={needsCorrection && !isFieldFlagged('document_work_visa')}
+                    className={`${docErrors.workVisa ? 'border-red-500 focus:border-red-500' : ''} ${needsCorrection && !isFieldFlagged('document_work_visa') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('document_work_visa') ? 'border-red-500 border-2' : ''}`}
                   />
+                  {isFieldFlagged('document_work_visa') && (
+                    <p className="text-xs text-red-600 font-medium mt-1">
+                      This part was not accepted due to the reason: {getCorrectionReason('document_work_visa') || 'Document requires correction'}
+                    </p>
+                  )}
+                  {documents.workVisa && !existingDocs.workVisa && (
+                    <div className="text-xs text-green-600 mt-1">
+                      Selected: {documents.workVisa.name}
+                    </div>
+                  )}
                   {docErrors.workVisa && <p className="text-xs text-red-500">{docErrors.workVisa}</p>}
-                  {documents.workVisa && (
+                  {(documents.workVisa || existingDocs.workVisa) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 min-w-0 w-full">
                       <div className="space-y-1">
                         <Label
@@ -875,7 +1714,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           id="visaCategory"
                           className={`w-full border rounded px-2 py-2 text-xs h-10 ${
                             workVisaComplete ? 'border-green-500 focus:border-green-500' : ''
-                          }`}
+                          } ${!isFieldEditable('visa_category') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_category') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                           value={docMeta.visaCategory}
                           onChange={e =>
                             setDocMeta(prev => ({
@@ -884,6 +1723,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                               visaType: '',
                             }))
                           }
+                          disabled={!isFieldEditable('visa_category')}
                         >
                           <option value="">----</option>
                           <option value="Temporary Work Visas (Non-Immigrant)">Temporary Work Visas (Non-Immigrant)</option>
@@ -893,6 +1733,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           <option value="Family / Dependent Visas">Family / Dependent Visas</option>
                           <option value="Others">Others</option>
                         </select>
+                        {isFieldFlagged('visa_category') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('visa_category') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label
@@ -906,9 +1751,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                             id="visaType"
                             className={`w-full border rounded px-2 py-2 text-xs h-10 ${
                               workVisaComplete ? 'border-green-500 focus:border-green-500' : ''
-                            }`}
+                            } ${!isFieldEditable('visa_type') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_type') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                             value={docMeta.visaType}
                             onChange={e => setDocMeta(prev => ({ ...prev, visaType: e.target.value }))}
+                            disabled={!isFieldEditable('visa_type')}
                           >
                             <option value="">----</option>
                             <option value="H-1B – Skilled Workers / Professionals">
@@ -935,9 +1781,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                             id="visaType"
                             className={`w-full border rounded px-2 py-2 text-xs h-10 ${
                               workVisaComplete ? 'border-green-500 focus:border-green-500' : ''
-                            }`}
+                            } ${!isFieldEditable('visa_type') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_type') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                             value={docMeta.visaType}
                             onChange={e => setDocMeta(prev => ({ ...prev, visaType: e.target.value }))}
+                            disabled={!isFieldEditable('visa_type')}
                           >
                             <option value="">----</option>
                             <option value="EB-1 – Priority Workers">EB-1 – Priority Workers</option>
@@ -955,9 +1802,10 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                             id="visaType"
                             className={`w-full border rounded px-2 py-2 text-xs h-10 ${
                               workVisaComplete ? 'border-green-500 focus:border-green-500' : ''
-                            }`}
+                            } ${!isFieldEditable('visa_type') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_type') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                             value={docMeta.visaType}
                             onChange={e => setDocMeta(prev => ({ ...prev, visaType: e.target.value }))}
+                            disabled={!isFieldEditable('visa_type')}
                           >
                             <option value="">----</option>
                             <option value="H-4 – Dependents of H Visa Holders">H-4 – Dependents of H Visa Holders</option>
@@ -971,10 +1819,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           <Input
                             id="visaType"
                             type="text"
-                            className={`text-xs h-10 ${workVisaComplete ? 'border-green-500 focus:border-green-500' : ''}`}
+                            className={`text-xs h-10 ${workVisaComplete ? 'border-green-500 focus:border-green-500' : ''} ${!isFieldEditable('visa_type') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_type') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                             placeholder="Enter custom visa type"
                             value={docMeta.visaType}
                             onChange={e => setDocMeta(prev => ({ ...prev, visaType: e.target.value }))}
+                            disabled={!isFieldEditable('visa_type')}
                           />
                         ) : (
                           <Input
@@ -984,6 +1833,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                             placeholder="Select category first"
                             disabled
                           />
+                        )}
+                        {isFieldFlagged('visa_type') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('visa_type') || 'Field requires correction'}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-1">
@@ -998,10 +1852,16 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           value={docMeta.visaNumber}
                           onChange={e => setDocMeta(prev => ({ ...prev, visaNumber: e.target.value.toUpperCase() }))}
                           placeholder="Visa number"
+                          disabled={!isFieldEditable('visa_number')}
                           className={`text-xs ${
                             workVisaComplete ? 'border-green-500 focus:border-green-500' : ''
-                          }`}
+                          } ${!isFieldEditable('visa_number') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_number') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                         />
+                        {isFieldFlagged('visa_number') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('visa_number') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label
@@ -1015,9 +1875,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           onChange={(date) => setDocMeta(prev => ({ ...prev, visaValidity: date }))}
                           minDate={getVisaValidityMinDate()}
                           placeholder="Select date"
-                          className={workVisaComplete ? 'border-green-500' : ''}
+                          disabled={!isFieldEditable('visa_validity')}
+                          className={`${workVisaComplete ? 'border-green-500' : ''} ${!isFieldEditable('visa_validity') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('visa_validity') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                           label="Visa Validity"
                         />
+                        {isFieldFlagged('visa_validity') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('visa_validity') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1035,17 +1901,33 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   >
                     Employment Contract / Offer Letter
                   </Label>
+                  {existingDocs.employmentContract && existingDocInfo.employmentContract && (
+                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      <span className="font-medium">Previously uploaded:</span> {existingDocInfo.employmentContract.fileName}
+                    </div>
+                  )}
                   <Input
                     id="employmentContractFile"
                     type="file"
                     accept=".pdf,.docx,.jpg,.jpeg,.png"
                     onChange={event => handleFileChange('employmentContract', event.target.files?.[0] || null)}
-                    className={docErrors.employmentContract ? 'border-red-500 focus:border-red-500' : ''}
+                    disabled={needsCorrection && !isFieldFlagged('document_employment_contract')}
+                    className={`${docErrors.employmentContract ? 'border-red-500 focus:border-red-500' : ''} ${needsCorrection && !isFieldFlagged('document_employment_contract') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('document_employment_contract') ? 'border-red-500 border-2' : ''}`}
                   />
+                  {isFieldFlagged('document_employment_contract') && (
+                    <p className="text-xs text-red-600 font-medium mt-1">
+                      This part was not accepted due to the reason: {getCorrectionReason('document_employment_contract') || 'Document requires correction'}
+                    </p>
+                  )}
+                  {documents.employmentContract && !existingDocs.employmentContract && (
+                    <div className="text-xs text-green-600 mt-1">
+                      Selected: {documents.employmentContract.name}
+                    </div>
+                  )}
                   {docErrors.employmentContract && (
                     <p className="text-xs text-red-500">{docErrors.employmentContract}</p>
                   )}
-                  {documents.employmentContract && (
+                  {(documents.employmentContract || existingDocs.employmentContract) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 min-w-0 w-full">
                       <div className="space-y-1">
                         <Label
@@ -1059,9 +1941,15 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           onChange={(date) => setDocMeta(prev => ({ ...prev, ecIssuedDate: date }))}
                           maxDate={getMaxDate()}
                           placeholder="Select date"
-                          className={employmentContractComplete ? 'border-green-500' : ''}
+                          disabled={!isFieldEditable('ec_issued_date')}
+                          className={`${employmentContractComplete ? 'border-green-500' : ''} ${!isFieldEditable('ec_issued_date') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('ec_issued_date') ? 'border-red-500 border-2 bg-red-50' : ''}`}
                           label="Employment Contract Issued Date"
                         />
+                        {isFieldFlagged('ec_issued_date') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('ec_issued_date') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label
@@ -1074,7 +1962,8 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                           id="ecVerification"
                           className={`w-full border rounded px-2 py-2 text-xs h-10 ${
                             employmentContractComplete ? 'border-green-500 focus:border-green-500' : ''
-                          }`}
+                          } ${!isFieldEditable('ec_verification') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('ec_verification') ? 'border-red-500 border-2 bg-red-50' : ''}`}
+                          disabled={!isFieldEditable('ec_verification')}
                           value={docMeta.ecVerification}
                           onChange={e => setDocMeta(prev => ({ ...prev, ecVerification: e.target.value }))}
                         >
@@ -1095,6 +1984,11 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                             Employment Contract with confirmation from SEM
                           </option>
                         </select>
+                        {isFieldFlagged('ec_verification') && (
+                          <p className="text-xs text-red-600 font-medium">
+                            This part was not accepted due to the reason: {getCorrectionReason('ec_verification') || 'Field requires correction'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1103,13 +1997,29 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                 {/* TESDA / PRC License */}
                 <div className="space-y-2 text-left">
                   <Label htmlFor="tesdaLicenseFile">TESDA / PRC License</Label>
+                  {existingDocs.tesdaLicense && existingDocInfo.tesdaLicense && (
+                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                      <span className="font-medium">Previously uploaded:</span> {existingDocInfo.tesdaLicense.fileName}
+                    </div>
+                  )}
                   <Input
                     id="tesdaLicenseFile"
                     type="file"
                     accept=".pdf,.docx,.jpg,.jpeg,.png"
                     onChange={event => handleFileChange('tesdaLicense', event.target.files?.[0] || null)}
-                    className={docErrors.tesdaLicense ? 'border-red-500 focus:border-red-500' : ''}
+                    disabled={needsCorrection && !isFieldFlagged('document_tesda_license')}
+                    className={`${docErrors.tesdaLicense ? 'border-red-500 focus:border-red-500' : ''} ${needsCorrection && !isFieldFlagged('document_tesda_license') ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFieldFlagged('document_tesda_license') ? 'border-red-500 border-2' : ''}`}
                   />
+                  {isFieldFlagged('document_tesda_license') && (
+                    <p className="text-xs text-red-600 font-medium mt-1">
+                      This part was not accepted due to the reason: {getCorrectionReason('document_tesda_license') || 'Document requires correction'}
+                    </p>
+                  )}
+                  {documents.tesdaLicense && !existingDocs.tesdaLicense && (
+                    <div className="text-xs text-green-600 mt-1">
+                      Selected: {documents.tesdaLicense.name}
+                    </div>
+                  )}
                   {docErrors.tesdaLicense && <p className="text-xs text-red-500">{docErrors.tesdaLicense}</p>}
                 </div>
               </div>
@@ -1125,17 +2035,28 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                   { key: 'peosCertificate', label: 'PEOS Certificate' },
                   { key: 'clearance', label: 'Clearance' },
                   { key: 'insuranceCoverage', label: 'Insurance Coverage Proof' },
-                ].map(item => (
-                  <div key={item.key} className="space-y-2 text-left">
-                    <Label htmlFor={`${item.key}File`}>{item.label}</Label>
-                    <Input
-                      id={`${item.key}File`}
-                      type="file"
-                      accept=".pdf,.docx,.jpg,.jpeg,.png"
-                      onChange={event => handleFileChange(item.key as keyof typeof documents, event.target.files?.[0] || null)}
-                    />
-                  </div>
-                ))}
+                ].map(item => {
+                  const fieldKey = getOptionalDocFieldKey(item.key)
+                  const isFlagged = isFieldFlagged(fieldKey)
+                  return (
+                    <div key={item.key} className="space-y-2 text-left">
+                      <Label htmlFor={`${item.key}File`}>{item.label}</Label>
+                      <Input
+                        id={`${item.key}File`}
+                        type="file"
+                        accept=".pdf,.docx,.jpg,.jpeg,.png"
+                        onChange={event => handleFileChange(item.key as keyof typeof documents, event.target.files?.[0] || null)}
+                        disabled={needsCorrection && !isFlagged}
+                        className={`${needsCorrection && !isFlagged ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFlagged ? 'border-red-500 border-2' : ''}`}
+                      />
+                      {isFlagged && (
+                        <p className="text-xs text-red-600 font-medium">
+                          This part was not accepted due to the reason: {getCorrectionReason(fieldKey) || 'Document requires correction'}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -1145,17 +2066,28 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
                 {[
                   { key: 'eregistration', label: 'E-Registration Form' },
                   { key: 'pdosCertificate', label: 'PDOS Certificate' },
-                ].map(item => (
-                  <div key={item.key} className="space-y-2 text-left">
-                    <Label htmlFor={`${item.key}File`}>{item.label}</Label>
-                    <Input
-                      id={`${item.key}File`}
-                      type="file"
-                      accept=".pdf,.docx,.jpg,.jpeg,.png"
-                      onChange={event => handleFileChange(item.key as keyof typeof documents, event.target.files?.[0] || null)}
-                    />
-                  </div>
-                ))}
+                ].map(item => {
+                  const fieldKey = getOptionalDocFieldKey(item.key)
+                  const isFlagged = isFieldFlagged(fieldKey)
+                  return (
+                    <div key={item.key} className="space-y-2 text-left">
+                      <Label htmlFor={`${item.key}File`}>{item.label}</Label>
+                      <Input
+                        id={`${item.key}File`}
+                        type="file"
+                        accept=".pdf,.docx,.jpg,.jpeg,.png"
+                        onChange={event => handleFileChange(item.key as keyof typeof documents, event.target.files?.[0] || null)}
+                        disabled={needsCorrection && !isFlagged}
+                        className={`${needsCorrection && !isFlagged ? 'bg-gray-100 cursor-not-allowed' : ''} ${isFlagged ? 'border-red-500 border-2' : ''}`}
+                      />
+                      {isFlagged && (
+                        <p className="text-xs text-red-600 font-medium">
+                          This part was not accepted due to the reason: {getCorrectionReason(fieldKey) || 'Document requires correction'}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -1250,7 +2182,7 @@ export default function DirectHireApplicantForm({ defaultEmail, defaultNames }: 
             <Button
               type="button"
               className="bg-[#0f62fe] hover:bg-[#0c4dcc]"
-              disabled={loading}
+              disabled={loading || (needsCorrection && !formHasChanges)}
               onClick={goToReviewStep}
             >
               Review Application

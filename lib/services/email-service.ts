@@ -96,6 +96,39 @@ export class EmailService {
       html
     });
   }
+
+  static async sendNotificationEmail(
+    recipient: string,
+    subject: string,
+    message: string
+  ): Promise<void> {
+    const fromAddress =
+      process.env.SMTP_FROM ||
+      process.env.SMTP_USER ||
+      'BalikBayani Portal <no-reply@balikbayani.local>';
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <p>${message.replace(/\n/g, '<br/>')}</p>
+        <p style="margin-top: 24px;">BalikBayani Portal</p>
+      </div>
+    `;
+
+    if (!isEmailConfigured()) {
+      console.warn('[EmailService] SMTP not configured. Notification email logged for debugging only.');
+      console.info(`[EmailService] To: ${recipient} | Subject: ${subject} | Message: ${message}`);
+      return;
+    }
+
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from: fromAddress,
+      to: recipient,
+      subject,
+      text: message,
+      html
+    });
+  }
 }
 
 export default EmailService;

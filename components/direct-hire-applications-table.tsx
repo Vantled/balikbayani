@@ -2,11 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { PasswordInput } from "@/components/ui/password-input"
-import { MoreHorizontal, Eye, Edit, Trash2, FileText, File, Image as ImageIcon, FileArchive, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download } from "lucide-react"
+import { MoreHorizontal, Eye, Edit, Trash2, FileText, File, Image as ImageIcon, FileArchive, Plus, BadgeCheck, X, AlertTriangle, Loader2, Settings, RefreshCcw, Download, RotateCcw, ArrowRight, Flag, Flag as FlagSolid } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/auth"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
@@ -18,6 +18,46 @@ import StatusChecklist from "@/components/status-checklist"
 import CreateApplicationModal from "@/components/create-application-modal"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
 import TransactionHistory from "@/components/transaction-history"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+
+const correctionFieldOptions = [
+  { value: 'email', label: 'Email Address' },
+  { value: 'cellphone', label: 'Phone Number' },
+  { value: 'name', label: 'Full Name' },
+  { value: 'sex', label: 'Sex' },
+  { value: 'jobsite', label: 'Job Site' },
+  { value: 'position', label: 'Position' },
+  { value: 'job_type', label: 'Job Type' },
+  { value: 'employer', label: 'Employer' },
+  { value: 'salary', label: 'Salary' },
+  { value: 'evaluator', label: 'Evaluator' },
+  { value: 'documents', label: 'Documents (re-upload)' },
+]
+
+const statusProgression = [
+  { key: 'evaluated', label: 'Evaluated' },
+  { key: 'for_confirmation', label: 'For Confirmation' },
+  { key: 'emailed_to_dhad', label: 'Emailed to DHAD' },
+  { key: 'received_from_dhad', label: 'Received from DHAD' },
+  { key: 'for_interview', label: 'For Interview' },
+]
+
+const getNextStatus = (statusChecklist?: any, fallbackStatus?: string) => {
+  if (statusChecklist) {
+    for (const item of statusProgression) {
+      const checked = statusChecklist[item.key]?.checked
+      if (!checked) return item
+    }
+    return null
+  }
+  // Fallback: derive from legacy status
+  const order = ['pending', ...statusProgression.map(s => s.key)]
+  const idx = fallbackStatus ? order.indexOf(fallbackStatus) : -1
+  if (idx === -1 || idx === order.length - 1) return null
+  const nextKey = order[idx + 1]
+  return statusProgression.find(s => s.key === nextKey) || null
+}
 
 // Defer auth role check to client to avoid hydration mismatch
 
@@ -37,6 +77,13 @@ interface ApplicantDocumentsTabProps {
   onViewPDF?: (documentId: string, documentName: string) => void
   setSelectedDocument: (document: {id: string, name: string, fileBlob?: Blob} | null) => void
   setPdfViewerOpen: (open: boolean) => void
+  onFlagDocument?: (key: string, label: string) => void
+  isDocumentFlagged?: (key: string) => boolean
+  getDocumentFlagReason?: (key: string) => string
+  isDocumentCorrected?: (key: string) => boolean
+  isDocumentResolved?: (key: string) => boolean
+  onResolveDocument?: (key: string) => Promise<void>
+  isPendingStatus?: boolean
 }
 
 export default function DirectHireApplicationsTable({ search, filterQuery = "", showDeletedOnly: propShowDeletedOnly, showFinishedOnly: propShowFinishedOnly, showProcessingOnly: propShowProcessingOnly, statusFilter: propStatusFilter }: DirectHireApplicationsTableProps) {
@@ -61,6 +108,192 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
   const [statusChecklistOpen, setStatusChecklistOpen] = useState(false)
   const [selectedApplicationForStatus, setSelectedApplicationForStatus] = useState<DirectHireApplication | null>(null)
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false)
+  const [correctionItems, setCorrectionItems] = useState<{ field_key: string; message: string }[]>([{ field_key: '', message: '' }])
+  const [correctionNote, setCorrectionNote] = useState('')
+  const [correctionSaving, setCorrectionSaving] = useState(false)
+  const [openCorrections, setOpenCorrections] = useState<{ field_key: string; message: string; created_at?: string }[]>([])
+  const [allCorrections, setAllCorrections] = useState<{ field_key: string; message: string; resolved_at?: string | null; created_at?: string }[]>([])
+  const [correctionsLoading, setCorrectionsLoading] = useState(false)
+  const [flagTarget, setFlagTarget] = useState<{ key: string; label: string } | null>(null)
+  const [flagReason, setFlagReason] = useState('')
+  const [flagModalOpen, setFlagModalOpen] = useState(false)
+  const [isReFlagging, setIsReFlagging] = useState(false)
+  const [localFlags, setLocalFlags] = useState<{ field_key: string; message: string }[]>([])
+  const [selectedDocsMeta, setSelectedDocsMeta] = useState<Record<string, string>>({})
+  
+  // Check if field is flagged (either locally or in corrections)
+  const isFieldFlagged = (key: string) => {
+    return localFlags.some(f => f.field_key === key) || allCorrections.some(c => c.field_key === key)
+  }
+  
+  // Get flag reason
+  const getFlagReason = (key: string) => {
+    const localFlag = localFlags.find(f => f.field_key === key)
+    if (localFlag) return localFlag.message
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction?.message || ''
+  }
+  
+  // Check if field was corrected by applicant (orange flag)
+  // A field is "corrected" if it was flagged, applicant resubmitted (needs_correction = false), but staff hasn't verified yet (not resolved)
+  const isFieldCorrected = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    if (!correction || correction.resolved_at) return false
+    
+    // If correction exists, not resolved, and needs_correction is false, it means applicant has corrected but staff hasn't verified
+    return !selected?.needs_correction
+  }
+  
+  // Check if field is resolved (green flag)
+  const isFieldResolved = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction ? !!correction.resolved_at : false
+  }
+  
+  // Helper function to get user-friendly field labels
+  const getFieldLabel = (fieldKey: string): string => {
+    const fieldLabelMap: Record<string, string> = {
+      name: 'Name',
+      email: 'Email',
+      cellphone: 'Phone Number',
+      sex: 'Sex',
+      jobsite: 'Job Site',
+      position: 'Position',
+      job_type: 'Job Type',
+      employer: 'Employer',
+      salary: 'Salary',
+      raw_salary: 'Salary',
+      salary_currency: 'Salary Currency',
+      evaluator: 'Evaluator',
+      passport_number: 'Passport Number',
+      passport_validity: 'Passport Validity',
+      visa_category: 'Visa Category',
+      visa_type: 'Visa Type',
+      visa_number: 'Visa Number',
+      visa_validity: 'Visa Validity',
+      ec_issued_date: 'Employment Contract Issued Date',
+      ec_verification: 'Employment Contract Verification Type',
+    }
+    
+    // Handle document fields (e.g., document_passport -> Passport)
+    if (fieldKey.startsWith('document_')) {
+      const docType = fieldKey.replace('document_', '')
+      return docType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    }
+    
+    return fieldLabelMap[fieldKey] || fieldKey
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+  
+  const renderFlaggableField = (key: string, label: string, value: React.ReactNode) => {
+    const flagged = isFieldFlagged(key)
+    const corrected = isFieldCorrected(key)
+    const resolved = isFieldResolved(key)
+    const isPendingStatus = selected?.status === 'pending' || (selected as any)?.status_checklist === null
+    // Flagging should only be available when status is 'pending' AND evaluated is not checked
+    // If evaluated is checked, the application has moved past "For Evaluation"
+    const statusChecklist = (selected as any)?.status_checklist
+    const isEvaluated = statusChecklist?.evaluated?.checked === true
+    const isForEvaluation = selected?.status === 'pending' && !isEvaluated
+    
+    // Determine flag color and state
+    let flagColor = 'text-red-600 fill-red-600'
+    let flagBorderColor = 'border-red-200'
+    let flagTextColor = 'text-red-700'
+    let flagState = 'Flagged'
+    
+    if (resolved) {
+      flagColor = 'text-green-600 fill-green-600'
+      flagBorderColor = 'border-green-200'
+      flagTextColor = 'text-green-700'
+      flagState = '✓ Resolved'
+    } else if (corrected) {
+      flagColor = 'text-amber-600 fill-amber-600'
+      flagBorderColor = 'border-amber-300'
+      flagTextColor = 'text-amber-800'
+      flagState = 'Needs Review'
+    }
+    
+    return (
+      <div className="relative group">
+        <div className="text-gray-500">{label}</div>
+        <div className="font-medium flex items-center gap-1">
+          {value}
+          {flagged && (
+            <div className="relative flex items-center gap-1">
+              <FlagSolid className={`h-5 w-5 ${flagColor}`} />
+              <div className={`absolute z-20 hidden group-hover:block left-0 top-full mt-1 min-w-[180px] rounded-md bg-white shadow-lg border ${flagBorderColor} p-2 text-xs ${flagTextColor}`}>
+                {corrected ? (
+                  <div>{getFlagReason(key)}</div>
+                ) : (
+                  <>
+                    <div className="font-medium mb-1">{flagState}</div>
+                    <div>{getFlagReason(key)}</div>
+                  </>
+                )}
+              </div>
+              {isForEvaluation && corrected && !resolved && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFieldToResolve({ key, label })
+                    setResolveConfirmOpen(true)
+                  }}
+                  className="ml-1 text-xs text-green-600 hover:text-green-700 underline"
+                  title="Mark as resolved"
+                >
+                  ✓
+                </button>
+              )}
+            </div>
+          )}
+          {!flagged && isForEvaluation && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(false)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 transition-opacity ml-1 opacity-0 group-hover:opacity-100"
+              aria-label={`Flag ${label}`}
+              title={`Flag ${label}`}
+            >
+              <Flag className="h-5 w-5" />
+            </button>
+          )}
+          {corrected && !resolved && isForEvaluation && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(true)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 ml-1"
+              aria-label="Flag again"
+              title="Flag again - correction not sufficient"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        {flagged && !corrected && (
+          <div className={`text-xs ${flagTextColor}`}>
+            {flagState}: {getFlagReason(key)}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const [formData, setFormData] = useState<any>({
     name: "",
@@ -82,7 +315,9 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState("")
   const [confirmingPassword, setConfirmingPassword] = useState(false)
+  const [correctionRefreshKey, setCorrectionRefreshKey] = useState(0)
   const [confirmPurpose, setConfirmPurpose] = useState<'deleted' | 'finished' | null>(null)
+  const [viewedApplications, setViewedApplications] = useState<Set<string>>(new Set())
   
   // Confirmation states for restore and permanent delete
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
@@ -99,6 +334,60 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   // PDF Viewer Modal state
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<{id: string, name: string, fileBlob?: Blob} | null>(null)
+  const fetchOpenCorrections = async (applicationId: string) => {
+    try {
+      setCorrectionsLoading(true)
+      // Fetch all corrections including resolved ones
+      const res = await fetch(`/api/direct-hire/${applicationId}/corrections?include_resolved=true`)
+      const data = await res.json()
+      if (data.success) {
+        const allCorrs = data.data || []
+        setAllCorrections(allCorrs)
+        // Filter to only open corrections for the openCorrections state
+        const openCorrs = allCorrs.filter((c: any) => !c.resolved_at)
+        setOpenCorrections(openCorrs)
+        // Set local flags to open corrections (for new flags being added)
+        setLocalFlags(openCorrs)
+      } else {
+        setOpenCorrections([])
+        setAllCorrections([])
+        setLocalFlags([])
+      }
+    } catch (err) {
+      setOpenCorrections([])
+      setAllCorrections([])
+      setLocalFlags([])
+    } finally {
+      setCorrectionsLoading(false)
+    }
+  }
+
+  const fetchSelectedDocumentsMeta = async (applicationId: string) => {
+    try {
+      const res = await fetch(`/api/documents?applicationId=${applicationId}&applicationType=direct_hire`)
+      const data = await res.json()
+      if (!data.success) {
+        setSelectedDocsMeta({})
+        return
+      }
+      const meta: Record<string, string> = {}
+      const docs = data.data || []
+      docs.forEach((doc: any) => {
+        const m = doc.meta || {}
+        if (m.passport_number) meta.passport_number = m.passport_number
+        if (m.passport_expiry) meta.passport_validity = m.passport_expiry
+        if (m.visa_category) meta.visa_category = m.visa_category
+        if (m.visa_type) meta.visa_type = m.visa_type
+        if (m.visa_number) meta.visa_number = m.visa_number
+        if (m.visa_validity) meta.visa_validity = m.visa_validity
+        if (m.ec_issued_date) meta.ec_issued_date = m.ec_issued_date
+        if (m.ec_verification) meta.ec_verification = m.ec_verification
+      })
+      setSelectedDocsMeta(meta)
+    } catch (err) {
+      setSelectedDocsMeta({})
+    }
+  }
   
   // Delete confirmation state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -107,6 +396,13 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
   // Status change confirmation state
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false)
   const [statusToChange, setStatusToChange] = useState<{key: string, label: string} | null>(null)
+  
+  // Return for compliance confirmation state
+  const [returnForComplianceConfirmOpen, setReturnForComplianceConfirmOpen] = useState(false)
+  
+  // Mark as resolved confirmation state
+  const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false)
+  const [fieldToResolve, setFieldToResolve] = useState<{ key: string; label: string } | null>(null)
 
   // Extract sex filter from parsed filters (moved to top to avoid initialization error)
   const normalizedSearch = search.trim().toLowerCase()
@@ -159,6 +455,106 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     }).catch(() => {})
     return () => { mounted = false }
   }, [])
+
+  // Function to mark application as viewed
+  const markApplicationAsViewed = useCallback(async (applicationId: string) => {
+    // Check if already marked as viewed locally
+    if (viewedApplications.has(applicationId)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/direct-hire/${applicationId}/view`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      
+      if (response.ok) {
+        // Add to viewed set
+        setViewedApplications(prev => new Set(prev).add(applicationId))
+      }
+    } catch (error) {
+      console.error('Error marking application as viewed:', error)
+    }
+  }, [viewedApplications])
+
+  // Function to check if application has been viewed
+  const checkApplicationViewed = useCallback(async (applicationId: string) => {
+    if (viewedApplications.has(applicationId)) {
+      return true
+    }
+
+    try {
+      const response = await fetch(`/api/direct-hire/${applicationId}/view`, {
+        credentials: 'include',
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.viewed) {
+          setViewedApplications(prev => new Set(prev).add(applicationId))
+          return true
+        }
+      }
+    } catch (error) {
+      console.error('Error checking application view status:', error)
+    }
+    
+    return false
+  }, [viewedApplications])
+
+  useEffect(() => {
+    if (correctionModalOpen && selected?.id) {
+      void fetchOpenCorrections(selected.id)
+    }
+  }, [correctionModalOpen, selected?.id])
+
+  // Check view status for all applications with applicant_user_id when applications are loaded
+  useEffect(() => {
+    const checkViews = async () => {
+      const applicantApps = applications.filter(app => (app as any).applicant_user_id)
+      const promises = applicantApps.map(app => checkApplicationViewed(app.id))
+      await Promise.all(promises)
+    }
+    
+    if (applications.length > 0) {
+      void checkViews()
+    }
+  }, [applications, checkApplicationViewed])
+
+  // Fetch corrections when view modal opens or when corrections are refreshed
+  useEffect(() => {
+    if (open && selected?.id) {
+      void fetchOpenCorrections(selected.id)
+      // Mark application as viewed when modal opens
+      markApplicationAsViewed(selected.id)
+    }
+  }, [open, selected?.id, correctionRefreshKey, markApplicationAsViewed])
+
+  useEffect(() => {
+    if (selected?.id) {
+      void fetchSelectedDocumentsMeta(selected.id)
+    } else {
+      setSelectedDocsMeta({})
+    }
+  }, [selected?.id])
+
+  const handleFlagContext = (e: React.MouseEvent, key: string, label: string) => {
+    e.preventDefault()
+    setFlagTarget({ key, label })
+    setFlagReason(getFlagReason(key))
+    setFlagModalOpen(true)
+  }
+
+  const upsertFlag = (key: string, message: string) => {
+    setLocalFlags(prev => {
+      const existing = prev.find(f => f.field_key === key)
+      if (existing) {
+        return prev.map(f => f.field_key === key ? { ...f, message } : f)
+      }
+      return [...prev, { field_key: key, message }]
+    })
+  }
 
   // Initial load and whenever filter toggles change
   useEffect(() => {
@@ -223,6 +619,45 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
     return () => window.removeEventListener('refresh:direct_hire' as any, handler as any)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter, evaluatorFilter, jobsiteFilter, positionFilter, dateRangeFilter])
+
+  // Listen for open application view event (from notifications)
+  useEffect(() => {
+    const handler = (event: CustomEvent) => {
+      const { applicationId, applicationType } = event.detail
+      if (applicationType === 'direct_hire' && applicationId) {
+        // Wait a bit for the page to load, then try to find the application
+        setTimeout(() => {
+          // Find the application in the current list
+          const app = applications.find(a => a.id === applicationId)
+          if (app) {
+            setSelected(app)
+            setOpen(true)
+            markApplicationAsViewed(applicationId)
+          } else {
+            // Application not in current list, fetch it directly
+            fetch(`/api/direct-hire/${applicationId}`, {
+              credentials: 'include',
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success && data.data) {
+                  setSelected(data.data)
+                  setOpen(true)
+                  markApplicationAsViewed(applicationId)
+                  // Refresh the list to include this application
+                  fetchApplications(effectiveSearch, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
+                }
+              })
+              .catch(err => {
+                console.error('Error fetching application:', err)
+              })
+          }
+        }, 300) // Small delay to ensure page is loaded
+      }
+    }
+    window.addEventListener('open:application:view', handler as EventListener)
+    return () => window.removeEventListener('open:application:view', handler as EventListener)
+  }, [applications, markApplicationAsViewed, effectiveSearch, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter, fetchApplications])
 
   // Filter applications based on search (parseSearch and sexFilter already defined above)
   
@@ -757,6 +1192,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                         e.preventDefault()
                         setSelected(application)
                         setOpen(true)
+                        markApplicationAsViewed(application.id)
                       }}
                     >
                     <td className="py-3 px-4 text-center">
@@ -765,8 +1201,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                     <td className="py-3 px-4 text-center">
                       {(application.name || '').toUpperCase()}
                       {(application as any).applicant_user_id && (
-                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 relative">
                           Applicant
+                          {!viewedApplications.has(application.id) && (
+                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -902,7 +1341,11 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                                 ) : (
                                   <>
                                     {/* For active non-draft applications, show all normal actions */}
-                                    <DropdownMenuItem onClick={() => { setSelected(application); setOpen(true) }}>
+                                    <DropdownMenuItem onClick={() => { 
+                                      setSelected(application)
+                                      setOpen(true)
+                                      markApplicationAsViewed(application.id)
+                                    }}>
                                       <Eye className="h-4 w-4 mr-2" />
                                       View
                                     </DropdownMenuItem>
@@ -960,49 +1403,10 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <div className="mb-6">
                 <div className="font-semibold text-gray-700 mb-2">Applicant Information</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  <div>
-                    <div className="text-gray-500">Control No.:</div>
-                    <div className="font-medium">{selected.control_number}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Name:</div>
-                    <div className="font-medium">{selected.name}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Email:</div>
-                    <div className="font-medium">{(selected as any).email || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Cellphone No.:</div>
-                    <div className="font-medium">{(selected as any).cellphone || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Sex:</div>
-                    <div className="font-medium capitalize">{selected.sex}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Status:</div>
-                    <div className="font-medium">
-                      {(() => {
-                        if ((selected as any).deleted_at) return 'Deleted'
-                        const latestKey = getDerivedStatusKey(selected)
-                        switch (latestKey) {
-                          case 'evaluated': return 'Evaluated'
-                          case 'for_confirmation_confirmed': return 'Confirmed'
-                          case 'for_confirmation': return 'For Confirmation'
-                          case 'emailed_to_dhad': return 'Emailed to DHAD'
-                          case 'received_from_dhad': return 'Received from DHAD'
-                          case 'for_interview': return 'For Interview'
-                          case null:
-                          default: {
-                            const capitalizeWords = (str: string) => str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                            if (!selected.status_checklist && selected.status) return capitalizeWords(selected.status)
-                            return 'No statuses checked'
-                          }
-                        }
-                      })()}
-                  </div>
-                  </div>
+                  {renderFlaggableField('name', 'Name:', selected.name)}
+                  {renderFlaggableField('email', 'Email:', (selected as any).email || 'N/A')}
+                  {renderFlaggableField('cellphone', 'Cellphone No.:', (selected as any).cellphone || 'N/A')}
+                  {renderFlaggableField('sex', 'Sex:', <span className="uppercase">{selected.sex}</span>)}
                 </div>
               </div>
               <hr className="my-4" />
@@ -1010,35 +1414,18 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <div className="mb-6">
                 <div className="font-semibold text-gray-700 mb-2">Employment Details</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  <div>
-                    <div className="text-gray-500">Jobsite:</div>
-                    <div className="font-medium">{(selected.jobsite || '').toUpperCase()}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Position:</div>
-                    <div className="font-medium">{selected.position}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Employer:</div>
-                    <div className="font-medium">{(selected as any).employer || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Salary (per month):</div>
-                    <div className="font-medium">
-                      {(() => {
-                        const raw = (selected as any).raw_salary ?? (selected as any).rawSalary
-                        const cur = ((selected as any).salary_currency ?? (selected as any).salaryCurrency) || 'USD'
-                        const rawNum = typeof raw === 'string' ? Number(String(raw).replace(/,/g, '')) : Number(raw || 0)
-                        const usd = Number(selected.salary || 0)
-                        const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                        return `USD ${fmt(usd)} / ${String(cur).toUpperCase()} ${fmt(rawNum)}`
-                      })()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Evaluator:</div>
-                    <div className="font-medium">{selected.evaluator || 'Not assigned'}</div>
-                  </div>
+                  {renderFlaggableField('jobsite', 'Jobsite:', (selected.jobsite || '').toUpperCase())}
+                  {renderFlaggableField('position', 'Position:', selected.position)}
+                  {renderFlaggableField('job_type', 'Job Type:', ((selected as any).job_type || 'N/A').toUpperCase())}
+                  {renderFlaggableField('employer', 'Employer:', (selected as any).employer || 'N/A')}
+                  {renderFlaggableField('salary', 'Salary (per month):', (() => {
+                    const raw = (selected as any).raw_salary ?? (selected as any).rawSalary
+                    const cur = ((selected as any).salary_currency ?? (selected as any).salaryCurrency) || ''
+                    const rawNum = typeof raw === 'string' ? Number(String(raw).replace(/,/g, '')) : Number(raw || 0)
+                    const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    return `${fmt(rawNum)} ${cur ? String(cur).toUpperCase() : ''}`.trim()
+                  })())}
+                  {renderFlaggableField('evaluator', 'Evaluator:', selected.evaluator || 'Not assigned')}
                 </div>
               </div>
               <hr className="my-4" />
@@ -1089,7 +1476,6 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-semibold text-gray-700">Application Status</div>
-                  <div className="text-xs text-gray-500 italic">Click on unchecked status to mark as completed</div>
                 </div>
                 <ul className="text-sm">
                   {(() => {
@@ -1116,13 +1502,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       return oldStatuses.map(status => (
                         <li 
                           key={status.key} 
-                          className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-2 rounded transition-colors ${selected.status === status.key ? 'bg-green-50' : ''}`}
-                          onClick={() => {
-                            if (selected.status === status.key) return // Don't allow clicking on current status
-                            
-                            setStatusToChange({ key: status.key, label: status.label })
-                            setStatusConfirmOpen(true)
-                          }}
+                          className={`flex items-center gap-2 py-1 px-2 rounded ${selected.status === status.key ? 'bg-green-50' : ''}`}
                         >
                           <span className={`text-lg ${selected.status === status.key ? status.color : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${selected.status === status.key ? status.color.replace('text-', 'text-').replace('-600', '-700') : 'text-gray-700'}`}>
@@ -1155,13 +1535,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       return (
                         <li 
                           key={status.key} 
-                          className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-2 rounded transition-colors ${isChecked ? 'bg-green-50' : ''}`}
-                          onClick={() => {
-                            if (isChecked) return // Don't allow clicking on already checked status
-                            
-                            setStatusToChange({ key: status.key, label: status.label })
-                            setStatusConfirmOpen(true)
-                          }}
+                          className={`flex items-center gap-2 py-1 px-2 rounded ${isChecked ? 'bg-green-50' : ''}`}
                         >
                           <span className={`text-lg ${isChecked ? (status as any).dot : 'text-gray-400'}`}>●</span>
                           <span className={`font-semibold ${isChecked ? (status as any).text : 'text-gray-700'}`}>
@@ -1181,6 +1555,35 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 </ul>
               </div>
               <hr className="my-4" />
+              {/* Documents Information */}
+              <div className="mb-6">
+                <div className="font-semibold text-gray-700 mb-2">Documents Information</div>
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 mb-2">Passport</div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                      {renderFlaggableField('passport_number', 'Passport Number:', selectedDocsMeta.passport_number || (selected as any).passport_number || 'N/A')}
+                      {renderFlaggableField('passport_validity', 'Passport Validity:', selectedDocsMeta.passport_validity || (selected as any).passport_validity || 'N/A')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 mb-2">Visa / Work Permit</div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                      {renderFlaggableField('visa_category', 'Visa Category:', selectedDocsMeta.visa_category || (selected as any).visa_category || 'N/A')}
+                      {renderFlaggableField('visa_type', 'Visa Type:', selectedDocsMeta.visa_type || (selected as any).visa_type || 'N/A')}
+                      {renderFlaggableField('visa_number', 'Visa Number:', selectedDocsMeta.visa_number || (selected as any).visa_number || 'N/A')}
+                      {renderFlaggableField('visa_validity', 'Visa Validity:', selectedDocsMeta.visa_validity || (selected as any).visa_validity || 'N/A')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 mb-2">Employment Contract</div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                      {renderFlaggableField('ec_issued_date', 'Issued Date:', selectedDocsMeta.ec_issued_date || (selected as any).ec_issued_date || 'N/A')}
+                      {renderFlaggableField('ec_verification', 'Verification Type:', selectedDocsMeta.ec_verification || (selected as any).ec_verification || 'N/A')}
+                    </div>
+                  </div>
+                </div>
+              </div>
               {/* Documents */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1238,6 +1641,25 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                   }}
                   setSelectedDocument={setSelectedDocument}
                   setPdfViewerOpen={setPdfViewerOpen}
+                  onFlagDocument={(key, label) => {
+                    setFlagTarget({ key, label })
+                    setFlagReason(getFlagReason(key))
+                    setIsReFlagging(true)
+                    setFlagModalOpen(true)
+                  }}
+                  isDocumentFlagged={(key) => isFieldFlagged(key)}
+                  getDocumentFlagReason={(key) => getFlagReason(key)}
+                  isDocumentCorrected={(key) => isFieldCorrected(key)}
+                  isDocumentResolved={(key) => isFieldResolved(key)}
+                  isPendingStatus={(() => {
+                    const statusChecklist = (selected as any)?.status_checklist
+                    const isEvaluated = statusChecklist?.evaluated?.checked === true
+                    return selected?.status === 'pending' && !isEvaluated
+                  })()}
+                  onResolveDocument={(key) => {
+                    setFieldToResolve({ key, label: getFieldLabel(key) })
+                    setResolveConfirmOpen(true)
+                  }}
                 />
               <TransactionHistory
                 applicationType="direct-hire"
@@ -1246,8 +1668,257 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 />
               </div>
             </div>
+            {(() => {
+              const nextStatus = selected ? getNextStatus(selected.status_checklist, selected.status) : null
+              const isPendingStatus = selected?.status === 'pending' || (selected as any)?.status_checklist === null
+              // Return for Compliance should only be available when status is 'pending' AND evaluated is not checked
+              // If evaluated is checked, the application has moved past "For Evaluation"
+              const statusChecklist = (selected as any)?.status_checklist
+              const isEvaluated = statusChecklist?.evaluated?.checked === true
+              const isForEvaluation = selected?.status === 'pending' && !isEvaluated
+              return nextStatus ? (
+              <div className="flex justify-end gap-2 px-6 py-3 bg-white border-t">
+                {isForEvaluation && (
+                  <Button
+                    variant="destructive"
+                    className="bg-red-700 hover:bg-red-800 flex items-center gap-2"
+                    size="sm"
+                    disabled={correctionSaving || !localFlags.length}
+                    onClick={() => {
+                      if (!selected) return
+                      const validItems = localFlags.filter(i => i.field_key.trim() && i.message.trim())
+                      if (!validItems.length) {
+                        toast({ title: 'No flagged fields', description: 'Flag at least one field with a reason.', variant: 'destructive' })
+                        return
+                      }
+                      setReturnForComplianceConfirmOpen(true)
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Return for Compliance
+                  </Button>
+                )}
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={() => {
+                    setStatusToChange({ key: nextStatus.key, label: nextStatus.label })
+                    setStatusConfirmOpen(true)
+                  }}
+                >
+                  {`Mark as ${nextStatus.label}`}
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+              ) : null
+            })()}
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Flag reason modal */}
+      <Dialog open={flagModalOpen} onOpenChange={(open) => {
+        setFlagModalOpen(open)
+        if (!open) {
+          setIsReFlagging(false)
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Flag issue for {flagTarget?.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">Describe what needs to be corrected for this field.</p>
+            <Textarea
+              value={flagReason}
+              onChange={(e) => setFlagReason(e.target.value)}
+              placeholder="Reason"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setFlagModalOpen(false)
+              setIsReFlagging(false)
+            }}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                if (flagTarget && flagReason.trim()) {
+                  if (isReFlagging && selected) {
+                    // Immediately re-flag via API
+                    try {
+                      const res = await fetch(`/api/direct-hire/${selected.id}/corrections`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          items: [{ field_key: flagTarget.key, message: flagReason.trim() }], 
+                          note: '' 
+                        }),
+                      })
+                      const data = await res.json()
+                      if (data.success) {
+                        toast({ title: 'Field re-flagged', description: `${flagTarget.label} has been re-flagged for correction.` })
+                        setCorrectionRefreshKey(prev => prev + 1)
+                        void fetchOpenCorrections(selected.id)
+                        // Refresh application data to update needs_correction
+                        const appRes = await fetch(`/api/direct-hire/${selected.id}`)
+                        if (appRes.ok) {
+                          const appData = await appRes.json()
+                          if (appData.success && appData.data) {
+                            setSelected(appData.data)
+                          }
+                        }
+                      } else {
+                        toast({ title: 'Error', description: data.error || 'Failed to re-flag field', variant: 'destructive' })
+                      }
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err?.message || 'Failed to re-flag field', variant: 'destructive' })
+                    }
+                  } else {
+                    // Add to local flags for initial flagging
+                    upsertFlag(flagTarget.key, flagReason.trim())
+                  }
+                  setFlagModalOpen(false)
+                  setIsReFlagging(false)
+                } else {
+                  toast({ title: 'Reason required', description: 'Please enter a reason for the flag.', variant: 'destructive' })
+                }
+              }}
+            >
+              {isReFlagging ? 'Re-flag' : 'Save flag'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Corrections Modal */}
+      <Dialog open={correctionModalOpen} onOpenChange={setCorrectionModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Send back for correction</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border p-3 bg-gray-50">
+              <div className="text-sm font-medium mb-2">Current open corrections</div>
+              {correctionsLoading ? (
+                <div className="text-sm text-gray-500">Loading...</div>
+              ) : openCorrections.length === 0 ? (
+                <div className="text-sm text-gray-500">None</div>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {openCorrections.map((c) => (
+                    <li key={c.field_key + c.message} className="flex flex-col rounded border p-2 bg-white">
+                      <span className="font-semibold">{c.field_key}</span>
+                      <span className="text-gray-700">{c.message}</span>
+                      {c.created_at && <span className="text-xs text-gray-500">Added: {new Date(c.created_at).toLocaleString()}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {correctionItems.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-[2fr,3fr,auto] gap-2 items-start">
+                  <div>
+                    <Label className="text-xs">Field</Label>
+                    <select
+                      className="w-full border rounded px-2 py-2 text-sm"
+                      value={item.field_key}
+                      onChange={(e) => {
+                        const next = [...correctionItems]
+                        next[idx].field_key = e.target.value
+                        setCorrectionItems(next)
+                      }}
+                    >
+                      <option value="">Select field</option>
+                      {correctionFieldOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Problem</Label>
+                    <Textarea
+                      value={item.message}
+                      onChange={(e) => {
+                        const next = [...correctionItems]
+                        next[idx].message = e.target.value
+                        setCorrectionItems(next)
+                      }}
+                      placeholder="Describe what needs to be corrected"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setCorrectionItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCorrectionItems(prev => [...prev, { field_key: '', message: '' }])}
+              >
+                Add another field
+              </Button>
+            </div>
+
+            <div>
+              <Label className="text-xs">Overall note (optional)</Label>
+              <Textarea
+                value={correctionNote}
+                onChange={(e) => setCorrectionNote(e.target.value)}
+                placeholder="Additional context for the applicant"
+                className="text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCorrectionModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selected) return
+                const validItems = (localFlags.length ? localFlags : correctionItems).filter(i => i.field_key.trim() && i.message.trim())
+                if (validItems.length === 0) {
+                  toast({ title: 'Missing fields', description: 'Select at least one field and message.', variant: 'destructive' })
+                  return
+                }
+                setCorrectionSaving(true)
+                try {
+                  const res = await fetch(`/api/direct-hire/${selected.id}/corrections`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: validItems, note: correctionNote }),
+                  })
+                  const data = await res.json()
+                  if (!data.success) throw new Error(data.error || 'Failed to send corrections')
+                  toast({ title: 'Sent back for correction', description: 'Applicant will be notified.' })
+                  setCorrectionModalOpen(false)
+                  setCorrectionRefreshKey(prev => prev + 1)
+                  setLocalFlags([])
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message || 'Failed to send corrections', variant: 'destructive' })
+                } finally {
+                  setCorrectionSaving(false)
+                }
+              }}
+              disabled={correctionSaving}
+            >
+              {correctionSaving ? 'Sending...' : 'Send back'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1811,6 +2482,135 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Return for Compliance Confirmation Dialog */}
+      <AlertDialog open={returnForComplianceConfirmOpen} onOpenChange={setReturnForComplianceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Return Application for Compliance</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to return this application to the applicant for compliance? 
+              The applicant will be notified and will need to correct the flagged fields before resubmitting.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {localFlags.length > 0 && (
+            <div className="mt-3">
+              <div className="font-medium text-sm mb-2">Flagged fields ({localFlags.length}):</div>
+              <ul className="list-disc list-inside text-sm space-y-1">
+                {localFlags.map((flag, idx) => (
+                  <li key={idx}>
+                    <span className="font-medium">{getFieldLabel(flag.field_key)}:</span> {flag.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-800"
+              onClick={async () => {
+                if (!selected) return
+                const validItems = localFlags.filter(i => i.field_key.trim() && i.message.trim())
+                if (!validItems.length) {
+                  toast({ title: 'No flagged fields', description: 'Flag at least one field with a reason.', variant: 'destructive' })
+                  setReturnForComplianceConfirmOpen(false)
+                  return
+                }
+                setCorrectionSaving(true)
+                try {
+                  const res = await fetch(`/api/direct-hire/${selected.id}/corrections`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: validItems, note: '' }),
+                  })
+                  const data = await res.json()
+                  if (!data.success) throw new Error(data.error || 'Failed to send corrections')
+                  toast({ title: 'Sent back for correction', description: 'Applicant will be notified.' })
+                  setReturnForComplianceConfirmOpen(false)
+                  setCorrectionRefreshKey(prev => prev + 1)
+                  setLocalFlags([])
+                  // Keep the view modal open after flagging
+                  // setOpen(false)
+                  fetchApplications(search, 1, showDeletedOnly, showFinishedOnly, showProcessingOnly, sexFilter, statusFilter)
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message || 'Failed to send corrections', variant: 'destructive' })
+                } finally {
+                  setCorrectionSaving(false)
+                }
+              }}
+            >
+              Return for Compliance
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Mark as Resolved Confirmation Dialog */}
+      <AlertDialog open={resolveConfirmOpen} onOpenChange={(open) => {
+        setResolveConfirmOpen(open)
+        if (!open) {
+          setFieldToResolve(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-green-600">Mark Correction as Resolved</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to mark this correction as resolved?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center gap-2 text-green-800 font-semibold mb-2">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Mark as Resolved
+            </div>
+            <p className="text-green-700">
+              You are about to mark the correction for <strong>{fieldToResolve?.label}</strong> as resolved.
+            </p>
+            <p className="text-green-700 mt-2">
+              This will indicate that the applicant's correction has been reviewed and accepted. The flag will turn green.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setResolveConfirmOpen(false)
+              setFieldToResolve(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                if (!selected || !fieldToResolve) return
+                try {
+                  const res = await fetch(`/api/direct-hire/${selected.id}/corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field_key: fieldToResolve.key, resolved: true }),
+                  })
+                  const data = await res.json()
+                  if (data.success) {
+                    toast({ title: 'Correction marked as resolved', description: `${fieldToResolve.label} is now marked as resolved.` })
+                    setCorrectionRefreshKey(prev => prev + 1)
+                    void fetchOpenCorrections(selected.id)
+                    setResolveConfirmOpen(false)
+                    setFieldToResolve(null)
+                  } else {
+                    toast({ title: 'Error', description: data.error || 'Failed to mark as resolved', variant: 'destructive' })
+                  }
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message || 'Failed to mark as resolved', variant: 'destructive' })
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              Mark as Resolved
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
@@ -2015,7 +2815,7 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
 }
 
 // Applicant Documents List Component
-function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onViewPDF, setSelectedDocument, setPdfViewerOpen }: ApplicantDocumentsTabProps) {
+function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onViewPDF, setSelectedDocument, setPdfViewerOpen, onFlagDocument, isDocumentFlagged, getDocumentFlagReason, isDocumentCorrected, isDocumentResolved, onResolveDocument, isPendingStatus }: ApplicantDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [editingDocument, setEditingDocument] = useState<string | null>(null)
@@ -2384,9 +3184,85 @@ function ApplicantDocumentsList({ applicationId, refreshTrigger, onRefresh, onVi
             >
               Cancel
             </Button>
-          </div>
+            </div>
         ) : (
-          <span className="text-sm font-medium">{formatDocumentType(document.document_type, document.file_name)}</span>
+            <span className="text-sm font-medium flex items-center gap-2 group/document">
+              {formatDocumentType(document.document_type, document.file_name)}
+              {(() => {
+                const docKey = `document_${document.document_type}`
+                const isFlagged = isDocumentFlagged && isDocumentFlagged(docKey)
+                const corrected = isDocumentCorrected && isDocumentCorrected(docKey)
+                const resolved = isDocumentResolved && isDocumentResolved(docKey)
+                
+                if (isFlagged) {
+                  let flagColor = 'text-red-600 fill-red-600'
+                  let flagBorderColor = 'border-red-200'
+                  let flagTextColor = 'text-red-700'
+                  let flagState = 'Flagged'
+                  
+                  if (resolved) {
+                    flagColor = 'text-green-600 fill-green-600'
+                    flagBorderColor = 'border-green-200'
+                    flagTextColor = 'text-green-700'
+                    flagState = '✓ Resolved'
+                  } else if (corrected) {
+                    flagColor = 'text-amber-600 fill-amber-600'
+                    flagBorderColor = 'border-amber-300'
+                    flagTextColor = 'text-amber-800'
+                    flagState = 'Needs Review'
+                  }
+                  
+                  return (
+                    <div className="relative group flex items-center gap-1">
+                      <FlagSolid className={`h-4 w-4 ${flagColor}`} />
+                      <div className={`absolute z-20 hidden group-hover:block left-0 top-full mt-1 min-w-[180px] rounded-md bg-white shadow-lg border ${flagBorderColor} p-2 text-xs ${flagTextColor}`}>
+                        {corrected ? (
+                          <div>{getDocumentFlagReason ? getDocumentFlagReason(docKey) : 'Flagged for review'}</div>
+                        ) : (
+                          <>
+                            <div className="font-medium mb-1">{flagState}</div>
+                            <div>{getDocumentFlagReason ? getDocumentFlagReason(docKey) : 'Flagged for review'}</div>
+                          </>
+                        )}
+                      </div>
+                      {corrected && !resolved && onResolveDocument && isPendingStatus && (
+                        <button
+                          type="button"
+                          onClick={() => onResolveDocument(docKey)}
+                          className="ml-1 text-xs text-green-600 hover:text-green-700 underline"
+                          title="Mark as resolved"
+                        >
+                          ✓
+                        </button>
+                      )}
+                      {corrected && !resolved && onFlagDocument && isPendingStatus && (
+                        <button
+                          type="button"
+                          onClick={() => onFlagDocument(docKey, formatDocumentType(document.document_type, document.file_name))}
+                          className="ml-1 text-xs text-red-600 hover:text-red-700"
+                          title="Flag again - correction not sufficient"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                } else {
+                  return (
+                    onFlagDocument && isPendingStatus ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center text-red-600 hover:text-red-700 opacity-0 group-hover/document:opacity-100 transition-opacity"
+                        onClick={() => onFlagDocument(docKey, formatDocumentType(document.document_type, document.file_name))}
+                        aria-label={`Flag ${formatDocumentType(document.document_type, document.file_name)}`}
+                      >
+                        <Flag className="h-4 w-4" />
+                      </button>
+                    ) : null
+                  )
+                }
+              })()}
+            </span>
         )}
       </div>
       <div className="flex items-center space-x-2">

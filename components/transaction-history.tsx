@@ -28,6 +28,10 @@ const formatActionLabel = (action: string): string => {
       return "Approved";
     case "rejected":
       return "Rejected";
+    case "correction_requested":
+      return "Sent Back for Correction";
+    case "correction_resubmitted":
+      return "Resubmitted After Correction";
     case "release_card":
       return "Card Released";
     case "received_by_region":

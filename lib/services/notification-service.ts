@@ -165,3 +165,118 @@ export class NotificationService {
   }
 }
 
+/**
+ * Staff Notification Interface
+ */
+export interface StaffNotification {
+  id: string
+  user_id: string
+  type: 'correction_resubmitted' | 'status_change' | 'application_deleted'
+  title: string
+  message: string
+  application_type: 'direct_hire' | 'balik_manggagawa' | 'gov_to_gov' | null
+  application_id: string | null
+  field_key: string | null
+  is_read: boolean
+  created_at: string
+  read_at: string | null
+}
+
+/**
+ * Staff Notification Service Extension
+ */
+export class StaffNotificationService {
+
+  /**
+   * Create a notification for staff
+   */
+  static async createStaffNotification(
+    userId: string,
+    type: 'correction_resubmitted' | 'status_change' | 'application_deleted',
+    title: string,
+    message: string,
+    applicationType?: 'direct_hire' | 'balik_manggagawa' | 'gov_to_gov',
+    applicationId?: string,
+    fieldKey?: string
+  ): Promise<StaffNotification> {
+    const result = await db.query(
+      `INSERT INTO staff_notifications 
+       (user_id, type, title, message, application_type, application_id, field_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [userId, type, title, message, applicationType || null, applicationId || null, fieldKey || null]
+    )
+
+    return result.rows[0]
+  }
+
+  /**
+   * Get staff notifications for a user
+   */
+  static async getStaffNotifications(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{ notifications: StaffNotification[]; total: number }> {
+    const notificationsResult = await db.query(
+      `SELECT * FROM staff_notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    )
+
+    const countResult = await db.query(
+      'SELECT COUNT(*) FROM staff_notifications WHERE user_id = $1',
+      [userId]
+    )
+
+    return {
+      notifications: notificationsResult.rows,
+      total: parseInt(countResult.rows[0].count, 10),
+    }
+  }
+
+  /**
+   * Get unread staff notification count
+   */
+  static async getStaffUnreadCount(userId: string): Promise<number> {
+    const result = await db.query(
+      'SELECT COUNT(*) FROM staff_notifications WHERE user_id = $1 AND is_read = FALSE',
+      [userId]
+    )
+
+    return parseInt(result.rows[0].count, 10)
+  }
+
+  /**
+   * Mark staff notification as read
+   */
+  static async markStaffNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+    const result = await db.query(
+      `UPDATE staff_notifications
+       SET is_read = TRUE, read_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2
+       RETURNING id`,
+      [notificationId, userId]
+    )
+
+    return result.rows.length > 0
+  }
+
+  /**
+   * Mark all staff notifications as read for a user
+   */
+  static async markAllStaffNotificationsAsRead(userId: string): Promise<number> {
+    const result = await db.query(
+      `UPDATE staff_notifications
+       SET is_read = TRUE, read_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND is_read = FALSE
+       RETURNING id`,
+      [userId]
+    )
+
+    return result.rows.length
+  }
+}
+

@@ -615,6 +615,7 @@ async function initializeDatabase() {
       { file: 'migrations/20250108_create_notifications_table.sql', desc: 'Creating applicant notifications table' },
       { file: 'migrations/20250301_add_direct_hire_corrections.sql', desc: 'Adding corrections workflow for Direct Hire applications' },
       { file: 'migrations/20250302_create_staff_notifications_table.sql', desc: 'Creating staff notifications table' },
+      { file: 'migrations/20250304_add_bm_corrections.sql', desc: 'Adding corrections workflow for Balik Manggagawa' },
       { file: 'migrations/20250303_create_application_views_table.sql', desc: 'Creating application views tracking table' }
     ];
 

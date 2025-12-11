@@ -3,10 +3,10 @@
 
 import Header from "@/components/shared/header"
 import { useBalikManggagawaClearance } from "@/hooks/use-balik-manggagawa-clearance"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2, ChevronUp, FileCheck, CheckCircle, XCircle } from "lucide-react"
+import { Filter, Search, Plus, MoreHorizontal, Eye, Edit, Trash2, FileText, Settings, Download, Loader2, ChevronUp, FileCheck, CheckCircle, XCircle, Flag, Flag as FlagSolid, X } from "lucide-react"
 import DocumentViewerModal from "@/components/pdf-viewer-modal"
 import TransactionHistory from "@/components/transaction-history"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { AVAILABLE_CURRENCIES, getUSDEquivalentAsync, type Currency } from "@/lib/currency-converter"
-import { useCallback, useRef } from "react"
+import { useRef } from "react"
 import BMFilterPanel from "@/components/bm-filter-panel"
 import ProcessingStatusCard from "@/components/processing-status-card"
 
@@ -693,6 +693,20 @@ export default function BalikManggagawaPage() {
   const [viewOpen, setViewOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [selected, setSelected] = useState<any>(null)
+  const [allCorrections, setAllCorrections] = useState<{ field_key: string; message: string; resolved_at: string | null }[]>([])
+  const [correctionsLoading, setCorrectionsLoading] = useState(false)
+  const [flagModalOpen, setFlagModalOpen] = useState(false)
+  const [flagTarget, setFlagTarget] = useState<{ key: string; label: string } | null>(null)
+  const [flagReason, setFlagReason] = useState('')
+  const [isReFlagging, setIsReFlagging] = useState(false)
+  const [localFlags, setLocalFlags] = useState<{ field_key: string; message: string }[]>([])
+  const [returnForComplianceConfirmOpen, setReturnForComplianceConfirmOpen] = useState(false)
+  const [proceedToApprovalConfirmOpen, setProceedToApprovalConfirmOpen] = useState(false)
+  const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false)
+  const [fieldToResolve, setFieldToResolve] = useState<{ key: string; label: string } | null>(null)
+  const [correctionRefreshKey, setCorrectionRefreshKey] = useState(0)
+  const [correctionSaving, setCorrectionSaving] = useState(false)
+  const [viewedApplications, setViewedApplications] = useState<Set<string>>(new Set())
   const [editSaving, setEditSaving] = useState(false)
   const [editData, setEditData] = useState({
     nameOfWorker: "",
@@ -724,6 +738,119 @@ export default function BalikManggagawaPage() {
   const [complianceSubmitting, setComplianceSubmitting] = useState(false)
   const [complianceFields, setComplianceFields] = useState<Record<string, string>>({})
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  const getFieldLabel = (fieldKey: string) => {
+    const map: Record<string, string> = {
+      name_of_worker: 'Name of Worker',
+      sex: 'Sex',
+      destination: 'Destination',
+      position: 'Position',
+      job_type: 'Job Type',
+      employer: 'Employer',
+      salary: 'Salary',
+      raw_salary: 'Salary',
+      salary_currency: 'Salary Currency',
+    }
+    return map[fieldKey] || fieldKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  const isFieldFlagged = (key: string) => {
+    return localFlags.some(f => f.field_key === key) || allCorrections.some(c => c.field_key === key)
+  }
+
+  const getFlagReason = (key: string) => {
+    const localFlag = localFlags.find(f => f.field_key === key)
+    if (localFlag) return localFlag.message
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction?.message || ''
+  }
+
+  const isFieldResolved = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction ? !!correction.resolved_at : false
+  }
+
+  // A field is "corrected" if it was flagged, applicant resubmitted (needs_correction = false), and not resolved yet.
+  const isFieldCorrected = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    if (!correction || correction.resolved_at) return false
+    return selected && selected.needs_correction === false
+  }
+
+  const refreshCorrections = useCallback(async (clearanceId: string) => {
+    try {
+      setCorrectionsLoading(true)
+      const res = await fetch(`/api/balik-manggagawa/clearance/${clearanceId}/corrections?include_resolved=true`)
+      const data = await res.json()
+      if (data.success) {
+        setAllCorrections(data.data || [])
+      } else {
+        setAllCorrections([])
+      }
+    } catch {
+      setAllCorrections([])
+    } finally {
+      setCorrectionsLoading(false)
+    }
+  }, [])
+
+  const refreshSelected = useCallback(async (clearanceId: string) => {
+    try {
+      const res = await fetch(`/api/balik-manggagawa/clearance/${clearanceId}`)
+      const json = await res.json()
+      if (json.success && json.data) {
+        setSelected(json.data)
+      }
+    } catch {}
+  }, [])
+
+  // Function to mark application as viewed
+  const markApplicationAsViewed = useCallback(async (clearanceId: string) => {
+    // Check if already marked as viewed locally
+    if (viewedApplications.has(clearanceId)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/balik-manggagawa/clearance/${clearanceId}/view`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        // Add to viewed set
+        setViewedApplications(prev => new Set(prev).add(clearanceId))
+      }
+    } catch (error) {
+      console.error('Error marking application as viewed:', error)
+    }
+  }, [viewedApplications])
+
+  // Function to check if application has been viewed
+  const checkApplicationViewed = useCallback(async (clearanceId: string) => {
+    if (viewedApplications.has(clearanceId)) {
+      return true
+    }
+
+    try {
+      const response = await fetch(`/api/balik-manggagawa/clearance/${clearanceId}/view`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.viewed) {
+          setViewedApplications(prev => new Set(prev).add(clearanceId))
+          return true
+        }
+      }
+    } catch (error) {
+      console.error('Error checking application view status:', error)
+    }
+
+    return false
+  }, [viewedApplications])
 
   const getComplianceTitle = (type: string) => {
     switch (type) {
@@ -815,6 +942,180 @@ export default function BalikManggagawaPage() {
     ] as Array<{ key: string; label: string; required?: boolean; inputType?: string; toUpper?: boolean }>
   }
 
+  const renderFlaggableField = (key: string, label: string, value: string | number | null | undefined) => {
+    const flagged = isFieldFlagged(key)
+    const corrected = isFieldCorrected(key)
+    const resolved = isFieldResolved(key)
+    const isPending = (selected?.status || '') === 'pending'
+
+    // Determine flag color and state
+    let flagColor = 'text-red-600 fill-red-600'
+    let flagBorderColor = 'border-red-200'
+    let flagTextColor = 'text-red-700'
+    let flagState = 'Flagged'
+
+    if (resolved) {
+      flagColor = 'text-green-600 fill-green-600'
+      flagBorderColor = 'border-green-200'
+      flagTextColor = 'text-green-700'
+      flagState = '✓ Resolved'
+    } else if (corrected) {
+      flagColor = 'text-amber-600 fill-amber-600'
+      flagBorderColor = 'border-amber-300'
+      flagTextColor = 'text-amber-800'
+      flagState = 'Needs Review'
+    }
+
+    return (
+      <div className="relative group">
+        <div className="text-gray-500">{label}</div>
+        <div className="font-medium flex items-center gap-1">
+          {value ?? '-'}
+          {flagged && (
+            <div className="relative flex items-center gap-1">
+              <FlagSolid className={`h-5 w-5 ${flagColor}`} />
+              <div className={`absolute z-20 hidden group-hover:block left-0 top-full mt-1 min-w-[180px] rounded-md bg-white shadow-lg border ${flagBorderColor} p-2 text-xs ${flagTextColor}`}>
+                {corrected ? (
+                  <div>{getFlagReason(key)}</div>
+                ) : (
+                  <>
+                    <div className="font-medium mb-1">{flagState}</div>
+                    <div>{getFlagReason(key)}</div>
+                  </>
+                )}
+              </div>
+              {isPending && corrected && !resolved && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFieldToResolve({ key, label })
+                    setResolveConfirmOpen(true)
+                  }}
+                  className="ml-1 text-xs text-green-600 hover:text-green-700 underline"
+                  title="Mark as resolved"
+                >
+                  ✓
+                </button>
+              )}
+            </div>
+          )}
+          {!flagged && isPending && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(false)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 transition-opacity ml-1 opacity-0 group-hover:opacity-100"
+              aria-label={`Flag ${label}`}
+              title={`Flag ${label}`}
+            >
+              <Flag className="h-5 w-5" />
+            </button>
+          )}
+          {corrected && !resolved && isPending && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(true)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 ml-1"
+              aria-label="Flag again"
+              title="Flag again - correction not sufficient"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        {flagged && !corrected && (
+          <div className={`text-xs ${flagTextColor}`}>
+            {flagState}: {getFlagReason(key)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const handleReturnForCompliance = async () => {
+    if (!selected?.id) return
+    // Prevent duplicate returns - if already returned for compliance, don't allow another return
+    if (selected.needs_correction === true) {
+      toast({ title: 'Already returned', description: 'This application has already been returned for compliance. Wait for the applicant to resubmit.', variant: 'destructive' })
+      setReturnForComplianceConfirmOpen(false)
+      return
+    }
+    // Check if there are any unresolved flags (red flags) available
+    const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+    if (!hasUnresolvedFlags) {
+      toast({ title: 'No unresolved flags', description: 'All flags must be resolved (green) or new flags must be added before returning for compliance.', variant: 'destructive' })
+      setReturnForComplianceConfirmOpen(false)
+      return
+    }
+    const items = (localFlags.length ? localFlags : allCorrections.filter(c => !c.resolved_at))
+      .map(c => ({ field_key: c.field_key, message: c.message }))
+    if (!items || items.length === 0) {
+      toast({ title: 'Add at least one flag', description: 'Please flag at least one field before returning for compliance.', variant: 'destructive' })
+      return
+    }
+    await submitFlags(items)
+    setReturnForComplianceConfirmOpen(false)
+  }
+
+  const submitFlags = async (items: { field_key: string; message: string }[]) => {
+    if (!selected?.id || items.length === 0) return
+    setCorrectionSaving(true)
+    try {
+      const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/corrections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to flag')
+      toast({ title: 'Flagged', description: 'Fields have been flagged for correction.' })
+      setFlagModalOpen(false)
+      setFlagReason('')
+      setFlagTarget(null)
+      setLocalFlags([])
+      setCorrectionRefreshKey(k => k + 1)
+      await refreshSelected(selected.id)
+      await refreshCorrections(selected.id)
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'Failed to flag fields', variant: 'destructive' })
+    } finally {
+      setCorrectionSaving(false)
+    }
+  }
+
+  const handleResolveField = async (fieldKey: string) => {
+    if (!selected?.id) return
+    setCorrectionSaving(true)
+    try {
+      const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/corrections`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_key: fieldKey, resolved: true }),
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to resolve')
+      toast({ title: 'Resolved', description: 'Field marked as resolved.' })
+      setCorrectionRefreshKey(k => k + 1)
+      await refreshSelected(selected.id)
+      await refreshCorrections(selected.id)
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'Failed to resolve', variant: 'destructive' })
+    } finally {
+      setCorrectionSaving(false)
+    }
+  }
+
   const openComplianceDialog = (type: string) => {
     setSelectedComplianceType(type)
     const defs = getComplianceFieldDefs(type)
@@ -833,6 +1134,30 @@ export default function BalikManggagawaPage() {
   useEffect(() => {
     fetchClearances({ page: 1, limit: 10 })
   }, [fetchClearances])
+
+  useEffect(() => {
+    if (selected?.id) {
+      void refreshCorrections(selected.id)
+      // Mark application as viewed when modal opens
+      markApplicationAsViewed(selected.id)
+    } else {
+      setAllCorrections([])
+      setLocalFlags([])
+    }
+  }, [selected?.id, correctionRefreshKey, refreshCorrections, markApplicationAsViewed])
+
+  // Check view status for all applications with applicant_user_id when clearances are loaded
+  useEffect(() => {
+    const checkViews = async () => {
+      const applicantApps = clearances.filter((app: any) => app.applicant_user_id)
+      const promises = applicantApps.map((app: any) => checkApplicationViewed(app.id))
+      await Promise.all(promises)
+    }
+    
+    if (clearances.length > 0) {
+      void checkViews()
+    }
+  }, [clearances, checkApplicationViewed])
 
   // Live search: refresh results whenever search text changes
   useEffect(() => {
@@ -1144,6 +1469,7 @@ export default function BalikManggagawaPage() {
                         }
                         setSelected(row)
                         setViewOpen(true)
+                        markApplicationAsViewed(row.id)
                       }}
                     >
                       <td className="py-3 px-4 text-center">
@@ -1152,8 +1478,11 @@ export default function BalikManggagawaPage() {
                       <td className="py-3 px-4 text-center">
                         {row.name_of_worker}
                         {row.applicant_user_id && (
-                          <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                          <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 relative">
                             Applicant
+                            {!viewedApplications.has(row.id) && (
+                              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1199,6 +1528,7 @@ export default function BalikManggagawaPage() {
                                   if (json.success) {
                                     setSelected(json.data)
                                     setViewOpen(true)
+                                    markApplicationAsViewed(row.id)
                                   } else {
                                     toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
                                   }
@@ -1569,37 +1899,21 @@ export default function BalikManggagawaPage() {
                 <div className="text-gray-500">Control No.:</div>
                 <div className="font-medium">{selected?.control_number || '-'}</div>
               </div>
-              <div>
-                <div className="text-gray-500">Name of Worker:</div>
-                <div className="font-medium">{selected?.name_of_worker || '-'}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">Sex:</div>
-                <div className="font-medium capitalize">{selected?.sex || '-'}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">Employer:</div>
-                <div className="font-medium">{selected?.employer || '-'}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">Destination:</div>
-                <div className="font-medium">{selected?.destination || '-'}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">Position:</div>
-                <div className="font-medium">{selected?.position || '-'}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">Salary (per month):</div>
-                <div className="font-medium">
-                  {selected?.salary != null && selected?.raw_salary != null && selected?.salary_currency ? 
-                    `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${selected.salary_currency} ${Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                    : selected?.salary != null ? 
-                      `USD ${Number(selected.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                      : '-'
-                  }
-                </div>
-              </div>
+              {renderFlaggableField('name_of_worker', 'Name of Worker', selected?.name_of_worker || '-')}
+              {renderFlaggableField('sex', 'Sex', selected?.sex ? selected.sex.toString().toUpperCase() : '-')}
+              {renderFlaggableField('destination', 'Destination', selected?.destination || '-')}
+              {renderFlaggableField('position', 'Position', selected?.position || '-')}
+              {renderFlaggableField('job_type', 'Job Type', selected?.job_type ? selected.job_type.toUpperCase() : '-')}
+              {renderFlaggableField('employer', 'Employer', selected?.employer || '-')}
+              {renderFlaggableField(
+                'salary',
+                'Salary (per month)',
+                selected?.raw_salary != null && selected?.salary_currency
+                  ? `${selected.salary_currency} ${Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : selected?.raw_salary != null
+                    ? Number(selected.raw_salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '-'
+              )}
             </div>
             {/* Documents Section */}
             <div className="px-6 pb-6">
@@ -1652,6 +1966,49 @@ export default function BalikManggagawaPage() {
               )
             }
             
+            // For pending status: show Return for Compliance and Proceed to Approval
+            if (status === 'pending') {
+              // Check if there are any unresolved flags (red flags) available
+              const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+              // Disable if already returned for compliance (needs_correction = true) to prevent duplicate returns
+              const alreadyReturned = selected?.needs_correction === true
+              return (
+                <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    disabled={!hasUnresolvedFlags || alreadyReturned}
+                    className="flex items-center gap-2 bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      setReturnForComplianceConfirmOpen(true)
+                    }}
+                    title={(() => {
+                      if (alreadyReturned) {
+                        return 'Application has already been returned for compliance. Wait for applicant to resubmit.'
+                      }
+                      if (!hasUnresolvedFlags) {
+                        return 'No unresolved flags available. All flags must be resolved (green) or new flags must be added before returning for compliance.'
+                      }
+                      return undefined
+                    })()}
+                  >
+                    <Flag className="h-4 w-4" />
+                    Return for Compliance
+                  </Button>
+                  <Button 
+                    disabled={hasUnresolvedFlags}
+                    className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      setProceedToApprovalConfirmOpen(true)
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Proceed to Approval
+                  </Button>
+                </div>
+              )
+            }
+            
+            // For other statuses: show For Compliance, Reject/Deny, and Approve
             return (
               <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-end gap-3">
                 <DropdownMenu>
@@ -1663,24 +2020,12 @@ export default function BalikManggagawaPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="center" className="w-56">
                     <DropdownMenuItem onClick={() => openComplianceDialog('critical_skill')}>Critical Skills</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('for_assessment_country')
-                    }}>For Assessment Country</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('non_compliant_country')
-                    }}>Non Compliant Country</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('no_verified_contract')
-                    }}>No Verified Contract</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('seafarer_position')
-                    }}>Seaferer's Position</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('watchlisted_employer')
-                    }}>Watchlisted Employer</DropdownMenuItem>
-                    <DropdownMenuItem onClick={async () => {
-                      openComplianceDialog('watchlisted_similar_name')
-                    }}>Watchlisted OFW</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('for_assessment_country')}>For Assessment Country</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('non_compliant_country')}>Non Compliant Country</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('no_verified_contract')}>No Verified Contract</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('seafarer_position')}>Seaferer's Position</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('watchlisted_employer')}>Watchlisted Employer</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openComplianceDialog('watchlisted_similar_name')}>Watchlisted OFW</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button 
@@ -1702,6 +2047,161 @@ export default function BalikManggagawaPage() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Flag Modal */}
+      <Dialog open={flagModalOpen} onOpenChange={(o)=> { setFlagModalOpen(o); if (!o) { setFlagReason(''); setFlagTarget(null); setIsReFlagging(false); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isReFlagging ? 'Flag again' : `Flag ${flagTarget?.label || 'field'}`}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-gray-600">
+              Enter the reason for returning this field for correction.
+            </div>
+            <textarea
+              value={flagReason}
+              onChange={(e) => setFlagReason(e.target.value)}
+              className="w-full border rounded px-3 py-2 min-h-[120px]"
+              placeholder="Describe what needs to be corrected..."
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setFlagModalOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!flagTarget || !flagReason.trim() || correctionSaving}
+              onClick={() => {
+                if (!flagTarget || !flagReason.trim()) return
+                setLocalFlags([{ field_key: flagTarget.key, message: flagReason.trim() }])
+                void submitFlags([{ field_key: flagTarget.key, message: flagReason.trim() }])
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {correctionSaving ? 'Saving...' : 'Return for correction'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return for Compliance Confirmation */}
+      <AlertDialog open={returnForComplianceConfirmOpen} onOpenChange={setReturnForComplianceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Return for Compliance</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="text-sm text-gray-700">
+            This will send the flagged fields back to the applicant for correction.
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleReturnForCompliance}
+            >
+              Return
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Proceed to Approval Confirmation */}
+      <AlertDialog open={proceedToApprovalConfirmOpen} onOpenChange={setProceedToApprovalConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Proceed to Approval</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to move the application for <strong>{selected?.name_of_worker || 'this applicant'}</strong> to "For Approval" status?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={async () => {
+                if (!selected?.id) return
+                try {
+                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}`, { 
+                    method: 'PATCH', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ action: 'status_update', status: 'for_approval', clearanceType: null }) 
+                  })
+                  const json = await res.json()
+                  if (json.success) {
+                    toast({ title: 'Updated', description: 'Application moved to For Approval' })
+                    setProceedToApprovalConfirmOpen(false)
+                    setViewOpen(false)
+                    fetchClearances(getCurrentFilters())
+                  } else {
+                    toast({ title: 'Update failed', description: json.error || 'Failed to update', variant: 'destructive' })
+                  }
+                } catch {
+                  toast({ title: 'Update failed', description: 'Network error', variant: 'destructive' })
+                }
+              }}
+            >
+              Proceed
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Mark as Resolved Confirmation Dialog */}
+      <AlertDialog open={resolveConfirmOpen} onOpenChange={(open) => {
+        setResolveConfirmOpen(open)
+        if (!open) {
+          setFieldToResolve(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark as Resolved</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="text-sm text-gray-700 space-y-2">
+            <p>
+              Are you sure you want to mark <strong>{fieldToResolve?.label || 'this field'}</strong> as resolved?
+            </p>
+            <p className="text-xs text-gray-500">
+              This will indicate that the applicant's correction has been reviewed and accepted. The flag will turn green.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setResolveConfirmOpen(false)
+              setFieldToResolve(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={async () => {
+                if (!selected?.id || !fieldToResolve) return
+                try {
+                  const res = await fetch(`/api/balik-manggagawa/clearance/${selected.id}/corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field_key: fieldToResolve.key, resolved: true }),
+                    credentials: 'include',
+                  })
+                  const data = await res.json()
+                  if (data.success) {
+                    toast({ title: 'Correction marked as resolved', description: `${fieldToResolve.label} is now marked as resolved.` })
+                    setCorrectionRefreshKey(prev => prev + 1)
+                    await refreshSelected(selected.id)
+                    await refreshCorrections(selected.id)
+                    setResolveConfirmOpen(false)
+                    setFieldToResolve(null)
+                  } else {
+                    toast({ title: 'Error', description: data.error || 'Failed to mark as resolved', variant: 'destructive' })
+                  }
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message || 'Failed to mark as resolved', variant: 'destructive' })
+                }
+              }}
+            >
+              Mark as Resolved
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit Modal */}
       <Dialog open={editOpen} onOpenChange={(o)=> { setEditOpen(o); if (!o) { setSelected(null); setEditSaving(false); setOriginalEditData(null); setOriginalSalaryUSD(null) } }}>

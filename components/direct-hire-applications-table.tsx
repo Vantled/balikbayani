@@ -1681,9 +1681,15 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 {isForEvaluation && (
                   <Button
                     variant="destructive"
-                    className="bg-red-700 hover:bg-red-800 flex items-center gap-2"
+                    className="bg-red-700 hover:bg-red-800 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     size="sm"
-                    disabled={correctionSaving || !localFlags.length}
+                    disabled={(() => {
+                      if (correctionSaving) return true
+                      if (selected?.needs_correction === true) return true
+                      // Check if there are any unresolved flags (red flags) available
+                      const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+                      return !hasUnresolvedFlags
+                    })()}
                     onClick={() => {
                       if (!selected) return
                       const validItems = localFlags.filter(i => i.field_key.trim() && i.message.trim())
@@ -1693,6 +1699,16 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                       }
                       setReturnForComplianceConfirmOpen(true)
                     }}
+                    title={(() => {
+                      if (selected?.needs_correction === true) {
+                        return 'Application has already been returned for compliance. Wait for applicant to resubmit.'
+                      }
+                      const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+                      if (!hasUnresolvedFlags) {
+                        return 'No unresolved flags available. All flags must be resolved (green) or new flags must be added before returning for compliance.'
+                      }
+                      return undefined
+                    })()}
                   >
                     <RotateCcw className="h-4 w-4" />
                     Return for Compliance
@@ -1701,11 +1717,23 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
                 <Button
                   variant="default"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={(() => {
+                    // Only disable for "Mark as Evaluated" when there are unresolved flags
+                    if (nextStatus.key === 'evaluated') {
+                      // Check if there are any unresolved flags (flags that are not green/resolved)
+                      const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+                      return hasUnresolvedFlags
+                    }
+                    return false
+                  })()}
                   onClick={() => {
                     setStatusToChange({ key: nextStatus.key, label: nextStatus.label })
                     setStatusConfirmOpen(true)
                   }}
+                  title={nextStatus.key === 'evaluated' && (allCorrections.some(c => !c.resolved_at) || localFlags.length > 0) 
+                    ? 'All flagged fields must be resolved (green) before marking as evaluated.' 
+                    : undefined}
                 >
                   {`Mark as ${nextStatus.label}`}
                   <ArrowRight className="h-4 w-4" />
@@ -2510,6 +2538,19 @@ export default function DirectHireApplicationsTable({ search, filterQuery = "", 
               className="bg-red-700 hover:bg-red-800"
               onClick={async () => {
                 if (!selected) return
+                // Prevent duplicate returns - if already returned for compliance, don't allow another return
+                if (selected.needs_correction === true) {
+                  toast({ title: 'Already returned', description: 'This application has already been returned for compliance. Wait for the applicant to resubmit.', variant: 'destructive' })
+                  setReturnForComplianceConfirmOpen(false)
+                  return
+                }
+                // Check if there are any unresolved flags (red flags) available
+                const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+                if (!hasUnresolvedFlags) {
+                  toast({ title: 'No unresolved flags', description: 'All flags must be resolved (green) or new flags must be added before returning for compliance.', variant: 'destructive' })
+                  setReturnForComplianceConfirmOpen(false)
+                  return
+                }
                 const validItems = localFlags.filter(i => i.field_key.trim() && i.message.trim())
                 if (!validItems.length) {
                   toast({ title: 'No flagged fields', description: 'Flag at least one field with a reason.', variant: 'destructive' })

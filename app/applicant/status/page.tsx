@@ -107,6 +107,8 @@ export default function ApplicantStatusPage() {
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
   const [directHireCorrections, setDirectHireCorrections] = useState<{ field_key: string; message: string }[]>([])
   const [directHireCorrectionsLoading, setDirectHireCorrectionsLoading] = useState(false)
+  const [bmCorrections, setBmCorrections] = useState<{ field_key: string; message: string }[]>([])
+  const [bmCorrectionsLoading, setBmCorrectionsLoading] = useState(false)
 
   useEffect(() => {
     fetchApplications()
@@ -126,6 +128,23 @@ export default function ApplicantStatusPage() {
       setDirectHireCorrections([])
     } finally {
       setDirectHireCorrectionsLoading(false)
+    }
+  }
+
+  const fetchBmCorrections = async (clearanceId: string) => {
+    try {
+      setBmCorrectionsLoading(true)
+      const res = await fetch(`/api/balik-manggagawa/clearance/${clearanceId}/corrections`)
+      const data = await res.json()
+      if (data.success) {
+        setBmCorrections(data.data || [])
+      } else {
+        setBmCorrections([])
+      }
+    } catch {
+      setBmCorrections([])
+    } finally {
+      setBmCorrectionsLoading(false)
     }
   }
 
@@ -233,6 +252,11 @@ export default function ApplicantStatusPage() {
           newApplications.balikManggagawa = {
             application: bmData.data,
             documents: docsData.success ? (docsData.data || []) : [],
+          }
+          if (bmData.data.needs_correction) {
+            void fetchBmCorrections(bmData.data.id)
+          } else {
+            setBmCorrections([])
           }
         }
       }
@@ -598,6 +622,61 @@ export default function ApplicantStatusPage() {
         </AccordionTrigger>
         <AccordionContent className="px-6 pb-6">
           <div className="space-y-6 pt-4">
+            {application.needs_correction && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-800">Action required</div>
+                    <div className="text-xs text-amber-700">Some fields need correction before processing continues.</div>
+                  </div>
+                </div>
+                {bmCorrectionsLoading ? (
+                  <div className="text-sm text-amber-800">Loading corrections...</div>
+                ) : bmCorrections.length === 0 ? (
+                  <div className="text-sm text-amber-800">Corrections will appear here once available.</div>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {bmCorrections.map((c, idx) => {
+                      // Convert technical field key to user-friendly label
+                      const getFieldLabel = (fieldKey: string): string => {
+                        const fieldLabelMap: Record<string, string> = {
+                          name_of_worker: 'Name of Worker',
+                          sex: 'Sex',
+                          destination: 'Destination',
+                          position: 'Position',
+                          job_type: 'Job Type',
+                          employer: 'Employer',
+                          salary: 'Salary',
+                          raw_salary: 'Salary',
+                          salary_currency: 'Salary Currency',
+                        }
+                        return fieldLabelMap[fieldKey] || fieldKey
+                          .split('_')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ')
+                      }
+                      
+                      return (
+                        <li key={idx} className="rounded-md bg-white border p-2">
+                          <div className="font-semibold text-gray-900">{getFieldLabel(c.field_key)}</div>
+                          <div className="text-gray-700">{c.message}</div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      router.push(`/applicant/start/balik-manggagawa?edit=${application.id}&corrections=true`)
+                    }}
+                  >
+                    Open Application Form to Make Corrections
+                  </Button>
+                </div>
+              </div>
+            )}
             <div>
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Application Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

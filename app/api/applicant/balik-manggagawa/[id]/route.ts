@@ -1,15 +1,17 @@
 // app/api/applicant/balik-manggagawa/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { ApiResponse } from '@/lib/types'
-import AuthService from '@/lib/services/auth-service'
-import { db } from '@/lib/database'
+import { AuthService } from '@/lib/services/auth-service'
+import { DatabaseService } from '@/lib/services/database-service'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse>> {
   try {
+    const { id } = await params
     const token = request.cookies.get('bb_auth_token')?.value
+    
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
@@ -19,19 +21,14 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-    const result = await db.query(
-      'SELECT * FROM balik_manggagawa_clearance WHERE id = $1 LIMIT 1',
-      [id]
-    )
-
-    if (result.rows.length === 0) {
+    const clearance = await DatabaseService.getBalikManggagawaClearanceById(id)
+    
+    if (!clearance) {
       return NextResponse.json({ success: false, error: 'Application not found' }, { status: 404 })
     }
 
-    const clearance = result.rows[0]
     if (clearance.applicant_user_id !== user.id) {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
     }
 
     return NextResponse.json({
@@ -39,11 +36,9 @@ export async function GET(
       data: clearance,
     })
   } catch (error) {
-    console.error('Applicant BM fetch error:', error)
     return NextResponse.json({
       success: false,
-      error: 'Failed to fetch Balik Manggagawa application',
+      error: 'Failed to fetch application',
     }, { status: 500 })
   }
 }
-

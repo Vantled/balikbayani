@@ -675,10 +675,11 @@ export class DatabaseService {
         throw err;
       }
     }
-    // Default newly created BM application to For Approval
+    // Set status: 'pending' for applicant-created applications, 'for_approval' for staff-created
     if (rows[0]?.id) {
       try {
-        await db.query('UPDATE balik_manggagawa_clearance SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['for_approval', rows[0].id])
+        const status = clearanceData.applicantUserId ? 'pending' : 'for_approval'
+        await db.query('UPDATE balik_manggagawa_clearance SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [status, rows[0].id])
         const { rows: updated } = await db.query('SELECT * FROM balik_manggagawa_clearance WHERE id = $1', [rows[0].id])
         return updated[0] || rows[0]
       } catch {

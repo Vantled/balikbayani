@@ -33,17 +33,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     const body = await request.json()
     const {
-      nameOfWorker,
+      name_of_worker,
       sex,
       employer,
       destination,
       position,
-      jobType,
-      salaryAmount,
-      salaryCurrency = 'USD',
+      job_type,
+      salary,
+      salary_currency = 'USD',
     } = body || {}
 
-    if (!nameOfWorker || !sex || !employer || !destination || !salaryAmount) {
+    if (!name_of_worker || !sex || !employer || !destination || !salary) {
       return NextResponse.json({
         success: false,
         error: 'Please complete all required fields before submitting.',
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 400 })
     }
 
-    const salaryValue = Number(salaryAmount)
+    const salaryValue = Number(salary)
     if (Number.isNaN(salaryValue) || salaryValue <= 0) {
       return NextResponse.json({
         success: false,
@@ -65,23 +65,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       }, { status: 400 })
     }
 
-    const normalizedCurrency = String(salaryCurrency || 'USD').toUpperCase()
-    // Convert salary to USD (matching create-application-modal.tsx logic)
+    const normalizedCurrency = String(salary_currency || 'USD').toUpperCase()
     let salaryUSD = normalizedCurrency === 'USD'
       ? salaryValue
       : convertToUSD(salaryValue, normalizedCurrency)
-    // Round to nearest hundredths (matching create-application-modal.tsx)
     salaryUSD = Math.round((salaryUSD + Number.EPSILON) * 100) / 100
 
     const clearance = await DatabaseService.createBalikManggagawaClearance({
-      nameOfWorker: String(nameOfWorker).toUpperCase(),
+      nameOfWorker: String(name_of_worker).toUpperCase(),
       sex: sex === 'female' ? 'female' : 'male',
       employer: String(employer).toUpperCase(),
       destination: String(destination).toUpperCase(),
       salary: salaryUSD,
       rawSalary: salaryValue,
       salaryCurrency: normalizedCurrency,
-      jobType: jobType || null,
+      jobType: job_type || null,
       position: position ? String(position).toUpperCase() : null,
       evaluator: 'APPLICANT PORTAL',
       time_received: new Date().toISOString(),
@@ -112,8 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
         createdAt: clearance.created_at,
       },
     }
-
-    return NextResponse.json(response)
+    return NextResponse.json(response, { status: 201 })
   } catch (error) {
     console.error('Applicant BM submission error:', error)
     return NextResponse.json({

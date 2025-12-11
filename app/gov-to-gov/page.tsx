@@ -4,12 +4,13 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { MoreHorizontal, Plus, Download, Search, X, FileText, Eye, Edit, Trash2, File, Image as ImageIcon, FileArchive, Loader2, RotateCcw, Filter } from "lucide-react"
+import { MoreHorizontal, Plus, Download, Search, X, FileText, Eye, Edit, Trash2, File, Image as ImageIcon, FileArchive, Loader2, RotateCcw, Filter, Flag, Flag as FlagSolid, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Header from "@/components/shared/header"
 import { useLoginSuccessToast } from "@/hooks/use-login-success-toast"
@@ -138,6 +139,21 @@ export default function GovToGovPage() {
     time_released: "",
   })
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
+  
+  // Flagging and correction states
+  const [allCorrections, setAllCorrections] = useState<{ field_key: string; message: string; resolved_at: string | null }[]>([])
+  const [correctionsLoading, setCorrectionsLoading] = useState(false)
+  const [flagModalOpen, setFlagModalOpen] = useState(false)
+  const [flagTarget, setFlagTarget] = useState<{ key: string; label: string } | null>(null)
+  const [flagReason, setFlagReason] = useState('')
+  const [isReFlagging, setIsReFlagging] = useState(false)
+  const [localFlags, setLocalFlags] = useState<{ field_key: string; message: string }[]>([])
+  const [returnForComplianceConfirmOpen, setReturnForComplianceConfirmOpen] = useState(false)
+  const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false)
+  const [fieldToResolve, setFieldToResolve] = useState<{ key: string; label: string } | null>(null)
+  const [correctionRefreshKey, setCorrectionRefreshKey] = useState(0)
+  const [correctionSaving, setCorrectionSaving] = useState(false)
+  const [viewedApplications, setViewedApplications] = useState<Set<string>>(new Set())
 
   // Validate Basic Information step
   const validateBasicInfo = (notify: boolean) => {
@@ -163,6 +179,353 @@ export default function GovToGovPage() {
   }
 
   // Search is now handled by backend through appliedFilters
+
+  // Flagging helper functions
+  const getFieldLabel = (fieldKey: string) => {
+    const map: Record<string, string> = {
+      last_name: 'Last Name',
+      first_name: 'First Name',
+      middle_name: 'Middle Name',
+      sex: 'Sex',
+      date_of_birth: 'Date of Birth',
+      age: 'Age',
+      height: 'Height',
+      weight: 'Weight',
+      educational_attainment: 'Educational Attainment',
+      present_address: 'Present Address',
+      email_address: 'Email Address',
+      contact_number: 'Contact Number',
+      passport_number: 'Passport Number',
+      passport_validity: 'Passport Validity',
+      id_presented: 'ID Presented',
+      id_number: 'ID Number',
+      with_taiwan_work_experience: 'Taiwan Work Experience',
+      taiwan_company: 'Taiwan Company',
+      taiwan_year_started: 'Taiwan Year Started',
+      taiwan_year_ended: 'Taiwan Year Ended',
+      with_job_experience: 'Job Experience',
+      other_company: 'Other Company',
+      other_year_started: 'Other Year Started',
+      other_year_ended: 'Other Year Ended',
+    }
+    return map[fieldKey] || fieldKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  const isFieldFlagged = (key: string) => {
+    return localFlags.some(f => f.field_key === key) || allCorrections.some(c => c.field_key === key)
+  }
+
+  const getFlagReason = (key: string) => {
+    const localFlag = localFlags.find(f => f.field_key === key)
+    if (localFlag) return localFlag.message
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction?.message || ''
+  }
+
+  const isFieldResolved = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    return correction ? !!correction.resolved_at : false
+  }
+
+  const isFieldCorrected = (key: string) => {
+    const correction = allCorrections.find(c => c.field_key === key)
+    if (!correction || correction.resolved_at) return false
+    return selected && selected.needs_correction === false
+  }
+
+  const refreshCorrections = async (applicationId: string) => {
+    try {
+      setCorrectionsLoading(true)
+      console.log('[Gov-to-Gov] Refreshing corrections for application:', applicationId)
+      const res = await fetch(`/api/gov-to-gov/${applicationId}/corrections?include_resolved=true`)
+      const data = await res.json()
+      console.log('[Gov-to-Gov] Corrections API response:', data)
+      if (data.success) {
+        const corrections = data.data || []
+        console.log('[Gov-to-Gov] Setting allCorrections:', corrections)
+        setAllCorrections(corrections)
+        // Clear localFlags for fields that are now in allCorrections and unresolved
+        // This means they were successfully saved to the database
+        setLocalFlags(prev => {
+          const filtered = prev.filter(localFlag => {
+            const inCorrections = corrections.find(c => c.field_key === localFlag.field_key && !c.resolved_at)
+            // Remove from localFlags if it's now in allCorrections (successfully saved)
+            // Keep it if it's not in corrections yet (still being processed or failed to save)
+            const keep = !inCorrections
+            console.log(`[Gov-to-Gov] localFlag ${localFlag.field_key}: inCorrections=${!!inCorrections}, keep=${keep}`)
+            return keep
+          })
+          console.log('[Gov-to-Gov] Updated localFlags after refresh:', filtered)
+          return filtered
+        })
+      } else {
+        console.warn('[Gov-to-Gov] Corrections API returned success=false')
+        setAllCorrections([])
+      }
+    } catch (error) {
+      console.error('[Gov-to-Gov] Error refreshing corrections:', error)
+      setAllCorrections([])
+    } finally {
+      setCorrectionsLoading(false)
+    }
+  }
+
+  const refreshSelected = async (applicationId: string) => {
+    try {
+      const res = await fetch(`/api/gov-to-gov/${applicationId}`)
+      const json = await res.json()
+      if (json.success && json.data) {
+        setSelected(json.data)
+      }
+    } catch {}
+  }
+
+  // Function to mark application as viewed
+  const markApplicationAsViewed = async (applicationId: string) => {
+    if (viewedApplications.has(applicationId)) {
+      return
+    }
+    try {
+      const response = await fetch(`/api/gov-to-gov/${applicationId}/view`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (response.ok) {
+        setViewedApplications(prev => new Set(prev).add(applicationId))
+      }
+    } catch (error) {
+      console.error('Error marking application as viewed:', error)
+    }
+  }
+
+  // Function to check if application has been viewed
+  const checkApplicationViewed = async (applicationId: string) => {
+    if (viewedApplications.has(applicationId)) {
+      return true
+    }
+    try {
+      const response = await fetch(`/api/gov-to-gov/${applicationId}/view`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.viewed) {
+          setViewedApplications(prev => new Set(prev).add(applicationId))
+          return true
+        }
+      }
+    } catch (error) {
+      console.error('Error checking application view status:', error)
+    }
+    return false
+  }
+
+  const renderFlaggableField = (key: string, label: string, value: string | number | null | undefined) => {
+    const flagged = isFieldFlagged(key)
+    const corrected = isFieldCorrected(key)
+    const resolved = isFieldResolved(key)
+    // For Gov-to-Gov, show flagging when application is in "Processing" status (neither date_received_by_region nor date_card_released is set)
+    const isProcessing = !selected?.date_received_by_region && !selected?.date_card_released
+
+    // Determine flag color and state
+    let flagColor = 'text-red-600 fill-red-600'
+    let flagBorderColor = 'border-red-200'
+    let flagTextColor = 'text-red-700'
+    let flagState = 'Flagged'
+
+    if (resolved) {
+      flagColor = 'text-green-600 fill-green-600'
+      flagBorderColor = 'border-green-200'
+      flagTextColor = 'text-green-700'
+      flagState = '✓ Resolved'
+    } else if (corrected) {
+      flagColor = 'text-amber-600 fill-amber-600'
+      flagBorderColor = 'border-amber-300'
+      flagTextColor = 'text-amber-800'
+      flagState = 'Needs Review'
+    }
+
+    return (
+      <div className="relative group">
+        <div className="text-gray-500">{label}</div>
+        <div className="font-medium flex items-center gap-1">
+          {value ?? '-'}
+          {flagged && (
+            <div className="relative flex items-center gap-1">
+              <FlagSolid className={`h-5 w-5 ${flagColor}`} />
+              <div className={`absolute z-20 hidden group-hover:block left-0 top-full mt-1 min-w-[180px] rounded-md bg-white shadow-lg border ${flagBorderColor} p-2 text-xs ${flagTextColor}`}>
+                {corrected ? (
+                  <div>{getFlagReason(key)}</div>
+                ) : (
+                  <>
+                    <div className="font-medium mb-1">{flagState}</div>
+                    <div>{getFlagReason(key)}</div>
+                  </>
+                )}
+              </div>
+              {isProcessing && corrected && !resolved && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFieldToResolve({ key, label })
+                    setResolveConfirmOpen(true)
+                  }}
+                  className="ml-1 text-xs text-green-600 hover:text-green-700 underline"
+                  title="Mark as resolved"
+                >
+                  ✓
+                </button>
+              )}
+            </div>
+          )}
+          {!flagged && isProcessing && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(false)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 transition-opacity ml-1 opacity-0 group-hover:opacity-100"
+              aria-label={`Flag ${label}`}
+              title={`Flag ${label}`}
+            >
+              <Flag className="h-5 w-5" />
+            </button>
+          )}
+          {corrected && !resolved && isProcessing && (
+            <button
+              type="button"
+              onClick={() => {
+                setFlagTarget({ key, label })
+                setFlagReason(getFlagReason(key))
+                setIsReFlagging(true)
+                setFlagModalOpen(true)
+              }}
+              className="inline-flex items-center text-red-600 hover:text-red-700 ml-1"
+              aria-label="Flag again"
+              title="Flag again - correction not sufficient"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        {flagged && !corrected && (
+          <div className={`text-xs ${flagTextColor}`}>
+            {flagState}: {getFlagReason(key)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const handleReturnForCompliance = async () => {
+    if (!selected?.id) return
+    // Prevent duplicate returns - can only return once
+    if (selected.needs_correction === true) {
+      toast({ title: 'Already returned', description: 'This application has already been returned for compliance. Wait for the applicant to resubmit.', variant: 'destructive' })
+      setReturnForComplianceConfirmOpen(false)
+      return
+    }
+    // Check if there are any unresolved flags
+    const hasUnresolvedFlags = allCorrections.some(c => !c.resolved_at) || localFlags.length > 0
+    if (!hasUnresolvedFlags) {
+      toast({ title: 'No unresolved flags', description: 'All flags must be resolved (green) or new flags must be added before returning for compliance.', variant: 'destructive' })
+      setReturnForComplianceConfirmOpen(false)
+      return
+    }
+    const items = (localFlags.length ? localFlags : allCorrections.filter(c => !c.resolved_at))
+      .map(c => ({ field_key: c.field_key, message: c.message }))
+    if (!items || items.length === 0) {
+      toast({ title: 'Add at least one flag', description: 'Please flag at least one field before returning for compliance.', variant: 'destructive' })
+      return
+    }
+    await submitFlags(items)
+    setReturnForComplianceConfirmOpen(false)
+  }
+
+  const submitFlags = async (items: { field_key: string; message: string }[]) => {
+    if (!selected?.id || items.length === 0) return
+    setCorrectionSaving(true)
+    try {
+      const res = await fetch(`/api/gov-to-gov/${selected.id}/corrections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to flag')
+      toast({ title: 'Flagged', description: 'Fields have been flagged for correction.' })
+      setFlagModalOpen(false)
+      setFlagReason('')
+      setFlagTarget(null)
+      // Refresh selected application first to get updated needs_correction status
+      await refreshSelected(selected.id)
+      // Then refresh corrections - this will update allCorrections and clear localFlags only for fields confirmed in allCorrections
+      // Use a small delay to ensure the database has committed the changes
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await refreshCorrections(selected.id)
+      // Trigger a re-render by updating the refresh key after corrections are loaded
+      setCorrectionRefreshKey(k => k + 1)
+    } catch (error: any) {
+      console.error('Error submitting flags:', error)
+      toast({ title: 'Error', description: error?.message || 'Failed to flag fields', variant: 'destructive' })
+      // On error, keep localFlags so user can try again
+    } finally {
+      setCorrectionSaving(false)
+    }
+  }
+
+  const handleResolveField = async (fieldKey: string) => {
+    if (!selected?.id) return
+    setCorrectionSaving(true)
+    try {
+      const res = await fetch(`/api/gov-to-gov/${selected.id}/corrections`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_key: fieldKey, resolved: true }),
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to resolve')
+      toast({ title: 'Resolved', description: 'Field marked as resolved.' })
+      setCorrectionRefreshKey(k => k + 1)
+      await refreshSelected(selected.id)
+      await refreshCorrections(selected.id)
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'Failed to resolve', variant: 'destructive' })
+    } finally {
+      setCorrectionSaving(false)
+    }
+  }
+
+  // Check view status for all applications with applicant_user_id when items are loaded
+  useEffect(() => {
+    const checkViews = async () => {
+      const applicantApps = items.filter((app: any) => app.applicant_user_id)
+      const promises = applicantApps.map((app: any) => checkApplicationViewed(app.id))
+      await Promise.all(promises)
+    }
+    
+    if (items.length > 0) {
+      void checkViews()
+    }
+  }, [items])
+
+  // Fetch corrections and mark as viewed when view modal opens
+  useEffect(() => {
+    if (selected?.id) {
+      void refreshCorrections(selected.id)
+      markApplicationAsViewed(selected.id)
+    } else {
+      // Only clear when modal is actually closed, not when refreshing
+      setAllCorrections([])
+      setLocalFlags([])
+    }
+  }, [selected?.id, correctionRefreshKey])
 
   return (
     <PermissionGuard permission="gov_to_gov" fallback={<div className="min-h-screen bg-[#eaf3fc]"><Header /></div>}>
@@ -457,6 +820,7 @@ export default function GovToGovPage() {
                       if (row.deleted_at) return; // disable double click for deleted
                       setSelected(row)
                       setViewOpen(true)
+                      markApplicationAsViewed(row.id)
                     }}
                     >
                     <td className="py-3 px-4 text-center">
@@ -465,8 +829,11 @@ export default function GovToGovPage() {
                     <td className="py-3 px-4 text-center">
                       {row.first_name}
                       {row.applicant_user_id && (
-                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        <div className="mt-1 inline-flex items-center justify-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 relative">
                           Applicant
+                          {!viewedApplications.has(row.id) && (
+                            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -499,7 +866,19 @@ export default function GovToGovPage() {
                             </>
                           ) : (
                             <>
-                              <DropdownMenuItem onClick={() => { setSelected(row); setViewOpen(true) }}>
+                              <DropdownMenuItem onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/gov-to-gov/${row.id}`)
+                                  const json = await res.json()
+                                  if (json.success) {
+                                    setSelected(json.data)
+                                    setViewOpen(true)
+                                    markApplicationAsViewed(row.id)
+                                  } else {
+                                    toast({ title: 'Failed to load', description: json.error || 'Not found', variant: 'destructive' })
+                                  }
+                                } catch {}
+                              }}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 View
                               </DropdownMenuItem>
@@ -1100,45 +1479,19 @@ export default function GovToGovPage() {
               <div className="mb-6">
                 <div className="font-semibold text-gray-700 mb-2">Applicant Information</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  <div>
-                    <div className="text-gray-500">Last Name:</div>
-                    <div className="font-medium">{selected.last_name}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">First Name:</div>
-                    <div className="font-medium">{selected.first_name}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Middle Name:</div>
-                    <div className="font-medium">{selected.middle_name || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Sex:</div>
-                    <div className="font-medium capitalize">{selected.sex}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Email:</div>
-                    <div className="font-medium">{selected.email_address || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Contact No.:</div>
-                    <div className="font-medium">{selected.contact_number || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Height:</div>
-                    <div className="font-medium">{selected.height ? `${selected.height} cm` : 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Weight:</div>
-                    <div className="font-medium">{selected.weight ? `${selected.weight} kg` : 'N/A'}</div>
+                  {renderFlaggableField('last_name', 'Last Name', selected.last_name)}
+                  {renderFlaggableField('first_name', 'First Name', selected.first_name)}
+                  {renderFlaggableField('middle_name', 'Middle Name', selected.middle_name || 'N/A')}
+                  {renderFlaggableField('sex', 'Sex', selected.sex ? selected.sex.toUpperCase() : 'N/A')}
+                  {renderFlaggableField('email_address', 'Email', selected.email_address || 'N/A')}
+                  {renderFlaggableField('contact_number', 'Contact No.', selected.contact_number || 'N/A')}
+                  {renderFlaggableField('height', 'Height', selected.height ? `${selected.height} cm` : 'N/A')}
+                  {renderFlaggableField('weight', 'Weight', selected.weight ? `${selected.weight} kg` : 'N/A')}
+                  <div className="col-span-2">
+                    {renderFlaggableField('present_address', 'Present Address', selected.present_address || 'N/A')}
                   </div>
                   <div className="col-span-2">
-                    <div className="text-gray-500">Present Address:</div>
-                    <div className="font-medium">{selected.present_address || 'N/A'}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <div className="text-gray-500">Educational Attainment:</div>
-                    <div className="font-medium">{selected.educational_attainment || 'N/A'}</div>
+                    {renderFlaggableField('educational_attainment', 'Educational Attainment', selected.educational_attainment || 'N/A')}
                   </div>
                 </div>
               </div>
@@ -1147,30 +1500,15 @@ export default function GovToGovPage() {
               <div className="mb-6">
                 <div className="font-semibold text-gray-700 mb-2">Passport Details</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  <div>
-                    <div className="text-gray-500">Passport Number:</div>
-                    <div className="font-medium">{selected.passport_number || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">Passport Validity:</div>
-                    <div className="font-medium">
-                      {selected.passport_validity ? 
-                        new Date(selected.passport_validity).toLocaleDateString('en-GB', { 
-                          day: 'numeric', 
-                          month: 'long', 
-                          year: 'numeric' 
-                        }).toUpperCase() : 'N/A'
-                      }
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">ID Presented:</div>
-                    <div className="font-medium">{selected.id_presented || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500">ID Number:</div>
-                    <div className="font-medium">{selected.id_number || 'N/A'}</div>
-                  </div>
+                  {renderFlaggableField('passport_number', 'Passport Number', selected.passport_number || 'N/A')}
+                  {renderFlaggableField('passport_validity', 'Passport Validity', selected.passport_validity ? 
+                    new Date(selected.passport_validity).toLocaleDateString('en-GB', { 
+                      day: 'numeric', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    }).toUpperCase() : 'N/A')}
+                  {renderFlaggableField('id_presented', 'ID Presented', selected.id_presented || 'N/A')}
+                  {renderFlaggableField('id_number', 'ID Number', selected.id_number || 'N/A')}
                 </div>
               </div>
               <hr className="my-4" />
@@ -1179,42 +1517,22 @@ export default function GovToGovPage() {
                 <div className="font-semibold text-gray-700 mb-2">Work Experience</div>
                 <div className="space-y-4 text-sm">
                   <div>
-                    <div className="text-gray-500 mb-1">Taiwan Work Experience:</div>
-                    <div className="font-medium">{selected.with_taiwan_work_experience ? 'YES' : 'NO'}</div>
+                    {renderFlaggableField('with_taiwan_work_experience', 'Taiwan Work Experience', selected.with_taiwan_work_experience ? 'YES' : 'NO')}
                     {selected.with_taiwan_work_experience && (
                       <div className="mt-2 grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <div className="text-gray-500">Company:</div>
-                          <div className="font-medium">{selected.taiwan_company || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500">Year Started:</div>
-                          <div className="font-medium">{selected.taiwan_year_started || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500">Year Ended:</div>
-                          <div className="font-medium">{selected.taiwan_year_ended || 'N/A'}</div>
-                        </div>
+                        {renderFlaggableField('taiwan_company', 'Company', selected.taiwan_company || 'N/A')}
+                        {renderFlaggableField('taiwan_year_started', 'Year Started', selected.taiwan_year_started || 'N/A')}
+                        {renderFlaggableField('taiwan_year_ended', 'Year Ended', selected.taiwan_year_ended || 'N/A')}
                       </div>
                     )}
                   </div>
                   <div>
-                    <div className="text-gray-500 mb-1">Other Job Experience:</div>
-                    <div className="font-medium">{selected.with_job_experience ? 'YES' : 'NO'}</div>
+                    {renderFlaggableField('with_job_experience', 'Other Job Experience', selected.with_job_experience ? 'YES' : 'NO')}
                     {selected.with_job_experience && (
                       <div className="mt-2 grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <div className="text-gray-500">Company:</div>
-                          <div className="font-medium">{selected.other_company || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500">Year Started:</div>
-                          <div className="font-medium">{selected.other_year_started || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500">Year Ended:</div>
-                          <div className="font-medium">{selected.other_year_ended || 'N/A'}</div>
-                        </div>
+                        {renderFlaggableField('other_company', 'Company', selected.other_company || 'N/A')}
+                        {renderFlaggableField('other_year_started', 'Year Started', selected.other_year_started || 'N/A')}
+                        {renderFlaggableField('other_year_ended', 'Year Ended', selected.other_year_ended || 'N/A')}
                       </div>
                     )}
                   </div>
@@ -1294,73 +1612,317 @@ export default function GovToGovPage() {
           )}
           {/* Action Buttons */}
           <div className="px-8 py-4 border-t bg-gray-50 flex justify-end gap-3">
-            {/* Release Card Button */}
-            <Button 
-              className={selected?.date_card_released ? "bg-gray-500 hover:bg-gray-600 text-white cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}
-              disabled={selected?.date_card_released}
-              onClick={() => {
-                if (!selected) return
-                if (selected.date_card_released) {
-                  toast({ 
-                    title: 'Card Already Released', 
-                    description: `This card was already released on ${new Date(selected.date_card_released).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'long', 
-                      year: 'numeric' 
-                    }).toUpperCase()}` 
-                  })
-                  return
-                }
-                setReleaseCardConfirmOpen(true)
-              }}
-            >
-              {selected?.date_card_released ? 'Card Already Released' : 'Release Card'}
-            </Button>
-            
-            {/* Received by Region Button */}
-            <Button 
-              className={selected?.date_received_by_region ? "bg-gray-500 hover:bg-gray-600 text-white cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}
-              disabled={selected?.date_received_by_region}
+            {(() => {
+              // For Processing status: show Return for Compliance button
+              const isProcessing = !selected?.date_received_by_region && !selected?.date_card_released
+              // Check for unresolved flags: either in allCorrections (not resolved) or in localFlags (just flagged)
+              // Use .some() like Direct Hire for consistency
+              const unresolvedCount = allCorrections.filter(c => !c.resolved_at).length
+              const hasUnresolvedFlags = unresolvedCount > 0 || localFlags.length > 0
+              const alreadyReturned = selected?.needs_correction === true
+              
+              // Calculate button disabled state
+              // Button should be disabled if:
+              // 1. Currently saving corrections
+              // 2. Already returned (can only return once - wait for applicant to resubmit)
+              // 3. No unresolved flags available
+              const buttonDisabled = correctionSaving || alreadyReturned || !hasUnresolvedFlags
+              const disabledReason = buttonDisabled 
+                ? (correctionSaving ? 'correctionSaving=true' : alreadyReturned ? 'alreadyReturned=true (can only return once)' : 'hasUnresolvedFlags=false')
+                : 'ENABLED - All conditions met'
+              
+              // Debug: log the state (ALWAYS log - remove filter in console if needed)
+              console.log('=== [Gov-to-Gov Return for Compliance Button] ===', {
+                isProcessing,
+                hasUnresolvedFlags,
+                unresolvedCount,
+                localFlagsCount: localFlags.length,
+                allCorrectionsCount: allCorrections.length,
+                alreadyReturned,
+                correctionSaving,
+                selectedId: selected?.id,
+                dateReceivedByRegion: selected?.date_received_by_region,
+                dateCardReleased: selected?.date_card_released,
+                localFlags: localFlags.map(f => ({ key: f.field_key, message: f.message })),
+                allCorrections: allCorrections.map(c => ({ key: c.field_key, resolved: !!c.resolved_at, message: c.message })),
+                buttonDisabled,
+                disabledReason,
+                'disabled prop value': buttonDisabled
+              })
+              
+              if (isProcessing) {
+                return (
+                  <>
+                    <Button
+                      variant="outline"
+                      disabled={buttonDisabled}
+                      className="flex items-center gap-2 bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        if (!selected) return
+                        // Prevent duplicate returns - can only return once
+                        if (selected?.needs_correction === true) {
+                          toast({ title: 'Already returned', description: 'Application has already been returned for compliance. Wait for applicant to resubmit.', variant: 'destructive' })
+                          return
+                        }
+                        // Use localFlags if available, otherwise use unresolved corrections from allCorrections
+                        const validItems = localFlags.length > 0 
+                          ? localFlags.filter(i => i.field_key.trim() && i.message.trim())
+                          : allCorrections.filter(c => !c.resolved_at).map(c => ({ field_key: c.field_key, message: c.message }))
+                        if (!validItems.length) {
+                          toast({ title: 'No flagged fields', description: 'Flag at least one field with a reason.', variant: 'destructive' })
+                          return
+                        }
+                        setReturnForComplianceConfirmOpen(true)
+                      }}
+                      title={(() => {
+                        if (alreadyReturned) {
+                          return 'Application has already been returned for compliance. Wait for applicant to resubmit.'
+                        }
+                        if (correctionSaving) {
+                          return 'Saving flags...'
+                        }
+                        if (!hasUnresolvedFlags) {
+                          return 'No unresolved flags available. All flags must be resolved (green) or new flags must be added before returning for compliance.'
+                        }
+                        return undefined
+                      })()}
+                    >
+                      <Flag className="h-4 w-4" />
+                      Return for Compliance
+                    </Button>
+                  </>
+                )
+              }
+              
+              // For other statuses: show normal buttons
+              return (
+                <>
+                  {/* Release Card Button */}
+                  <Button 
+                    className={selected?.date_card_released ? "bg-gray-500 hover:bg-gray-600 text-white cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}
+                    disabled={selected?.date_card_released}
+                    onClick={() => {
+                      if (!selected) return
+                      if (selected.date_card_released) {
+                        toast({ 
+                          title: 'Card Already Released', 
+                          description: `This card was already released on ${new Date(selected.date_card_released).toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          }).toUpperCase()}` 
+                        })
+                        return
+                      }
+                      setReleaseCardConfirmOpen(true)
+                    }}
+                  >
+                    {selected?.date_card_released ? 'Card Already Released' : 'Release Card'}
+                  </Button>
+                  
+                  {/* Received by Region Button */}
+                  <Button 
+                    className={selected?.date_received_by_region ? "bg-gray-500 hover:bg-gray-600 text-white cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}
+                    disabled={selected?.date_received_by_region}
+                    onClick={async () => {
+                      if (!selected) return
+                      if (selected.date_received_by_region) {
+                        toast({ 
+                          title: 'Already Received', 
+                          description: `This application was already received on ${new Date(selected.date_received_by_region).toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          }).toUpperCase()}` 
+                        })
+                        return
+                      }
+                      const currentDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+                      const res = await update(selected.id, { date_received_by_region: currentDate })
+                      if (res?.success) {
+                        toast({ 
+                          title: 'Marked as Received', 
+                          description: `Application marked as received by region on ${new Date(currentDate).toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          }).toUpperCase()}` 
+                        })
+                        await refresh()
+                        setViewOpen(false)
+                      } else {
+                        toast({ 
+                          title: 'Update failed', 
+                          description: res?.error || 'Unable to mark as received', 
+                          variant: 'destructive' 
+                        })
+                      }
+                    }}
+                  >
+                    {selected?.date_received_by_region ? 'Already Received by Region' : 'Received by Region'}
+                  </Button>
+                </>
+              )
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Flagging Modal */}
+      <Dialog open={flagModalOpen} onOpenChange={setFlagModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>
+            {isReFlagging ? 'Flag Again' : 'Flag Field for Correction'}
+          </DialogTitle>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Field: {flagTarget?.label}</Label>
+            </div>
+            <div>
+              <Label>Reason for flagging:</Label>
+              <Textarea
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                className="mt-1 min-h-[100px]"
+                placeholder="Enter the reason why this field needs correction..."
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setFlagModalOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!flagTarget || !flagReason.trim() || correctionSaving}
               onClick={async () => {
-                if (!selected) return
-                if (selected.date_received_by_region) {
-                  toast({ 
-                    title: 'Already Received', 
-                    description: `This application was already received on ${new Date(selected.date_received_by_region).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'long', 
-                      year: 'numeric' 
-                    }).toUpperCase()}` 
-                  })
-                  return
-                }
-                const currentDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
-                const res = await update(selected.id, { date_received_by_region: currentDate })
-                if (res?.success) {
-                  toast({ 
-                    title: 'Marked as Received', 
-                    description: `Application marked as received by region on ${new Date(currentDate).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'long', 
-                      year: 'numeric' 
-                    }).toUpperCase()}` 
-                  })
-                  await refresh()
-                  setViewOpen(false)
-                } else {
-                  toast({ 
-                    title: 'Update failed', 
-                    description: res?.error || 'Unable to mark as received', 
-                    variant: 'destructive' 
-                  })
+                if (!flagTarget || !flagReason.trim()) return
+                const newFlag = { field_key: flagTarget.key, message: flagReason.trim() }
+                console.log('[Gov-to-Gov] Flagging field:', newFlag)
+                // Add to localFlags first so button is enabled immediately
+                setLocalFlags(prev => {
+                  const existing = prev.find(f => f.field_key === flagTarget.key)
+                  const updated = existing
+                    ? prev.map(f => f.field_key === flagTarget.key ? newFlag : f)
+                    : [...prev, newFlag]
+                  console.log('[Gov-to-Gov] Updated localFlags:', updated)
+                  return updated
+                })
+                // Then submit - refreshCorrections will clear localFlags only after flags are confirmed in allCorrections
+                try {
+                  await submitFlags([newFlag])
+                } catch (error) {
+                  // If submission fails, keep the flag in localFlags
+                  console.error('[Gov-to-Gov] Failed to submit flag:', error)
                 }
               }}
+              className="bg-red-600 hover:bg-red-700 text-white"
             >
-              {selected?.date_received_by_region ? 'Already Received by Region' : 'Received by Region'}
+              {correctionSaving ? 'Saving...' : 'Flag field'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Return for Compliance Confirmation */}
+      <AlertDialog open={returnForComplianceConfirmOpen} onOpenChange={setReturnForComplianceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Return for Compliance</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to return this application to the applicant for compliance? 
+              The applicant will be notified and will need to correct the flagged fields before resubmitting.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(() => {
+            // Get all unresolved flags (from localFlags or allCorrections)
+            const unresolvedFlags = localFlags.length > 0 
+              ? localFlags
+              : allCorrections.filter(c => !c.resolved_at).map(c => ({ field_key: c.field_key, message: c.message }))
+            
+            if (unresolvedFlags.length > 0) {
+              return (
+                <div className="mt-3">
+                  <div className="font-medium text-sm mb-2">Flagged fields ({unresolvedFlags.length}):</div>
+                  <ul className="list-disc list-inside text-sm space-y-1 max-h-60 overflow-y-auto">
+                    {unresolvedFlags.map((flag, idx) => (
+                      <li key={idx}>
+                        <span className="font-medium">{getFieldLabel(flag.field_key)}:</span> {flag.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            }
+            return null
+          })()}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleReturnForCompliance}
+            >
+              Return
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Mark as Resolved Confirmation Dialog */}
+      <AlertDialog open={resolveConfirmOpen} onOpenChange={(open) => {
+        setResolveConfirmOpen(open)
+        if (!open) {
+          setFieldToResolve(null)
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark as Resolved</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="text-sm text-gray-700 space-y-2">
+            <p>
+              Are you sure you want to mark <strong>{fieldToResolve?.label || 'this field'}</strong> as resolved?
+            </p>
+            <p className="text-xs text-gray-500">
+              This will indicate that the applicant's correction has been reviewed and accepted. The flag will turn green.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setResolveConfirmOpen(false)
+              setFieldToResolve(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={async () => {
+                if (!selected?.id || !fieldToResolve) return
+                try {
+                  const res = await fetch(`/api/gov-to-gov/${selected.id}/corrections`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field_key: fieldToResolve.key, resolved: true }),
+                    credentials: 'include',
+                  })
+                  const data = await res.json()
+                  if (data.success) {
+                    toast({ title: 'Correction marked as resolved', description: `${fieldToResolve.label} is now marked as resolved.` })
+                    setCorrectionRefreshKey(prev => prev + 1)
+                    await refreshSelected(selected.id)
+                    await refreshCorrections(selected.id)
+                    setResolveConfirmOpen(false)
+                    setFieldToResolve(null)
+                  } else {
+                    toast({ title: 'Error', description: data.error || 'Failed to mark as resolved', variant: 'destructive' })
+                  }
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message || 'Failed to mark as resolved', variant: 'destructive' })
+                }
+              }}
+            >
+              Mark as Resolved
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirm */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

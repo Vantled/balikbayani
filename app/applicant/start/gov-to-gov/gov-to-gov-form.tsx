@@ -26,6 +26,9 @@ interface GovToGovApplicantFormProps {
     middle?: string
     last?: string
   }
+  applicationId?: string
+  needsCorrection?: boolean
+  correctionFields?: string[]
 }
 
 const EDUCATION_LEVELS = [
@@ -41,7 +44,13 @@ const YES_NO = [
   { value: 'no', label: 'No' },
 ]
 
-export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: GovToGovApplicantFormProps) {
+export default function GovToGovApplicantForm({ 
+  defaultEmail, 
+  defaultNames,
+  applicationId,
+  needsCorrection = false,
+  correctionFields = [],
+}: GovToGovApplicantFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const STORAGE_KEY = 'bb_applicant_gov_to_gov_form_v1'
@@ -71,14 +80,126 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     otherYearStarted: '',
     otherYearEnded: '',
   })
+  const [initialFormState, setInitialFormState] = useState(formState)
+  const [correctionReasons, setCorrectionReasons] = useState<Record<string, string>>({})
+
+  // Helper: is field editable (only flagged fields in correction mode)
+  const isFieldEditable = (fieldKey: string) => {
+    if (!needsCorrection) return true
+    return correctionFields.includes(fieldKey)
+  }
+
+  const isFieldFlagged = (fieldKey: string) => {
+    if (!needsCorrection) return false
+    return correctionFields.includes(fieldKey)
+  }
+
+  const getFlaggedClass = (fieldKey: string, base: string = '') => {
+    let cls = base
+    if (!isFieldEditable(fieldKey)) cls += ' bg-gray-100 cursor-not-allowed'
+    if (isFieldFlagged(fieldKey)) cls += ' border-red-500 border-2 bg-red-50'
+    return cls.trim()
+  }
+
+  const getCorrectionReason = (fieldKey: string): string => {
+    return correctionReasons[fieldKey] || 'This field requires correction.'
+  }
+
+  // Check if all flagged fields have changed
+  const hasChanges = (): boolean => {
+    if (!needsCorrection) return true // Allow normal form submission when not in correction mode
+    if (!initialFormState) return false // Disable until initial values are loaded
+    if (correctionFields.length === 0) return true // No flagged fields, allow submission
+    
+    // Map API field keys (snake_case) to form state keys (camelCase)
+    const fieldKeyMap: Record<string, keyof typeof formState> = {
+      first_name: 'firstName',
+      middle_name: 'middleName',
+      last_name: 'lastName',
+      sex: 'sex',
+      date_of_birth: 'dateOfBirth',
+      height: 'height',
+      weight: 'weight',
+      educational_attainment: 'educationalAttainment',
+      present_address: 'presentAddress',
+      email_address: 'emailAddress',
+      contact_number: 'contactNumber',
+      passport_number: 'passportNumber',
+      passport_validity: 'passportValidity',
+      with_taiwan_work_experience: 'withTaiwanExperience',
+      taiwan_company: 'taiwanCompany',
+      taiwan_year_started: 'taiwanYearStarted',
+      taiwan_year_ended: 'taiwanYearEnded',
+      with_job_experience: 'withOtherExperience',
+      other_company: 'otherCompany',
+      other_year_started: 'otherYearStarted',
+      other_year_ended: 'otherYearEnded',
+    }
+    
+    // Check that ALL flagged fields have changed
+    let checkedFields = 0
+    let changedFields = 0
+    
+    for (const fieldKey of correctionFields) {
+      const formFieldKey = fieldKeyMap[fieldKey]
+      if (!formFieldKey) {
+        // Skip fields that aren't in formState (like id_presented, id_number if not added)
+        continue
+      }
+      
+      checkedFields++
+      const currentValue = formState[formFieldKey]
+      const initialValue = initialFormState[formFieldKey]
+      
+      // Compare values (handle string trimming and case differences)
+      const current = typeof currentValue === 'string' ? currentValue.trim() : currentValue
+      const initial = typeof initialValue === 'string' ? initialValue.trim() : initialValue
+      
+      if (current !== initial) {
+        changedFields++
+      }
+    }
+    
+    // All checked flagged fields must have changed
+    return checkedFields > 0 && changedFields === checkedFields
+  }
+
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear()
     return Array.from({ length: 51 }, (_, i) => currentYear - i)
   }, [])
 
-  // Load saved draft on mount
+  // Determine initial step based on correction mode
   useEffect(() => {
+    if (needsCorrection && correctionFields.length > 0) {
+      // Find which step contains the first flagged field
+      const detailsFields = [
+        'first_name', 'middle_name', 'last_name', 'sex', 'date_of_birth',
+        'height', 'weight', 'educational_attainment', 'present_address',
+        'email_address', 'contact_number', 'passport_number', 'passport_validity',
+        'id_presented', 'id_number'
+      ]
+      const experienceFields = [
+        'with_taiwan_work_experience', 'taiwan_company', 'taiwan_year_started', 'taiwan_year_ended',
+        'with_job_experience', 'other_company', 'other_year_started', 'other_year_ended'
+      ]
+      
+      // Find the first flagged field
+      const firstFlaggedField = correctionFields[0]
+      
+      if (detailsFields.includes(firstFlaggedField)) {
+        setStep('details')
+      } else if (experienceFields.includes(firstFlaggedField)) {
+        setStep('experience')
+      } else {
+        // Default to details if field not found
+        setStep('details')
+      }
+      return
+    }
+    
+    // Only load from localStorage if not in correction mode
     try {
       if (typeof window === 'undefined') return
       const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -100,10 +221,124 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
       console.error('Failed to load Gov-to-Gov applicant draft:', err)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [needsCorrection, correctionFields])
 
-  // Auto-save draft whenever formState or step changes
+  // Load application when editing/correcting
   useEffect(() => {
+    const loadApplication = async () => {
+      if (!applicationId) return
+      try {
+        const res = await fetch(`/api/applicant/gov-to-gov/${applicationId}`, { credentials: 'include' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data.success || !data.data) return
+        const app = data.data
+        const loaded = {
+          firstName: app.first_name || '',
+          middleName: app.middle_name || '',
+          lastName: app.last_name || '',
+          sex: app.sex || '',
+          dateOfBirth: app.date_of_birth ? new Date(app.date_of_birth).toISOString().split('T')[0] : '',
+          height: app.height ? String(app.height) : '',
+          weight: app.weight ? String(app.weight) : '',
+          educationalAttainment: app.educational_attainment || '',
+          presentAddress: app.present_address || '',
+          emailAddress: app.email_address || '',
+          contactNumber: app.contact_number || '09',
+          passportNumber: app.passport_number || '',
+          passportValidity: app.passport_validity ? new Date(app.passport_validity).toISOString().split('T')[0] : '',
+          withTaiwanExperience: app.with_taiwan_work_experience ? 'yes' : 'no',
+          taiwanCompany: app.taiwan_company || '',
+          taiwanYearStarted: app.taiwan_year_started ? String(app.taiwan_year_started) : '',
+          taiwanYearEnded: app.taiwan_year_ended ? String(app.taiwan_year_ended) : '',
+          withOtherExperience: app.with_job_experience ? 'yes' : 'no',
+          otherCompany: app.other_company || '',
+          otherYearStarted: app.other_year_started ? String(app.other_year_started) : '',
+          otherYearEnded: app.other_year_ended ? String(app.other_year_ended) : '',
+        }
+        setFormState(loaded)
+        if (needsCorrection) setInitialFormState(loaded)
+        
+        // Load corrections if in correction mode
+        if (needsCorrection) {
+          try {
+            const correctionsResponse = await fetch(`/api/gov-to-gov/${applicationId}/corrections`, {
+              credentials: 'include',
+            })
+            if (correctionsResponse.ok) {
+              const correctionsData = await correctionsResponse.json()
+              if (correctionsData.success && Array.isArray(correctionsData.data)) {
+                const reasons: Record<string, string> = {}
+                const unresolvedFields: string[] = []
+                correctionsData.data.forEach((c: any) => {
+                  if (!c.resolved_at) {
+                    unresolvedFields.push(c.field_key)
+                    // Map field keys from API to form field names
+                    const fieldMap: Record<string, string> = {
+                      first_name: 'firstName',
+                      middle_name: 'middleName',
+                      last_name: 'lastName',
+                      date_of_birth: 'dateOfBirth',
+                      height: 'height',
+                      weight: 'weight',
+                      educational_attainment: 'educationalAttainment',
+                      present_address: 'presentAddress',
+                      email_address: 'emailAddress',
+                      contact_number: 'contactNumber',
+                      passport_number: 'passportNumber',
+                      passport_validity: 'passportValidity',
+                      id_presented: 'idPresented',
+                      id_number: 'idNumber',
+                      with_taiwan_work_experience: 'withTaiwanExperience',
+                      taiwan_company: 'taiwanCompany',
+                      taiwan_year_started: 'taiwanYearStarted',
+                      taiwan_year_ended: 'taiwanYearEnded',
+                      with_job_experience: 'withOtherExperience',
+                      other_company: 'otherCompany',
+                      other_year_started: 'otherYearStarted',
+                      other_year_ended: 'otherYearEnded',
+                    }
+                    const formFieldKey = fieldMap[c.field_key] || c.field_key
+                    reasons[formFieldKey] = c.message
+                  }
+                })
+                setCorrectionReasons(reasons)
+                
+                // Set step to the first step containing a flagged field
+                if (unresolvedFields.length > 0) {
+                  const detailsFields = [
+                    'first_name', 'middle_name', 'last_name', 'sex', 'date_of_birth',
+                    'height', 'weight', 'educational_attainment', 'present_address',
+                    'email_address', 'contact_number', 'passport_number', 'passport_validity',
+                    'id_presented', 'id_number'
+                  ]
+                  const experienceFields = [
+                    'with_taiwan_work_experience', 'taiwan_company', 'taiwan_year_started', 'taiwan_year_ended',
+                    'with_job_experience', 'other_company', 'other_year_started', 'other_year_ended'
+                  ]
+                  
+                  const firstFlaggedField = unresolvedFields[0]
+                  if (detailsFields.includes(firstFlaggedField)) {
+                    setStep('details')
+                  } else if (experienceFields.includes(firstFlaggedField)) {
+                    setStep('experience')
+                  } else {
+                    // Default to details if field not found
+                    setStep('details')
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    void loadApplication()
+  }, [applicationId, needsCorrection])
+
+  // Auto-save draft whenever formState or step changes (skip if editing)
+  useEffect(() => {
+    if (applicationId) return // Skip localStorage when editing
     try {
       if (typeof window === 'undefined') return
       const payload = { formState, step }
@@ -111,7 +346,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     } catch (err) {
       console.error('Failed to save Gov-to-Gov applicant draft:', err)
     }
-  }, [formState, step])
+  }, [formState, step, applicationId])
 
   const clearError = (field: string) => {
     setFieldErrors(prev => {
@@ -259,6 +494,93 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
     }
 
     setLoading(true)
+
+    // Handle correction mode submission
+    if (needsCorrection && applicationId) {
+      toast({
+        title: 'Submitting corrections...',
+        description: 'Please wait while we process your corrections.',
+      })
+
+      try {
+        // Map form fields to API field keys
+        const fieldMap: Record<string, string> = {
+          firstName: 'first_name',
+          middleName: 'middle_name',
+          lastName: 'last_name',
+          dateOfBirth: 'date_of_birth',
+          emailAddress: 'email_address',
+          contactNumber: 'contact_number',
+          passportNumber: 'passport_number',
+          passportValidity: 'passport_validity',
+          withTaiwanExperience: 'with_taiwan_work_experience',
+          taiwanCompany: 'taiwan_company',
+          taiwanYearStarted: 'taiwan_year_started',
+          taiwanYearEnded: 'taiwan_year_ended',
+          withOtherExperience: 'with_job_experience',
+          otherCompany: 'other_company',
+          otherYearStarted: 'other_year_started',
+          otherYearEnded: 'other_year_ended',
+        }
+
+        // Build payload with only changed flagged fields
+        const payload: Record<string, any> = {}
+        Object.entries(formState).forEach(([formKey, value]) => {
+          const apiKey = fieldMap[formKey] || formKey
+          if (!isFieldEditable(apiKey)) return
+          
+          // Only send changed fields
+          const initialValue = (initialFormState as any)[formKey]
+          if (initialValue !== value) {
+            // Handle special conversions
+            if (apiKey === 'height' || apiKey === 'weight' || 
+                apiKey === 'taiwan_year_started' || apiKey === 'taiwan_year_ended' ||
+                apiKey === 'other_year_started' || apiKey === 'other_year_ended') {
+              payload[apiKey] = value ? Number(value) : null
+            } else if (apiKey === 'with_taiwan_work_experience' || apiKey === 'with_job_experience') {
+              payload[apiKey] = value === 'yes'
+            } else {
+              payload[apiKey] = value
+            }
+          }
+        })
+
+        const response = await fetch(`/api/gov-to-gov/${applicationId}/corrections/resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ payload }),
+        })
+
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          toast({
+            title: 'Correction submission failed',
+            description: data.error || 'Unable to submit your corrections.',
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+
+        toast({
+          title: 'Corrections submitted',
+          description: 'Your corrections have been submitted for review.',
+        })
+        router.push('/applicant/status')
+        return
+      } catch (error) {
+        toast({
+          title: 'Correction submission failed',
+          description: 'An error occurred while submitting your corrections.',
+          variant: 'destructive',
+        })
+        setLoading(false)
+        return
+      }
+    }
+
+    // Handle new application submission
     toast({
       title: 'Submitting application...',
       description: 'Please wait while we process your submission.',
@@ -305,6 +627,7 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
           description,
           variant: 'destructive',
         })
+        setLoading(false)
         return
       }
 
@@ -374,9 +697,15 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="firstName"
               value={formState.firstName}
               onChange={e => updateField('firstName', e.target.value)}
-              className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('first_name')}
+              className={getFlaggedClass('first_name', fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : '')}
             />
             {fieldErrors.firstName && <p className="text-xs text-red-500">{fieldErrors.firstName}</p>}
+            {isFieldFlagged('first_name') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('firstName')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="middleName">Middle name</Label>
@@ -384,7 +713,14 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="middleName"
               value={formState.middleName}
               onChange={e => updateField('middleName', e.target.value)}
+              disabled={!isFieldEditable('middle_name')}
+              className={getFlaggedClass('middle_name')}
             />
+            {isFieldFlagged('middle_name') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('middleName')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="lastName">Last name</Label>
@@ -392,9 +728,15 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="lastName"
               value={formState.lastName}
               onChange={e => updateField('lastName', e.target.value)}
-              className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('last_name')}
+              className={getFlaggedClass('last_name', fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : '')}
             />
             {fieldErrors.lastName && <p className="text-xs text-red-500">{fieldErrors.lastName}</p>}
+            {isFieldFlagged('last_name') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('lastName')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -407,17 +749,23 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               onValueChange={value => {
                 updateRawField('sex', value)
               }}
+              disabled={!isFieldEditable('sex')}
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="male" id="sex-male" />
+                <RadioGroupItem value="male" id="sex-male" disabled={!isFieldEditable('sex')} />
                 <Label htmlFor="sex-male" className="font-normal">Male</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="female" id="sex-female" />
+                <RadioGroupItem value="female" id="sex-female" disabled={!isFieldEditable('sex')} />
                 <Label htmlFor="sex-female" className="font-normal">Female</Label>
               </div>
             </RadioGroup>
             {fieldErrors.sex && <p className="text-xs text-red-500">{fieldErrors.sex}</p>}
+            {isFieldFlagged('sex') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('sex')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="dob">Date of Birth</Label>
@@ -426,7 +774,8 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 value={formState.dateOfBirth}
                 onChange={date => updateRawField('dateOfBirth', date)}
                 maxDate={todayIso}
-                className={fieldErrors.dateOfBirth ? 'border-red-500 focus:border-red-500' : ''}
+                disabled={!isFieldEditable('date_of_birth')}
+                className={getFlaggedClass('date_of_birth', fieldErrors.dateOfBirth ? 'border-red-500 focus:border-red-500' : '')}
                 label="Date of Birth"
                 mode="dob"
               />
@@ -439,11 +788,17 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 onChange={e => {
                   updateRawField('dateOfBirth', e.target.value)
                 }}
-                className={`${fieldErrors.dateOfBirth ? 'border-red-500 focus:border-red-500' : ''} w-full`}
+                disabled={!isFieldEditable('date_of_birth')}
+                className={`${getFlaggedClass('date_of_birth', fieldErrors.dateOfBirth ? 'border-red-500 focus:border-red-500' : '')} w-full`}
                 max={todayIso}
               />
             </div>
             {fieldErrors.dateOfBirth && <p className="text-xs text-red-500">{fieldErrors.dateOfBirth}</p>}
+            {isFieldFlagged('date_of_birth') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('dateOfBirth')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -455,10 +810,16 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               type="number"
               value={formState.height}
               onChange={e => updateRawField('height', e.target.value)}
-              className={fieldErrors.height ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('height')}
+              className={getFlaggedClass('height', fieldErrors.height ? 'border-red-500 focus:border-red-500' : '')}
               min="1"
             />
             {fieldErrors.height && <p className="text-xs text-red-500">{fieldErrors.height}</p>}
+            {isFieldFlagged('height') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('height')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="weight">Weight (kg)</Label>
@@ -467,10 +828,16 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               type="number"
               value={formState.weight}
               onChange={e => updateRawField('weight', e.target.value)}
-              className={fieldErrors.weight ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('weight')}
+              className={getFlaggedClass('weight', fieldErrors.weight ? 'border-red-500 focus:border-red-500' : '')}
               min="1"
             />
             {fieldErrors.weight && <p className="text-xs text-red-500">{fieldErrors.weight}</p>}
+            {isFieldFlagged('weight') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('weight')}
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -485,8 +852,9 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               onValueChange={value => {
                 updateRawField('educationalAttainment', value)
               }}
+              disabled={!isFieldEditable('educational_attainment')}
             >
-              <SelectTrigger id="education" className={fieldErrors.educationalAttainment ? 'border-red-500 focus:border-red-500' : ''}>
+              <SelectTrigger id="education" className={getFlaggedClass('educational_attainment', fieldErrors.educationalAttainment ? 'border-red-500 focus:border-red-500' : '')}>
                 <SelectValue placeholder="Select level" />
               </SelectTrigger>
               <SelectContent>
@@ -496,6 +864,11 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               </SelectContent>
             </Select>
             {fieldErrors.educationalAttainment && <p className="text-xs text-red-500">{fieldErrors.educationalAttainment}</p>}
+            {isFieldFlagged('educational_attainment') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('educationalAttainment')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
@@ -504,9 +877,15 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               type="email"
               value={formState.emailAddress}
               onChange={e => updateRawField('emailAddress', e.target.value)}
-              className={fieldErrors.emailAddress ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('email_address')}
+              className={getFlaggedClass('email_address', fieldErrors.emailAddress ? 'border-red-500 focus:border-red-500' : '')}
             />
             {fieldErrors.emailAddress && <p className="text-xs text-red-500">{fieldErrors.emailAddress}</p>}
+            {isFieldFlagged('email_address') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('emailAddress')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -525,9 +904,15 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 updateRawField('contactNumber', next)
               }}
               placeholder="09XXXXXXXXX"
-              className={fieldErrors.contactNumber ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('contact_number')}
+              className={getFlaggedClass('contact_number', fieldErrors.contactNumber ? 'border-red-500 focus:border-red-500' : '')}
             />
             {fieldErrors.contactNumber && <p className="text-xs text-red-500">{fieldErrors.contactNumber}</p>}
+            {isFieldFlagged('contact_number') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('contactNumber')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="address">Present Address</Label>
@@ -536,9 +921,15 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               value={formState.presentAddress}
               onChange={e => updateField('presentAddress', e.target.value)}
               placeholder="HOUSE NO., STREET, CITY/PROVINCE"
-              className={`min-h-[90px] ${fieldErrors.presentAddress ? 'border-red-500 focus:border-red-500' : ''}`}
+              disabled={!isFieldEditable('present_address')}
+              className={`min-h-[90px] ${getFlaggedClass('present_address', fieldErrors.presentAddress ? 'border-red-500 focus:border-red-500' : '')}`}
             />
             {fieldErrors.presentAddress && <p className="text-xs text-red-500">{fieldErrors.presentAddress}</p>}
+            {isFieldFlagged('present_address') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('presentAddress')}
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -556,10 +947,16 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
               id="passportNumber"
               value={formState.passportNumber}
               onChange={e => updateField('passportNumber', e.target.value)}
-              className={fieldErrors.passportNumber ? 'border-red-500 focus:border-red-500' : ''}
+              disabled={!isFieldEditable('passport_number')}
+              className={getFlaggedClass('passport_number', fieldErrors.passportNumber ? 'border-red-500 focus:border-red-500' : '')}
               placeholder="P1234567"
             />
             {fieldErrors.passportNumber && <p className="text-xs text-red-500">{fieldErrors.passportNumber}</p>}
+            {isFieldFlagged('passport_number') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('passportNumber')}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="passportValidity">Passport Validity</Label>
@@ -568,7 +965,8 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 value={formState.passportValidity}
                 onChange={date => updateRawField('passportValidity', date)}
                 minDate={todayIso}
-                className={fieldErrors.passportValidity ? 'border-red-500 focus:border-red-500' : ''}
+                disabled={!isFieldEditable('passport_validity')}
+                className={getFlaggedClass('passport_validity', fieldErrors.passportValidity ? 'border-red-500 focus:border-red-500' : '')}
                 label="Passport Validity"
               />
             </div>
@@ -578,11 +976,17 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 type="date"
                 value={formState.passportValidity}
                 onChange={e => updateRawField('passportValidity', e.target.value)}
-                className={fieldErrors.passportValidity ? 'border-red-500 focus:border-red-500' : ''}
+                disabled={!isFieldEditable('passport_validity')}
+                className={getFlaggedClass('passport_validity', fieldErrors.passportValidity ? 'border-red-500 focus:border-red-500' : '')}
                 min={todayIso}
               />
             </div>
             {fieldErrors.passportValidity && <p className="text-xs text-red-500">{fieldErrors.passportValidity}</p>}
+            {isFieldFlagged('passport_validity') && (
+              <p className="text-xs text-red-600 font-medium mt-1">
+                This part was not accepted due to the reason: {getCorrectionReason('passportValidity')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -610,14 +1014,20 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 clearError('taiwanYearEnded')
               }
             }}
+            disabled={!isFieldEditable('with_taiwan_work_experience')}
           >
             {YES_NO.map(option => (
               <div key={option.value} className="flex items-center space-x-2">
-                <RadioGroupItem value={option.value} id={`taiwan-${option.value}`} />
+                <RadioGroupItem value={option.value} id={`taiwan-${option.value}`} disabled={!isFieldEditable('with_taiwan_work_experience')} />
                 <Label htmlFor={`taiwan-${option.value}`} className="font-normal">{option.label}</Label>
               </div>
             ))}
           </RadioGroup>
+          {isFieldFlagged('with_taiwan_work_experience') && (
+            <p className="text-xs text-red-600 font-medium mt-1">
+              This part was not accepted due to the reason: {getCorrectionReason('withTaiwanExperience')}
+            </p>
+          )}
         </div>
 
         {formState.withTaiwanExperience === 'yes' && (
@@ -628,15 +1038,22 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 id="taiwanCompany"
                 value={formState.taiwanCompany}
                 onChange={e => updateField('taiwanCompany', e.target.value)}
-                className={fieldErrors.taiwanCompany ? 'border-red-500 focus:border-red-500' : ''}
+                disabled={!isFieldEditable('taiwan_company')}
+                className={getFlaggedClass('taiwan_company', fieldErrors.taiwanCompany ? 'border-red-500 focus:border-red-500' : '')}
               />
               {fieldErrors.taiwanCompany && <p className="text-xs text-red-500">{fieldErrors.taiwanCompany}</p>}
+              {isFieldFlagged('taiwan_company') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('taiwanCompany')}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="taiwanYearStarted">Year Started</Label>
               <select
                 id="taiwanYearStarted"
-                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${fieldErrors.taiwanYearStarted ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={!isFieldEditable('taiwan_year_started')}
+                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${getFlaggedClass('taiwan_year_started', fieldErrors.taiwanYearStarted ? 'border-red-500 focus:border-red-500' : '')}`}
                 value={formState.taiwanYearStarted || ''}
                 onChange={e => updateRawField('taiwanYearStarted', e.target.value)}
                 aria-invalid={!!fieldErrors.taiwanYearStarted}
@@ -649,12 +1066,18 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 ))}
               </select>
               {fieldErrors.taiwanYearStarted && <p className="text-xs text-red-500">{fieldErrors.taiwanYearStarted}</p>}
+              {isFieldFlagged('taiwan_year_started') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('taiwanYearStarted')}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="taiwanYearEnded">Year Ended</Label>
               <select
                 id="taiwanYearEnded"
-                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${fieldErrors.taiwanYearEnded ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={!isFieldEditable('taiwan_year_ended')}
+                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${getFlaggedClass('taiwan_year_ended', fieldErrors.taiwanYearEnded ? 'border-red-500 focus:border-red-500' : '')}`}
                 value={formState.taiwanYearEnded || ''}
                 onChange={e => updateRawField('taiwanYearEnded', e.target.value)}
                 aria-invalid={!!fieldErrors.taiwanYearEnded}
@@ -667,6 +1090,11 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 ))}
               </select>
               {fieldErrors.taiwanYearEnded && <p className="text-xs text-red-500">{fieldErrors.taiwanYearEnded}</p>}
+              {isFieldFlagged('taiwan_year_ended') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('taiwanYearEnded')}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -690,14 +1118,20 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 clearError('otherYearEnded')
               }
             }}
+            disabled={!isFieldEditable('with_job_experience')}
           >
             {YES_NO.map(option => (
               <div key={option.value} className="flex items-center space-x-2">
-                <RadioGroupItem value={option.value} id={`job-${option.value}`} />
+                <RadioGroupItem value={option.value} id={`job-${option.value}`} disabled={!isFieldEditable('with_job_experience')} />
                 <Label htmlFor={`job-${option.value}`} className="font-normal">{option.label}</Label>
               </div>
             ))}
           </RadioGroup>
+          {isFieldFlagged('with_job_experience') && (
+            <p className="text-xs text-red-600 font-medium mt-1">
+              This part was not accepted due to the reason: {getCorrectionReason('withOtherExperience')}
+            </p>
+          )}
         </div>
 
         {formState.withOtherExperience === 'yes' && (
@@ -708,15 +1142,22 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 id="otherCompany"
                 value={formState.otherCompany}
                 onChange={e => updateField('otherCompany', e.target.value)}
-                className={fieldErrors.otherCompany ? 'border-red-500 focus:border-red-500' : ''}
+                disabled={!isFieldEditable('other_company')}
+                className={getFlaggedClass('other_company', fieldErrors.otherCompany ? 'border-red-500 focus:border-red-500' : '')}
               />
               {fieldErrors.otherCompany && <p className="text-xs text-red-500">{fieldErrors.otherCompany}</p>}
+              {isFieldFlagged('other_company') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('otherCompany')}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="otherYearStarted">Year Started</Label>
               <select
                 id="otherYearStarted"
-                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${fieldErrors.otherYearStarted ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={!isFieldEditable('other_year_started')}
+                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${getFlaggedClass('other_year_started', fieldErrors.otherYearStarted ? 'border-red-500 focus:border-red-500' : '')}`}
                 value={formState.otherYearStarted || ''}
                 onChange={e => updateRawField('otherYearStarted', e.target.value)}
                 aria-invalid={!!fieldErrors.otherYearStarted}
@@ -729,12 +1170,18 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 ))}
               </select>
               {fieldErrors.otherYearStarted && <p className="text-xs text-red-500">{fieldErrors.otherYearStarted}</p>}
+              {isFieldFlagged('other_year_started') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('otherYearStarted')}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="otherYearEnded">Year Ended</Label>
               <select
                 id="otherYearEnded"
-                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${fieldErrors.otherYearEnded ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={!isFieldEditable('other_year_ended')}
+                className={`w-full border rounded px-3 py-2.5 text-sm h-10 ${getFlaggedClass('other_year_ended', fieldErrors.otherYearEnded ? 'border-red-500 focus:border-red-500' : '')}`}
                 value={formState.otherYearEnded || ''}
                 onChange={e => updateRawField('otherYearEnded', e.target.value)}
                 aria-invalid={!!fieldErrors.otherYearEnded}
@@ -747,6 +1194,11 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
                 ))}
               </select>
               {fieldErrors.otherYearEnded && <p className="text-xs text-red-500">{fieldErrors.otherYearEnded}</p>}
+              {isFieldFlagged('other_year_ended') && (
+                <p className="text-xs text-red-600 font-medium mt-1">
+                  This part was not accepted due to the reason: {getCorrectionReason('otherYearEnded')}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -864,11 +1316,12 @@ export default function GovToGovApplicantForm({ defaultEmail, defaultNames }: Go
             </Button>
             <Button
               type="button"
-              className="bg-[#0f62fe] text-white"
+              className="bg-[#0f62fe] text-white disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || (needsCorrection && !hasChanges())}
+              title={needsCorrection && !hasChanges() ? 'Please make changes to all flagged fields before submitting.' : undefined}
             >
-              {loading ? 'Submitting...' : 'Submit Application'}
+              {loading ? 'Submitting...' : needsCorrection ? 'Submit Corrections' : 'Submit Application'}
             </Button>
           </>
         )}

@@ -7,7 +7,7 @@ import ApplicantHeader from '@/components/applicant-header'
 import DocumentViewerModal from '@/components/pdf-viewer-modal'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Loader2, Eye, FileText, CheckCircle2, Clock } from 'lucide-react'
+import { Loader2, Eye, FileText, CheckCircle2, Clock, Copy } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import type { BalikManggagawaClearance } from '@/lib/types'
 
@@ -81,6 +81,9 @@ interface GovToGovRecord {
   date_card_released?: string | null
   time_received?: string | null
   time_released?: string | null
+  needs_correction?: boolean
+  correction_fields?: string[] | null
+  correction_note?: string | null
   created_at: string
   updated_at: string
 }
@@ -109,10 +112,34 @@ export default function ApplicantStatusPage() {
   const [directHireCorrectionsLoading, setDirectHireCorrectionsLoading] = useState(false)
   const [bmCorrections, setBmCorrections] = useState<{ field_key: string; message: string }[]>([])
   const [bmCorrectionsLoading, setBmCorrectionsLoading] = useState(false)
+  const [govToGovCorrections, setGovToGovCorrections] = useState<{ field_key: string; message: string }[]>([])
+  const [govToGovCorrectionsLoading, setGovToGovCorrectionsLoading] = useState(false)
+  const [accordionValue, setAccordionValue] = useState<string>('')
 
   useEffect(() => {
     fetchApplications()
   }, [])
+
+  // Open specific accordion when coming from notification
+  useEffect(() => {
+    const openApp = searchParams.get('open')
+    if (openApp) {
+      // Wait for applications to load, then open the accordion
+      if (!loading) {
+        if (openApp === 'direct-hire' && applications.directHire?.application) {
+          setAccordionValue('direct-hire')
+          // Clean up URL
+          router.replace('/applicant/status', { scroll: false })
+        } else if (openApp === 'balik-manggagawa' && applications.balikManggagawa?.application) {
+          setAccordionValue('balik-manggagawa')
+          router.replace('/applicant/status', { scroll: false })
+        } else if (openApp === 'gov-to-gov' && applications.govToGov?.application) {
+          setAccordionValue('gov-to-gov')
+          router.replace('/applicant/status', { scroll: false })
+        }
+      }
+    }
+  }, [searchParams, loading, applications, router])
 
   const fetchDirectHireCorrections = async (applicationId: string) => {
     try {
@@ -145,6 +172,23 @@ export default function ApplicantStatusPage() {
       setBmCorrections([])
     } finally {
       setBmCorrectionsLoading(false)
+    }
+  }
+
+  const fetchGovToGovCorrections = async (applicationId: string) => {
+    try {
+      setGovToGovCorrectionsLoading(true)
+      const res = await fetch(`/api/gov-to-gov/${applicationId}/corrections`)
+      const data = await res.json()
+      if (data.success) {
+        setGovToGovCorrections(data.data || [])
+      } else {
+        setGovToGovCorrections([])
+      }
+    } catch {
+      setGovToGovCorrections([])
+    } finally {
+      setGovToGovCorrectionsLoading(false)
     }
   }
 
@@ -278,6 +322,11 @@ export default function ApplicantStatusPage() {
             application: govData.data,
             documents: docsData.success ? (docsData.data || []) : [],
           }
+          if (govData.data.needs_correction) {
+            void fetchGovToGovCorrections(govData.data.id)
+          } else {
+            setGovToGovCorrections([])
+          }
         }
       }
 
@@ -385,7 +434,21 @@ export default function ApplicantStatusPage() {
             <div className="flex items-center gap-4">
               <div className="text-left">
                 <h3 className="text-lg font-semibold text-gray-900">Direct Hire</h3>
-                <p className="text-sm text-gray-500">Control Number: {application.control_number}</p>
+                <p 
+                  className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 transition-colors inline-flex items-center gap-1"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigator.clipboard.writeText(application.control_number)
+                    toast({
+                      title: 'Copied!',
+                      description: 'Control number copied to clipboard',
+                    })
+                  }}
+                  title="Click to copy control number"
+                >
+                  Control Number: <span className="font-mono">{application.control_number}</span>
+                  <Copy className="h-3.5 w-3.5" />
+                </p>
               </div>
             </div>
             <span className={getStatusBadge(status)}>
@@ -613,7 +676,21 @@ export default function ApplicantStatusPage() {
           <div className="flex items-center justify-between w-full pr-4">
             <div className="flex flex-col text-left">
               <h3 className="text-lg font-semibold text-gray-900">Balik Manggagawa</h3>
-              <p className="text-sm text-gray-500">Control Number: {application.control_number}</p>
+              <p 
+                className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 transition-colors inline-flex items-center gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigator.clipboard.writeText(application.control_number)
+                  toast({
+                    title: 'Copied!',
+                    description: 'Control number copied to clipboard',
+                  })
+                }}
+                title="Click to copy control number"
+              >
+                Control Number: <span className="font-mono">{application.control_number}</span>
+                <Copy className="h-3.5 w-3.5" />
+              </p>
             </div>
             <span className={getStatusBadge(statusLabel)}>
               {statusLabel}
@@ -775,7 +852,6 @@ export default function ApplicantStatusPage() {
           <div className="flex items-center justify-between w-full pr-4">
             <div className="text-left">
               <h3 className="text-lg font-semibold text-gray-900">Gov-to-Gov</h3>
-              <p className="text-sm text-gray-500">Reference: {reference}</p>
             </div>
             <span className={getStatusBadge(status)}>
               {status}
@@ -784,6 +860,74 @@ export default function ApplicantStatusPage() {
         </AccordionTrigger>
         <AccordionContent className="px-6 pb-6">
           <div className="space-y-6 pt-4">
+            {application.needs_correction && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-800">Action required</div>
+                    <div className="text-xs text-amber-700">Some fields need correction before processing continues.</div>
+                  </div>
+                </div>
+                {govToGovCorrectionsLoading ? (
+                  <div className="text-sm text-amber-800">Loading corrections...</div>
+                ) : govToGovCorrections.length === 0 ? (
+                  <div className="text-sm text-amber-800">Corrections will appear here once available.</div>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {govToGovCorrections.map((c, idx) => {
+                      const getFieldLabel = (fieldKey: string): string => {
+                        const fieldLabelMap: Record<string, string> = {
+                          last_name: 'Last Name',
+                          first_name: 'First Name',
+                          middle_name: 'Middle Name',
+                          sex: 'Sex',
+                          date_of_birth: 'Date of Birth',
+                          age: 'Age',
+                          height: 'Height',
+                          weight: 'Weight',
+                          educational_attainment: 'Educational Attainment',
+                          present_address: 'Present Address',
+                          email_address: 'Email Address',
+                          contact_number: 'Contact Number',
+                          passport_number: 'Passport Number',
+                          passport_validity: 'Passport Validity',
+                          id_presented: 'ID Presented',
+                          id_number: 'ID Number',
+                          with_taiwan_work_experience: 'Taiwan Work Experience',
+                          taiwan_company: 'Taiwan Company',
+                          taiwan_year_started: 'Taiwan Year Started',
+                          taiwan_year_ended: 'Taiwan Year Ended',
+                          with_job_experience: 'Job Experience',
+                          other_company: 'Other Company',
+                          other_year_started: 'Other Year Started',
+                          other_year_ended: 'Other Year Ended',
+                        }
+                        return fieldLabelMap[fieldKey] || fieldKey
+                          .split('_')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ')
+                      }
+                      return (
+                        <li key={idx} className="rounded-md bg-white border p-2">
+                          <div className="font-semibold text-gray-900">{getFieldLabel(c.field_key)}</div>
+                          <div className="text-gray-700">{c.message}</div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      router.push(`/applicant/start/gov-to-gov?edit=${application.id}&corrections=true`)
+                    }}
+                  >
+                    Open Application Form to Make Corrections
+                  </Button>
+                </div>
+              </div>
+            )}
             <div>
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Applicant Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -960,7 +1104,7 @@ export default function ApplicantStatusPage() {
           </div>
 
           {/* Applications Accordion */}
-          <Accordion type="single" collapsible className="w-full space-y-4">
+          <Accordion type="single" collapsible className="w-full space-y-4" value={accordionValue} onValueChange={setAccordionValue}>
             {applications.directHire?.application && renderDirectHireApplication(applications.directHire)}
             {applications.balikManggagawa?.application && renderBalikManggagawaApplication(applications.balikManggagawa)}
             {applications.govToGov?.application && renderGovToGovApplication(applications.govToGov)}

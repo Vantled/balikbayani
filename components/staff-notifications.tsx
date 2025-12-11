@@ -161,10 +161,16 @@ export default function StaffNotifications() {
   }
 
   return (
-    <Popover open={open} onOpenChange={(isOpen) => {
+    <Popover open={open} onOpenChange={async (isOpen) => {
       setOpen(isOpen)
       if (isOpen) {
-        fetchNotifications()
+        await fetchNotifications()
+        // Mark all as read when modal opens (if there are unread notifications)
+        const hasUnread = notifications.some(n => !n.is_read) || unreadCount > 0
+        if (hasUnread) {
+          await handleMarkAllAsRead()
+          await fetchUnreadCount()
+        }
       }
     }}>
       <PopoverTrigger asChild>
@@ -188,16 +194,6 @@ export default function StaffNotifications() {
       >
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Notifications</h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleMarkAllAsRead}
-              className="text-xs"
-            >
-              Mark all as read
-            </Button>
-          )}
         </div>
         <ScrollArea className="h-[400px]">
           {loading ? (

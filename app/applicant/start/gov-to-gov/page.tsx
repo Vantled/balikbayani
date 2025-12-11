@@ -6,7 +6,15 @@ import GovToGovApplicantForm from './gov-to-gov-form'
 import { AuthService } from '@/lib/services/auth-service'
 import { db } from '@/lib/database'
 
-export default async function ApplicantStartGovToGovPage() {
+export default async function ApplicantStartGovToGovPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string; corrections?: string }>
+}) {
+  const params = await searchParams
+  const editId = params.edit
+  const isCorrectionMode = params.corrections === 'true'
+
   const cookieStore = await cookies()
   const userCookie = cookieStore.get('bb_user')
   const token = cookieStore.get('bb_auth_token')?.value
@@ -31,14 +39,41 @@ export default async function ApplicantStartGovToGovPage() {
     redirect('/login?from=/applicant/start/gov-to-gov')
   }
 
-  // Only block when there is an active (not soft-deleted) Gov-to-Gov application
-  const existing = await db.query(
-    'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
-    [validatedUser.id]
-  )
-
-  if (existing.rows.length > 0) {
-    redirect('/applicant/status')
+  // If editing, fetch application data
+  let correctionFields: string[] = []
+  let needsCorrection = false
+  let applicationId: string | null = null
+  if (editId) {
+    const appResult = await db.query(
+      `SELECT id, needs_correction, correction_fields 
+       FROM gov_to_gov_applications 
+       WHERE id = $1 AND applicant_user_id = $2 AND deleted_at IS NULL`,
+      [editId, validatedUser.id]
+    )
+    if (appResult.rows.length > 0) {
+      applicationId = appResult.rows[0].id
+      needsCorrection = appResult.rows[0].needs_correction || false
+      if (needsCorrection && appResult.rows[0].correction_fields) {
+        try {
+          correctionFields = Array.isArray(appResult.rows[0].correction_fields)
+            ? appResult.rows[0].correction_fields
+            : JSON.parse(appResult.rows[0].correction_fields || '[]')
+        } catch {
+          correctionFields = []
+        }
+      }
+    } else {
+      redirect('/applicant/status')
+    }
+  } else {
+    // Check if applicant already has an active Gov-to-Gov application
+    const existingApp = await db.query(
+      'SELECT id FROM gov_to_gov_applications WHERE applicant_user_id = $1 AND deleted_at IS NULL LIMIT 1',
+      [validatedUser.id]
+    )
+    if (existingApp.rows.length > 0) {
+      redirect('/applicant/status')
+    }
   }
 
   const preferredUser = validatedUser || user
@@ -70,6 +105,9 @@ export default async function ApplicantStartGovToGovPage() {
           <GovToGovApplicantForm
             defaultEmail={user?.email}
             defaultNames={defaultNames}
+            applicationId={applicationId || undefined}
+            needsCorrection={needsCorrection}
+            correctionFields={correctionFields}
           />
         </div>
       </section>
